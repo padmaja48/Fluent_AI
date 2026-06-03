@@ -1,5 +1,5 @@
 import { OAuth2Client } from 'google-auth-library';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { z } from 'zod';
 import { env } from '../config/env';
 import { getRedis } from '../config/redis';
@@ -14,6 +14,24 @@ import { durationToSeconds } from '../utils/duration';
 const googleClient = env.GOOGLE_CLIENT_ID
   ? new OAuth2Client(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET, env.GOOGLE_CALLBACK_URL)
   : null;
+
+const getPublicAppUrl = (req: Request) => {
+  if (env.CLIENT_URL && !env.CLIENT_URL.includes('localhost')) {
+    return env.CLIENT_URL;
+  }
+
+  const forwardedProto = req.get('x-forwarded-proto')?.split(',')[0]?.trim();
+  const forwardedHost = req.get('x-forwarded-host')?.split(',')[0]?.trim();
+  const host = forwardedHost || req.get('host');
+  if (host) {
+    return `${forwardedProto || req.protocol}://${host}`;
+  }
+
+  return env.CLIENT_URL;
+};
+
+const getGoogleCallbackUrl = (req: Request) =>
+  new URL('/api/auth/google/callback', getPublicAppUrl(req)).toString();
 
 export const registerSchema = z.object({
   body: z.object({
@@ -209,7 +227,7 @@ export const googleLogin = asyncHandler(async (req, res) => {
   });
 });
 
-export const googleRedirect = asyncHandler(async (_req, res) => {
+export const googleRedirect = asyncHandler(async (req, res) => {
   if (!googleClient || !env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
     throw new AppError('Google OAuth is not configured', 503, 'GOOGLE_NOT_CONFIGURED');
   }
@@ -218,6 +236,7 @@ export const googleRedirect = asyncHandler(async (_req, res) => {
     access_type: 'offline',
     scope: ['openid', 'email', 'profile'],
     prompt: 'consent',
+    redirect_uri: getGoogleCallbackUrl(req),
   });
 
   res.redirect(url);
@@ -233,7 +252,10 @@ export const googleCallback = asyncHandler(async (req, res) => {
     throw new AppError('Google OAuth code is required', 400, 'GOOGLE_CODE_REQUIRED');
   }
 
-  const { tokens: googleTokens } = await googleClient.getToken(code);
+  const { tokens: googleTokens } = await googleClient.getToken({
+    code,
+    redirect_uri: getGoogleCallbackUrl(req),
+  });
   if (!googleTokens.id_token) {
     throw new AppError('Google ID token was not returned', 400, 'GOOGLE_ID_TOKEN_REQUIRED');
   }
@@ -272,7 +294,7 @@ export const googleCallback = asyncHandler(async (req, res) => {
   });
   setRefreshCookie(res, appTokens.refreshToken);
 
-  const callbackUrl = new URL('/auth/callback', env.CLIENT_URL);
+  const callbackUrl = new URL('/auth/callback', getPublicAppUrl(req));
   callbackUrl.searchParams.set('accessToken', appTokens.accessToken);
   callbackUrl.searchParams.set('sessionId', appTokens.sessionId);
   res.redirect(callbackUrl.toString());

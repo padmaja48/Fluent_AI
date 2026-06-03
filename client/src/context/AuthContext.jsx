@@ -11,6 +11,27 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    if (window.location.pathname !== '/auth/callback') {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const callbackToken = params.get('accessToken');
+    if (!callbackToken) {
+      setInitializing(false);
+      setError('Google sign-in failed');
+      window.history.replaceState({}, document.title, '/');
+      return;
+    }
+
+    localStorage.setItem('accessToken', callbackToken);
+    localStorage.setItem('token', callbackToken);
+    setToken(callbackToken);
+    setInitializing(true);
+    window.history.replaceState({}, document.title, '/');
+  }, []);
+
+  useEffect(() => {
     const loadProfile = async () => {
       if (!token) {
         setInitializing(false);

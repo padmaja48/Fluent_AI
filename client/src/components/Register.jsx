@@ -1,5 +1,4 @@
 import React, { useState, useContext } from 'react';
-import { GoogleLogin } from '@react-oauth/google';
 import { AuthContext } from '../context/AuthContext';
 import '../styles/Auth.css';
 
@@ -8,15 +7,15 @@ export const Register = ({ onSwitchToLogin }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [level, setLevel] = useState('B1');
-  const { register, loginWithGoogle, loading, error } = useContext(AuthContext);
+  const { register, loading, error } = useContext(AuthContext);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try { await register(name, email, password, level); } catch { /* handled */ }
   };
 
-  const handleGoogleSuccess = async (credentialResponse) => {
-    try { await loginWithGoogle(credentialResponse.credential); } catch { /* handled */ }
+  const handleGoogleLogin = () => {
+    window.location.href = '/api/auth/google';
   };
 
   return (
@@ -30,14 +29,10 @@ export const Register = ({ onSwitchToLogin }) => {
         <p className="auth-card-subtitle">Start mastering English with AI-powered practice</p>
 
         <div className="google-btn-wrapper">
-          <GoogleLogin
-            onSuccess={handleGoogleSuccess}
-            onError={() => {}}
-            width="340"
-            text="signup_with"
-            shape="rectangular"
-            theme="outline"
-          />
+          <button type="button" className="google-redirect-btn" onClick={handleGoogleLogin}>
+            <span className="google-icon" aria-hidden="true">G</span>
+            Continue with Google
+          </button>
         </div>
         <div className="auth-divider"><span>or continue with email</span></div>
 
