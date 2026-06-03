@@ -18,6 +18,7 @@
     "client": "npm --workspace client run start",
     "seed": "npm --workspace server run seed",
     "build": "npm --workspace server run build && npm --workspace client run build",
+    "start": "npm --workspace server run start",
     "test": "npm --workspace server run test"
   },
   "devDependencies": {

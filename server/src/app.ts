@@ -4,6 +4,7 @@ import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import path from 'path';
 import { env } from './config/env';
 import { apiLimiter } from './middleware/rateLimiter';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
@@ -33,6 +34,16 @@ export const createApp = () => {
         if (env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
           callback(null, true);
           return;
+        }
+        if (process.env.RENDER_EXTERNAL_HOSTNAME) {
+          try {
+            if (new URL(origin).hostname === process.env.RENDER_EXTERNAL_HOSTNAME) {
+              callback(null, true);
+              return;
+            }
+          } catch {
+            // Fall through to the configured allowlist.
+          }
         }
         if (env.CORS_ORIGINS.includes(origin)) {
           callback(null, true);
@@ -76,6 +87,14 @@ export const createApp = () => {
   app.use('/api/v1/schedules', scheduleRoutes);
   app.use('/api/v1/reports', reportRoutes);
   app.use('/api/v1/tests', testRoutes);
+
+  if (env.NODE_ENV === 'production') {
+    const clientDistPath = path.resolve(__dirname, '../../client/dist');
+    app.use(express.static(clientDistPath));
+    app.get('*', (_req, res) => {
+      res.sendFile(path.join(clientDistPath, 'index.html'));
+    });
+  }
 
   app.use(notFoundHandler);
   app.use(errorHandler);

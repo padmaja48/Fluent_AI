@@ -1,6 +1,10 @@
 import axios from 'axios';
 
-const rawApiUrl = (import.meta.env.VITE_API_URL || 'http://localhost:4000').replace(/\/$/, '');
+const defaultApiUrl =
+  typeof window !== 'undefined' && import.meta.env.PROD
+    ? window.location.origin
+    : 'http://localhost:4000';
+const rawApiUrl = (import.meta.env.VITE_API_URL || defaultApiUrl).replace(/\/$/, '');
 const API_BASE_URL = rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl}/api`;
 
 const api = axios.create({
