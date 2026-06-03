@@ -2,6 +2,7 @@ import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express from 'express';
+import fs from 'fs';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import path from 'path';
@@ -88,11 +89,16 @@ export const createApp = () => {
   app.use('/api/v1/reports', reportRoutes);
   app.use('/api/v1/tests', testRoutes);
 
-  if (env.NODE_ENV === 'production') {
-    const clientDistPath = path.resolve(__dirname, '../../client/dist');
+  const clientDistPath = path.resolve(__dirname, '../../client/dist');
+  const clientIndexPath = path.join(clientDistPath, 'index.html');
+  if (fs.existsSync(clientIndexPath)) {
     app.use(express.static(clientDistPath));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(clientDistPath, 'index.html'));
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api')) {
+        next();
+        return;
+      }
+      res.sendFile(clientIndexPath);
     });
   }
 
