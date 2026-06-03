@@ -1,13 +1,16 @@
 /* ── Auth page wrapper ────────────────────────────── */
 .auth-container {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  min-height: 100vh;
-  padding: 24px;
+  height: 100dvh;
+  min-height: 0;
+  padding: 28px 24px;
   background: var(--app-bg);
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Subtle gradient blob behind the card */
@@ -28,7 +31,7 @@
   position: relative;
   width: 100%;
   max-width: 420px;
-  padding: 40px;
+  padding: 34px 40px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius3);
@@ -40,7 +43,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 28px;
+  margin-bottom: 22px;
 }
 
 .auth-card-logo .logo-mark {
@@ -76,14 +79,15 @@
 .auth-card-subtitle {
   font-size: 13px;
   color: var(--text2);
-  margin-bottom: 28px;
+  margin-bottom: 20px;
 }
 
 /* ── Google button wrapper ────────────────────────── */
 .google-btn-wrapper {
   display: flex;
   justify-content: center;
-  margin-bottom: 20px;
+  min-height: 40px;
+  margin-bottom: 16px;
 }
 
 /* ── Divider ──────────────────────────────────────── */
@@ -91,7 +95,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 .auth-divider::before,
 .auth-divider::after {
@@ -111,7 +115,7 @@
 
 /* ── Form groups ──────────────────────────────────── */
 .form-group {
-  margin-bottom: 16px;
+  margin-bottom: 14px;
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -143,7 +147,7 @@
 /* ── Footer link ──────────────────────────────────── */
 .auth-link {
   text-align: center;
-  margin-top: 20px;
+  margin-top: 16px;
   color: var(--text2);
   font-size: 13px;
 }
@@ -175,10 +179,14 @@
    RESPONSIVE
 ═══════════════════════════════════════════════════ */
 @media (max-width: 480px) {
-  .auth-container { padding: 16px; align-items: flex-start; padding-top: 40px; }
+  .auth-container { padding: 18px 16px; }
   .auth-card { padding: 28px 20px; border-radius: var(--radius2); }
   .auth-card h1 { font-size: 20px; }
   .google-btn-wrapper { transform: scale(0.95); transform-origin: center; }
+}
+
+@media (min-height: 860px) {
+  .auth-container { align-items: center; }
 }
 
 @media (max-width: 360px) {
