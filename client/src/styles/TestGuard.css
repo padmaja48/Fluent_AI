@@ -1,0 +1,185 @@
+/* ── In-test Integrity Banner ──────────────────── */
+.test-integrity-banner {
+  position: sticky;
+  top: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  animation: timerPulse 1s ease infinite;
+  border-bottom: 1px solid rgba(0,0,0,0.15);
+}
+
+/* ── Navigation Warning Banner ─────────────────── */
+.test-nav-warning {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  border-bottom: 1px solid rgba(0,0,0,0.15);
+}
+
+.test-nav-warning-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.test-nav-confirm {
+  padding: 5px 14px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(255,255,255,0.5);
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.test-nav-confirm:hover { background: rgba(255,255,255,0.25); }
+
+.test-nav-cancel {
+  padding: 5px 14px;
+  border-radius: var(--radius);
+  border: none;
+  background: rgba(255,255,255,0.9);
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.test-nav-cancel:hover { background: #fff; }
+
+/* ── Fullscreen Prompt Overlay ─────────────────── */
+.test-fs-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(0,0,0,0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.test-fs-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius2);
+  padding: 32px 28px;
+  max-width: 420px;
+  width: 90%;
+  text-align: center;
+}
+
+.test-fs-icon {
+  font-size: 2.5rem;
+  margin-bottom: 12px;
+}
+
+.test-fs-modal h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.test-fs-modal p {
+  font-size: 13px;
+  color: var(--text2);
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+.test-fs-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.test-fs-actions .btn-primary {
+  width: 100%;
+  min-height: 40px;
+}
+
+.test-fs-actions .btn-secondary {
+  width: 100%;
+  min-height: 38px;
+}
+
+/* ── Per-question Timer ─────────────────────────── */
+.test-timer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--radius);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.test-timer-icon { font-size: 13px; }
+
+.test-timer-value {
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+.test-timer-label {
+  font-size: 11px;
+  color: var(--text2);
+  font-weight: 500;
+}
+
+.test-timer.warning {
+  border-color: rgba(210, 153, 34, 0.5);
+  background: rgba(210, 153, 34, 0.1);
+}
+.test-timer.warning .test-timer-value { color: var(--warn); }
+
+.test-timer.danger {
+  border-color: var(--danger);
+  background: var(--danger-dim);
+  animation: timerPulse 0.8s ease infinite;
+}
+.test-timer.danger .test-timer-value { color: var(--danger); }
+
+@keyframes timerPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+
+/* ── Responsive ───────────────────────────────────── */
+@media (max-width: 640px) {
+  .test-fs-modal    { padding: 24px 18px; }
+  .test-fs-modal h3 { font-size: 16px; }
+  .test-fs-modal p  { font-size: 12px; }
+  .test-integrity-banner { font-size: 12px; padding: 8px 12px; }
+  .test-nav-warning { padding: 8px 12px; font-size: 12px; }
+  .test-nav-warning-actions { flex-wrap: wrap; width: 100%; }
+  .test-nav-confirm,
+  .test-nav-cancel  { flex: 1; text-align: center; }
+  .test-timer-value { font-size: 14px; }
+}
+
+@media (max-width: 380px) {
+  .test-fs-modal { padding: 20px 14px; }
+}

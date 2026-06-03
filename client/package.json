@@ -1,0 +1,33 @@
+{
+  "name": "fluentai-client",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@react-oauth/google": "^0.13.5",
+    "@vitejs/plugin-react": "^6.0.2",
+    "axios": "^1.4.0",
+    "papaparse": "^5.5.3",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.11.0",
+    "vite": "^8.0.14"
+  },
+  "scripts": {
+    "start": "vite --host 0.0.0.0",
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}

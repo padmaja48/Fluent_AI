@@ -1,0 +1,282 @@
+.writing-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.writing-criteria {
+  padding: 12px 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+}
+
+.writing-criteria strong {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+
+.writing-criteria p {
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+
+.writing-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.writing-hints span {
+  padding: 4px 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text2);
+}
+
+.writing-textarea {
+  width: 100%;
+  min-height: 200px;
+  padding: 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  font-family: var(--ff);
+  font-size: 14px;
+  line-height: 1.65;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.writing-textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.writing-textarea::placeholder {
+  color: var(--text3);
+}
+
+.writing-counter {
+  font-size: 12px;
+  color: var(--text2);
+  text-align: right;
+}
+
+/* ── AI Evaluation Result ───────────────────────── */
+.writing-result {
+  padding: 16px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius2);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.writing-score-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.writing-score-badge {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--accent);
+  font-family: var(--fm);
+  line-height: 1;
+}
+
+.writing-score-label {
+  font-size: 12px;
+  color: var(--text2);
+}
+
+.writing-feedback {
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.6;
+}
+
+/* ── Score row (main + breakdown) ───────────────── */
+.writing-score-main {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.writing-score-main strong {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.writing-score-main span {
+  font-size: 14px;
+  color: var(--text2);
+}
+
+.writing-score-breakdown {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.writing-score-breakdown > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.writing-score-breakdown span {
+  font-size: 11px;
+  color: var(--text2);
+}
+
+.writing-score-breakdown strong {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ── Strengths / Improvements detail ────────────── */
+.writing-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.writing-detail > strong {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text2);
+}
+
+.writing-detail ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+}
+
+.writing-detail.strengths li::before {
+  content: '+';
+  position: absolute;
+  left: 0;
+  color: var(--success);
+  font-weight: 700;
+}
+
+.writing-detail.improvements li::before {
+  content: '→';
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+}
+
+.writing-detail li {
+  font-size: 12px;
+  color: var(--text2);
+  padding-left: 14px;
+  position: relative;
+  line-height: 1.5;
+}
+
+/* ── Individual hint tag ─────────────────────────── */
+.writing-hint {
+  display: inline-block;
+  padding: 3px 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text2);
+}
+
+.writing-sub-scores {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.writing-sub-score {
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.writing-sub-score strong {
+  display: block;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+.writing-sub-score span {
+  font-size: 11px;
+  color: var(--text2);
+}
+
+.writing-strengths,
+.writing-improvements {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.writing-strengths strong,
+.writing-improvements strong {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text2);
+}
+
+.writing-strengths li,
+.writing-improvements li {
+  font-size: 12px;
+  color: var(--text2);
+  padding-left: 12px;
+  position: relative;
+  line-height: 1.5;
+}
+
+.writing-strengths li::before {
+  content: '+';
+  position: absolute;
+  left: 0;
+  color: var(--success);
+  font-weight: 700;
+}
+
+.writing-improvements li::before {
+  content: '→';
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+}
+
+@media (max-width: 600px) {
+  .writing-sub-scores { grid-template-columns: repeat(2, 1fr); }
+}

@@ -1,0 +1,240 @@
+/* ── Split layout (Practice) ───────────────────── */
+.reading-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.98fr) minmax(420px, 1fr);
+  gap: 28px;
+  align-items: stretch;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius2);
+  padding: 28px;
+  box-shadow: var(--subtle-shadow);
+}
+
+.reading-passage-panel {
+  position: sticky;
+  top: 0;
+  max-height: calc(100vh - 168px);
+  overflow-y: auto;
+  padding: 0 28px 0 0;
+  background: var(--surface);
+}
+
+.reading-passage-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--title);
+  margin-bottom: 12px;
+  letter-spacing: -0.01em;
+}
+
+.reading-passage-body {
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--text);
+}
+
+.reading-passage-body p + p {
+  margin-top: 16px;
+}
+
+.reading-question-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0 0 0 28px;
+  border-left: 2px solid var(--border);
+  overflow: hidden;
+}
+
+.reading-question-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.reading-comprehension-copy {
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--border);
+}
+
+.reading-comprehension-copy h2 {
+  font-size: 20px;
+  line-height: 1.3;
+  font-weight: 700;
+  color: var(--title);
+  margin-bottom: 10px;
+}
+
+.reading-comprehension-copy p {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+
+.reading-question-block {
+  padding: 0 6px;
+}
+
+.reading-question-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 12px;
+  margin-bottom: 12px;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.reading-question-text {
+  font-size: 17px;
+  line-height: 1.45;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+/* Option key label inside reading options */
+.reading-option-key {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+  color: var(--text2);
+  transition: background 0.15s, color 0.15s;
+}
+
+.reading-option-btn.selected .reading-option-key,
+.reading-option-btn:hover .reading-option-key {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* ── Inline passage (MixedTests) ───────────────── */
+.reading-inline-passage {
+  padding: 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.reading-inline-passage .reading-passage-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.reading-inline-passage .reading-passage-body {
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--text);
+}
+
+/* ── Reading options ────────────────────────────── */
+.reading-options-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.reading-option-btn {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  min-height: 52px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 15px;
+  font-family: var(--ff);
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  width: 100%;
+}
+
+.reading-option-btn > span:last-child {
+  flex: 1;
+  text-align: left;
+}
+
+.reading-option-btn:hover {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.reading-option-btn.selected {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.reading-option-btn.correct-option {
+  border-color: var(--success);
+  background: var(--success-dim);
+}
+
+.reading-option-btn.wrong-option {
+  border-color: var(--danger);
+  background: var(--danger-dim);
+}
+
+.reading-option-btn:disabled {
+  cursor: default;
+}
+
+/* ── Responsive ─────────────────────────────────── */
+@media (max-width: 900px) {
+  .reading-layout {
+    grid-template-columns: 1fr;
+    padding: 18px;
+    gap: 18px;
+  }
+  .reading-passage-panel {
+    position: static;
+    max-height: 280px;
+    padding: 0 0 18px;
+  }
+  .reading-question-panel {
+    border-left: 0;
+    border-top: 2px solid var(--border);
+    padding: 18px 0 0;
+  }
+  .reading-options-list { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  .reading-layout { padding: 14px; gap: 14px; }
+  .reading-passage-title { font-size: 17px; }
+  .reading-passage-body  { font-size: 14px; }
+  .reading-question-text { font-size: 15px; }
+  .reading-option-btn    { font-size: 13px; min-height: 44px; }
+}
+
+@media (max-width: 420px) {
+  .reading-layout { padding: 12px; }
+  .reading-passage-panel { max-height: 220px; }
+  .reading-comprehension-copy h2 { font-size: 16px; }
+  .reading-comprehension-copy p  { font-size: 13px; }
+}

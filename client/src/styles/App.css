@@ -1,0 +1,513 @@
+/* ── App shell ────────────────────────────────────── */
+.app-container {
+  display: flex;
+  flex-direction: row;       /* sidebar left, content right on desktop */
+  height: 100vh;
+  overflow: hidden;
+  background: var(--app-bg);
+}
+
+/* ── Topbar ───────────────────────────────────────── */
+.topbar {
+  height: 56px;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.topbar h1 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--title);
+  letter-spacing: -0.01em;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Main content area ────────────────────────────── */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;            /* prevent flex child overflow */
+}
+
+.content-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 32px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ══════════════════════════════════════════════════════
+   THEME TOGGLE — sidebar row + floating pill
+══════════════════════════════════════════════════════ */
+
+/* ── Full-width row (used inside sidebar footer) ─────── */
+.theme-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text2);
+  font-family: var(--ff);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.13s, color 0.13s;
+}
+
+.theme-toggle-row:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.theme-toggle-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.ttr-icon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.75;
+  color: var(--text2);
+  transition: opacity 0.13s, color 0.13s;
+}
+.theme-toggle-row:hover .ttr-icon { opacity: 1; }
+
+.ttr-label {
+  flex: 1;
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* ── The pill switch (track + knob) ────────────────── */
+.ttp-pill {
+  --trk-w:    36px;
+  --trk-h:    20px;
+  --knob-sz:  14px;
+  --knob-off: 3px;
+  --knob-on:  calc(var(--trk-w) - var(--knob-sz) - var(--knob-off));
+
+  flex-shrink: 0;
+  display: inline-flex;
+}
+
+.ttp-track {
+  position: relative;
+  width: var(--trk-w);
+  height: var(--trk-h);
+  border-radius: 999px;
+  background: var(--border2, #cbd5e1);
+  transition: background 0.28s ease, box-shadow 0.28s ease;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.15);
+}
+
+.ttp-pill--dark .ttp-track {
+  background: var(--accent, #7c3aed);
+  box-shadow:
+    inset 0 1px 3px rgba(0,0,0,0.25),
+    0 0 8px color-mix(in srgb, var(--accent, #7c3aed) 40%, transparent);
+}
+
+.ttp-knob {
+  position: absolute;
+  top: var(--knob-off);
+  left: var(--knob-off);
+  width: var(--knob-sz);
+  height: var(--knob-sz);
+  border-radius: 50%;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #f59e0b;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.22), 0 0 0 1px rgba(0,0,0,0.06);
+  transition:
+    transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1),
+    color 0.25s ease;
+  will-change: transform;
+}
+
+.ttp-pill--dark .ttp-knob {
+  transform: translateX(var(--knob-on));
+  color: #818cf8;
+}
+
+/* ── Floating wrapper (auth / admin pages) ──────────── */
+.theme-toggle-float {
+  position: fixed;
+  top: 14px;
+  right: 18px;
+  z-index: 9999;
+}
+
+/* On floating, hide the label and show as compact pill-only button */
+.theme-toggle-float .theme-toggle-row {
+  width: auto;
+  padding: 7px 12px 7px 10px;
+  gap: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.10), 0 1px 3px rgba(0,0,0,0.06);
+  font-size: 12px;
+  color: var(--text2);
+}
+
+.theme-toggle-float .theme-toggle-row:hover {
+  background: color-mix(in srgb, var(--surface) 98%, transparent);
+  color: var(--text);
+}
+
+.theme-toggle-float .ttr-label { font-size: 12px; font-weight: 500; }
+
+/* ── Auth kicker (used in admin pages) ───────────── */
+.auth-kicker {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 6px;
+}
+
+/* ── Test nav warning banner ──────────────────────── */
+.test-nav-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 20px;
+  background: var(--warn-dim);
+  border-bottom: 1px solid var(--warn);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--warn);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.test-nav-warning-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.test-nav-confirm {
+  padding: 5px 12px;
+  background: var(--danger);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.test-nav-confirm:hover { opacity: 0.85; }
+.test-nav-cancel {
+  padding: 5px 12px;
+  background: transparent;
+  color: var(--text2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.test-nav-cancel:hover { background: var(--surface2); }
+
+/* ── Admin standalone shell ───────────────────────── */
+.admin-standalone {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.admin-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Admin topbar — redesigned ────────────────────── */
+.admin-topbar {
+  height: 58px;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  gap: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  z-index: 50;
+}
+
+/* Scrollable admin content area below the topbar */
+.admin-scroll-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Brand section */
+.admin-topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.admin-topbar-logo {
+  width: 36px;
+  height: 36px;
+  background: var(--accent);
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: -0.04em;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.admin-topbar-brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.admin-topbar-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  line-height: 1;
+}
+
+.admin-topbar-name span:first-child { color: var(--accent); }
+
+.admin-topbar-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  padding: 2px 7px;
+  border-radius: 999px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  line-height: 1.4;
+}
+
+.admin-topbar-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+  line-height: 1;
+}
+
+/* Actions section */
+.admin-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.admin-topbar-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* Theme button */
+.admin-topbar-theme-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: var(--ff);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+
+.admin-topbar-theme-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg));
+}
+
+/* Student app button */
+.admin-topbar-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: var(--ff);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+
+.admin-topbar-action-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg));
+}
+
+/* Sign out button */
+.admin-topbar-logout-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--border));
+  background: color-mix(in srgb, var(--danger) 5%, var(--bg));
+  color: var(--danger);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: var(--ff);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
+}
+
+.admin-topbar-logout-btn:hover {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, var(--bg));
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--danger) 20%, transparent);
+}
+
+/* Legacy .logout-btn kept for any other usage */
+.logout-btn {
+  padding: 6px 14px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--ff);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.logout-btn:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: var(--danger-dim);
+}
+
+.admin-denied-card {
+  max-width: 400px;
+  margin: 80px auto;
+  padding: 40px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius3);
+  text-align: center;
+}
+.admin-denied-card h1 { font-size: 20px; margin-bottom: 10px; }
+.admin-denied-card p  { color: var(--text2); margin-bottom: 24px; font-size: 14px; }
+.admin-denied-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+/* ═══════════════════════════════════════════════════
+   RESPONSIVE BREAKPOINTS
+═══════════════════════════════════════════════════ */
+
+/* ── Tablet (≤1024px) ─────────────────────────────── */
+@media (max-width: 1024px) {
+  .content-area { padding: 20px 24px; }
+}
+
+/* ── Mobile (≤768px) — sidebar becomes bottom nav ─── */
+@media (max-width: 768px) {
+  .app-container {
+    flex-direction: column;   /* stack vertically */
+  }
+
+  .main-content {
+    /* Leave room for fixed bottom nav (64px) */
+    padding-bottom: 64px;
+  }
+
+  .content-area {
+    padding: 16px;
+    padding-bottom: 80px;     /* extra clearance above bottom nav */
+  }
+
+  .topbar {
+    padding: 0 16px;
+    height: 52px;
+    min-height: 52px;
+  }
+
+  .topbar h1 { font-size: 15px; }
+
+  .admin-topbar { padding: 0 14px; height: auto; min-height: 52px; flex-wrap: wrap; padding-top: 8px; padding-bottom: 8px; }
+  .admin-topbar-sub { display: none; }
+  .admin-topbar-badge { display: none; }
+
+  .admin-denied-card {
+    margin: 40px 16px;
+    padding: 28px 20px;
+  }
+
+  .test-nav-warning { padding: 8px 14px; font-size: 12px; }
+}
+
+/* ── Small mobile (≤480px) ────────────────────────── */
+@media (max-width: 480px) {
+  .content-area { padding: 12px; padding-bottom: 80px; }
+  .topbar h1 { font-size: 14px; }
+}

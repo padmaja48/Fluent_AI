@@ -1,0 +1,248 @@
+/* ═══════════════════════════════════════════════════
+   Sidebar — desktop: left rail | mobile: bottom nav
+═══════════════════════════════════════════════════ */
+
+/* ── Desktop left sidebar ─────────────────────────── */
+.sidebar {
+  width: 220px;
+  min-width: 220px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: width 0.2s;
+}
+
+/* ── Logo / Brand ─────────────────────────────────── */
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 16px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.logo {
+  width: 32px;
+  height: 32px;
+  background: var(--accent);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: -0.04em;
+  flex-shrink: 0;
+}
+
+.brand {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--title);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.brand span { color: var(--accent); }
+
+/* Mobile-only nav items (theme + logout) — hidden on desktop/tablet */
+.mobile-only-nav { display: none !important; }
+
+@media (max-width: 768px) {
+  .mobile-only-nav { display: flex !important; }
+}
+
+/* ── Nav items ────────────────────────────────────── */
+.sidebar-nav {
+  flex: 1;
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  color: var(--text2);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.13s, color 0.13s;
+  user-select: none;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  font-family: var(--ff);
+}
+
+.nav-item:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.nav-item.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.nav-item .icon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+.nav-item.active .icon,
+.nav-item:hover .icon { opacity: 1; }
+
+.nav-item .label { flex: 1; }
+
+/* ── Sidebar footer ───────────────────────────────── */
+.sidebar-footer {
+  padding: 10px 8px 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* Theme row sits flush with other footer items — no extra overrides needed */
+
+.sidebar-footer .logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  background: transparent;
+  color: var(--text2);
+  border: none;
+  border-radius: var(--radius);
+  font-family: var(--ff);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.13s, color 0.13s;
+}
+.sidebar-footer .logout-btn .icon {
+  width: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+.sidebar-footer .logout-btn:hover {
+  background: var(--danger-dim);
+  color: var(--danger);
+}
+.sidebar-footer .logout-btn:hover .icon { opacity: 1; }
+
+/* ═══════════════════════════════════════════════════
+   Tablet (≤1024px) — slim sidebar (icons + labels)
+═══════════════════════════════════════════════════ */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .sidebar { width: 190px; min-width: 190px; }
+  .nav-item { font-size: 13px; padding: 9px 10px; }
+  .brand { font-size: 14px; }
+}
+
+/* ═══════════════════════════════════════════════════
+   Mobile (≤768px) — fixed bottom navigation bar
+═══════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    flex-direction: row;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 200;
+    padding: 0;
+    background: var(--nav-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+  }
+
+  /* Hide brand header and footer on mobile */
+  .sidebar-header { display: none; }
+  .sidebar-footer  { display: none; }
+
+  .sidebar-nav {
+    flex-direction: row;
+    padding: 6px 4px;
+    gap: 0;
+    justify-content: space-around;
+    align-items: stretch;
+    width: 100%;
+    overflow: visible;
+  }
+
+  .nav-item {
+    flex-direction: column;
+    gap: 3px;
+    padding: 8px 4px;
+    font-size: 10px;
+    min-width: 0;
+    flex: 1;
+    justify-content: center;
+    align-items: center;
+    border-radius: var(--radius);
+    font-weight: 500;
+  }
+
+  .nav-item .icon {
+    width: 22px;
+    height: 22px;
+    opacity: 0.65;
+  }
+  .nav-item.active .icon { opacity: 1; }
+
+  .nav-item .label {
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 1;
+    text-align: center;
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .nav-item.active {
+    background: var(--accent-dim);
+    color: var(--accent);
+  }
+
+  /* Logout button gets a subtle red tint on mobile */
+  .nav-logout { color: var(--danger); }
+  .nav-logout .icon { opacity: 0.75; }
+  .nav-logout:hover { background: var(--danger-dim); }
+}
+
+/* ── Very small screens (≤380px) ─────────────────── */
+@media (max-width: 380px) {
+  .nav-item .label { display: none; }
+  .nav-item { padding: 10px 4px; }
+  .nav-item .icon { width: 24px; height: 24px; }
+}

@@ -1,0 +1,331 @@
+.mixed-tests-page {
+  display: grid;
+  gap: 16px;
+  animation: fadeIn 0.3s ease;
+}
+
+/* ── Hero ───────────────────────────────────────── */
+.mixed-hero {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 20px;
+  align-items: center;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius2);
+}
+
+.mixed-hero h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+  line-height: 1.3;
+}
+
+.mixed-hero p {
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.55;
+}
+
+.mixed-hero-panel {
+  text-align: center;
+  padding: 16px 20px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius2);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 110px;
+}
+
+.mixed-hero-panel strong {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.mixed-hero-panel span {
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.mixed-hero-panel small {
+  font-size: 11px;
+  color: var(--text2);
+}
+
+/* ── Level grid ─────────────────────────────────── */
+.test-level-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+}
+
+.test-level-card {
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius2);
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 0.15s, background 0.15s;
+  min-height: 110px;
+}
+
+.test-level-card:hover:not(:disabled),
+.test-level-card.active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.test-level-card.current {
+  border-color: var(--success);
+}
+
+.test-level-card.locked {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.test-level-card span {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.test-level-card strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.test-level-card p {
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.35;
+}
+
+.test-level-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.test-level-stats small {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text2);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+
+/* ── Test console ───────────────────────────────── */
+.test-console {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius2);
+}
+
+.test-console > div { flex: 1; min-width: 0; }
+
+.test-console h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.test-console p {
+  font-size: 13px;
+  color: var(--text2);
+}
+
+.test-console .btn-primary {
+  flex-shrink: 0;
+  min-width: 180px;
+  min-height: 38px;
+  padding: 0 18px;
+}
+
+/* ── Test slot panel ────────────────────────────── */
+.test-slot-panel {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius2);
+}
+
+.test-slot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.test-slot-header h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.test-slot-header strong {
+  font-size: 12px;
+  color: var(--text2);
+  font-weight: 500;
+}
+
+.test-slot-map {
+  display: grid;
+  grid-template-columns: repeat(20, 1fr);
+  gap: 5px;
+  padding: 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.test-slot {
+  aspect-ratio: 1;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text2);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.test-slot:hover:not(:disabled),
+.test-slot.selected {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.test-slot.completed {
+  border-color: rgba(63, 185, 80, 0.5);
+  background: rgba(63, 185, 80, 0.1);
+  color: var(--success);
+}
+
+.test-slot.in-progress {
+  border-color: rgba(210, 153, 34, 0.6);
+  background: rgba(210, 153, 34, 0.1);
+  color: var(--warn);
+}
+
+.test-slot.locked {
+  cursor: not-allowed;
+  opacity: 0.3;
+}
+
+/* ── Test complete note ─────────────────────────── */
+.test-complete-note {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(63, 185, 80, 0.35);
+  border-radius: var(--radius);
+  background: rgba(63, 185, 80, 0.07);
+}
+
+.test-complete-note strong {
+  font-size: 13px;
+  color: var(--success);
+  font-weight: 600;
+}
+
+.test-complete-note span {
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+
+/* ── Mixed test active session wrapper ──────────── */
+.mixed-test-session {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: fadeIn 0.3s ease;
+}
+
+/* ── Session progress bar ───────────────────────── */
+.mixed-test-header { margin-bottom: 4px; }
+
+.mixed-progress-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.mixed-progress-track div {
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width 0.25s ease;
+}
+
+.mixed-skill-lab span {
+  min-width: 80px;
+}
+
+/* ── Responsive ─────────────────────────────────── */
+
+/* Tablet landscape */
+@media (max-width: 1100px) {
+  .test-level-grid { grid-template-columns: repeat(3, 1fr); }
+  .test-slot-map   { grid-template-columns: repeat(10, 1fr); }
+}
+
+/* Tablet portrait */
+@media (max-width: 768px) {
+  .mixed-hero      { grid-template-columns: 1fr; gap: 12px; padding: 18px; }
+  .test-level-grid { grid-template-columns: repeat(3, 1fr); }
+  .mixed-test-session { gap: 10px; }
+}
+
+/* Mobile */
+@media (max-width: 700px) {
+  .mixed-hero      { grid-template-columns: 1fr; }
+  .test-level-grid { grid-template-columns: repeat(2, 1fr); }
+  .test-console    { flex-direction: column; align-items: stretch; }
+  .test-console .btn-primary { width: 100%; min-width: 0; }
+  .test-slot-header { flex-direction: column; align-items: flex-start; }
+  .test-slot-map   { grid-template-columns: repeat(5, 1fr); }
+  .test-slot-panel { padding: 12px; }
+}
+
+/* Small mobile */
+@media (max-width: 420px) {
+  .test-level-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .test-level-card { min-height: 90px; padding: 12px; }
+  .test-slot-map   { grid-template-columns: repeat(4, 1fr); }
+}

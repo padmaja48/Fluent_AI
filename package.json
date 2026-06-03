@@ -1,0 +1,24 @@
+{
+  "name": "fluentai",
+  "version": "1.0.0",
+  "description": "FluentAI - English Learning Platform MERN Stack",
+  "author": "Development Team",
+  "license": "MIT",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "install-all": "npm install && cd server && npm install && cd ../client && npm install",
+    "dev": "concurrently \"cd server && npm run dev\" \"cd client && npm start\"",
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm start",
+    "seed": "cd server && npm run seed",
+    "build": "cd server && npm run build && cd ../client && npm run build",
+    "test": "cd server && npm test"
+  },
+  "devDependencies": {
+    "concurrently": "^8.0.1",
+    "playwright-core": "^1.60.0"
+  }
+}

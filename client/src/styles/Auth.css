@@ -1,0 +1,187 @@
+/* ── Auth page wrapper ────────────────────────────── */
+.auth-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+  background: var(--app-bg);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Subtle gradient blob behind the card */
+.auth-container::before {
+  content: '';
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+  top: -100px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* ── Card ─────────────────────────────────────────── */
+.auth-card {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  padding: 40px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius3);
+  box-shadow: var(--shadow-lg);
+  animation: fadeIn 0.3s ease both;
+}
+
+.auth-card-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+
+.auth-card-logo .logo-mark {
+  width: 36px;
+  height: 36px;
+  background: var(--accent);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: -0.05em;
+  flex-shrink: 0;
+}
+
+.auth-card-logo .logo-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--title);
+}
+.auth-card-logo .logo-name span { color: var(--accent); }
+
+.auth-card h1 {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--title);
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+
+.auth-card-subtitle {
+  font-size: 13px;
+  color: var(--text2);
+  margin-bottom: 28px;
+}
+
+/* ── Google button wrapper ────────────────────────── */
+.google-btn-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+/* ── Divider ──────────────────────────────────────── */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.auth-divider span {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+/* ── Form groups ──────────────────────────────────── */
+.form-group {
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.form-group label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+  letter-spacing: 0.04em;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 9px 12px;
+  min-height: 40px;
+  font-size: 14px;
+}
+
+/* ── Submit button ────────────────────────────────── */
+.auth-card .btn-primary {
+  width: 100%;
+  min-height: 42px;
+  margin-top: 8px;
+  font-size: 14px;
+}
+
+/* ── Footer link ──────────────────────────────────── */
+.auth-link {
+  text-align: center;
+  margin-top: 20px;
+  color: var(--text2);
+  font-size: 13px;
+}
+.auth-link button {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 0;
+  transition: color 0.15s;
+}
+.auth-link button:hover { color: var(--accent-hover); text-decoration: underline; }
+
+/* ── Error message ────────────────────────────────── */
+.auth-card .error {
+  padding: 10px 12px;
+  background: var(--danger-dim);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 12px;
+}
+
+/* ═══════════════════════════════════════════════════
+   RESPONSIVE
+═══════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+  .auth-container { padding: 16px; align-items: flex-start; padding-top: 40px; }
+  .auth-card { padding: 28px 20px; border-radius: var(--radius2); }
+  .auth-card h1 { font-size: 20px; }
+  .google-btn-wrapper { transform: scale(0.95); transform-origin: center; }
+}
+
+@media (max-width: 360px) {
+  .auth-card { padding: 22px 16px; }
+  .auth-card h1 { font-size: 18px; }
+}
