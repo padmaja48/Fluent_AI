@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { interviewAPI, resumeAPI } from '../services/api';
 import { PERSONAS } from '../lib/personas';
+import { createAudioRecorder, getRecordedAudioFileName } from '../lib/audioRecording';
 import { AvatarPortrait } from './interview/AvatarPortrait';
 import VoiceIndicator from './interview/VoiceIndicator';
 import '../styles/Interview.css';
@@ -43,7 +44,10 @@ function speakWebSpeech(text, { wantMale = false, onEnd } = {}) {
   const utt = new SpeechSynthesisUtterance(text);
   utt.lang = 'en-US';
   utt.rate = 0.92;
+  let started = false;
   const doSpeak = () => {
+    if (started) return;
+    started = true;
     const voices = window.speechSynthesis.getVoices();
     const en = voices.filter(v => v.lang.startsWith('en'));
     if (wantMale) {
@@ -62,9 +66,10 @@ function speakWebSpeech(text, { wantMale = false, onEnd } = {}) {
     if (window.speechSynthesis.paused) window.speechSynthesis.resume();
     window.speechSynthesis.speak(utt);
   };
-  window.speechSynthesis.getVoices().length > 0
-    ? doSpeak()
-    : window.speechSynthesis.addEventListener('voiceschanged', doSpeak, { once: true });
+  if (window.speechSynthesis.getVoices().length === 0) {
+    window.speechSynthesis.addEventListener('voiceschanged', doSpeak, { once: true });
+  }
+  doSpeak();
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -110,7 +115,7 @@ function ResumeStep({ onNext }) {
       >
         {uploading ? <span>Uploading…</span>
           : resume ? <span className="iv-drop-success">✓ {resume.fileName || resume.originalName || 'Resume uploaded'}</span>
-          : <><span className="iv-drop-icon">📄</span><span>Drag & drop PDF here, or click to browse</span></>}
+          : <><span className="iv-drop-icon">PDF</span><span>Drag and drop PDF here, or click to browse</span></>}
         <input id="resume-file-input" type="file" accept=".pdf,.doc,.docx"
           style={{ display: 'none' }} onChange={e => upload(e.target.files[0])} />
       </div>
@@ -219,7 +224,7 @@ function PersonaStep({ onNext, onBack }) {
     <div className="iv-step">
       <h2 className="iv-step-title">Choose Your Interviewer</h2>
       <p className="iv-step-desc">
-        Click a card to select. Press <strong>▶ Preview voice</strong> to hear how they sound before deciding.
+        Click a card to select. Press <strong>Preview voice</strong> to hear how they sound before deciding.
       </p>
       {previewError && <p className="iv-error">{previewError}</p>}
 
@@ -248,9 +253,9 @@ function PersonaStep({ onNext, onBack }) {
               title={previewing === p.id ? 'Stop preview' : 'Preview voice'}
             >
               {previewing === p.id ? (
-                <><span className="iv-preview-icon">⏹</span> Stop</>
+                <>Stop</>
               ) : (
-                <><span className="iv-preview-icon">▶</span> Preview voice</>
+                <>Preview voice</>
               )}
             </button>
 
@@ -379,14 +384,14 @@ function SystemCheckStep({ onStart, onBack, loading }) {
       </div>
 
       <div className="iv-rules-box">
-        <h4>📋 Interview Rules</h4>
+        <h4>Interview Rules</h4>
         <ul>
-          <li>🖥️ You must remain in <strong>fullscreen</strong> at all times</li>
-          <li>🚫 <strong>Tab switching</strong> or leaving the window is not allowed</li>
-          <li>📋 <strong>Copy/paste</strong> is disabled during the interview</li>
-          <li>🖱️ <strong>Right-clicking</strong> is disabled</li>
-          <li>📵 Keep your <strong>face visible</strong> in the camera at all times</li>
-          <li>⚠️ <strong>{MAX_VIOLATIONS} violations</strong> will terminate the interview automatically</li>
+          <li><strong>Fullscreen:</strong> Stay in fullscreen at all times.</li>
+          <li><strong>Tab switching:</strong> Do not leave this window during the interview.</li>
+          <li><strong>Copy/paste:</strong> Clipboard actions are disabled.</li>
+          <li><strong>Right-click:</strong> Context menus are disabled.</li>
+          <li><strong>Camera:</strong> Keep your face visible at all times.</li>
+          <li><strong>Violations:</strong> {MAX_VIOLATIONS} violations will terminate the interview automatically.</li>
         </ul>
       </div>
 
@@ -425,9 +430,14 @@ function LiveSession({ interview, persona, onComplete }) {
   const [timer, setTimer]             = useState(interview.duration * 60 || 1800);
   const [interimText, setInterimText] = useState('');
   const [ending, setEnding]           = useState(false);
+  const [isProcessingAnswer, setIsProcessingAnswer] = useState(false);
 
   const videoRef        = useRef(null);
   const recognitionRef  = useRef(null);
+  const answerRecorderRef = useRef(null);
+  const answerStreamRef = useRef(null);
+  const answerChunksRef = useRef([]);
+  const answerCaptureModeRef = useRef(null);
   const animRef         = useRef(null);
   const animFrameRef    = useRef(null);
   const timerRef        = useRef(null);
@@ -446,6 +456,16 @@ function LiveSession({ interview, persona, onComplete }) {
     const rec = recognitionRef.current;
     recognitionRef.current = null;
     if (rec) { try { rec.onend = null; rec.stop(); } catch {} }
+    if (answerRecorderRef.current?.state === 'recording') {
+      try { answerRecorderRef.current.requestData?.(); } catch {}
+      try { answerRecorderRef.current.stop(); } catch {}
+    }
+    answerRecorderRef.current = null;
+    if (answerStreamRef.current) {
+      answerStreamRef.current.getTracks().forEach(track => track.stop());
+      answerStreamRef.current = null;
+    }
+    answerCaptureModeRef.current = null;
     setIsListening(false);
     setInterimText('');
   }, []);
@@ -485,7 +505,7 @@ function LiveSession({ interview, persona, onComplete }) {
     violationCountRef.current += 1;
     const count = violationCountRef.current;
     setViolations(count);
-    setViolationMsg(`⚠️ Warning (${count}/${MAX_VIOLATIONS}): ${description}`);
+    setViolationMsg(`Warning (${count}/${MAX_VIOLATIONS}): ${description}`);
     setViolationFlash(true);
     setTimeout(() => setViolationFlash(false), 800);
     try { await interviewAPI.logViolation(interview._id, type, description); } catch {}
@@ -643,7 +663,7 @@ function LiveSession({ interview, persona, onComplete }) {
   const playAudioBase64 = useCallback((base64, contentType, onEnd) => {
     return new Promise(resolve => {
       try {
-        if (sessionClosedRef.current) { resolve(); return; }
+        if (sessionClosedRef.current) { resolve(false); return; }
         if (ttsSourceRef.current) {
           ttsSourceRef.current.pause();
           if (ttsSourceRef.current._blobUrl) URL.revokeObjectURL(ttsSourceRef.current._blobUrl);
@@ -670,21 +690,20 @@ function LiveSession({ interview, persona, onComplete }) {
           setAudioLevel(0); setIsSpeaking(false);
           URL.revokeObjectURL(url); ttsSourceRef.current = null;
           if (!sessionClosedRef.current) onEnd?.();
-          resolve();
+          resolve(true);
         };
         audio.onerror = () => {
           cancelAnimationFrame(animFrameRef.current);
           setIsSpeaking(false); URL.revokeObjectURL(url); ttsSourceRef.current = null;
-          if (!sessionClosedRef.current) onEnd?.();
-          resolve();
+          resolve(false);
         };
         audio.play().catch(err => {
           console.warn('TTS play blocked, using Web Speech:', err);
           URL.revokeObjectURL(url); ttsSourceRef.current = null;
-          if (!sessionClosedRef.current) onEnd?.();
-          resolve();
+          setIsSpeaking(false);
+          resolve(false);
         });
-      } catch { setIsSpeaking(false); onEnd?.(); resolve(); }
+      } catch { setIsSpeaking(false); resolve(false); }
     });
   }, []);
 
@@ -704,16 +723,21 @@ function LiveSession({ interview, persona, onComplete }) {
       const { audioBase64, contentType } = res.data;
       if (sessionClosedRef.current) return;
       if (audioBase64 && contentType?.includes('audio')) {
-        await playAudioBase64(audioBase64, contentType, () => startListening());
+        const played = await playAudioBase64(audioBase64, contentType);
+        if (!played && !sessionClosedRef.current) {
+          const wantMale = persona?.id !== 'us-indian';
+          speakWebSpeech(questionText, { wantMale });
+          setIsSpeaking(true);
+        }
       } else {
         const wantMale = persona?.id !== 'us-indian';
-        speakWebSpeech(questionText, { wantMale, onEnd: () => startListening() });
+        speakWebSpeech(questionText, { wantMale });
         setIsSpeaking(true);
       }
     } catch {
       if (!sessionClosedRef.current) {
         const wantMale = persona?.id !== 'us-indian';
-        speakWebSpeech(questionText, { wantMale, onEnd: () => startListening() });
+        speakWebSpeech(questionText, { wantMale });
         setIsSpeaking(true);
       }
     }
@@ -725,11 +749,58 @@ function LiveSession({ interview, persona, onComplete }) {
   }, []); // eslint-disable-line
 
   /* ── Speech recognition ─────────────────────────── */
-  const startListening = () => {
+  const addCandidateTranscript = useCallback((text) => {
+    const clean = String(text || '').trim();
+    if (!clean) return;
+    setTranscript(prev => [...prev, { role: 'candidate', text: clean }]);
+  }, []);
+
+  const startRecordedAnswer = async () => {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setTranscript(prev => [...prev, { role: 'system', text: 'Microphone recording is not supported in this browser.' }]);
+      return false;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const { recorder, mimeType } = createAudioRecorder(stream);
+      answerChunksRef.current = [];
+      answerStreamRef.current = stream;
+      answerRecorderRef.current = recorder;
+      answerCaptureModeRef.current = 'recording';
+
+      recorder.ondataavailable = (event) => {
+        if (event.data?.size > 0) answerChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        if (answerStreamRef.current) {
+          answerStreamRef.current.getTracks().forEach(track => track.stop());
+          answerStreamRef.current = null;
+        }
+      };
+
+      recorder.start(250);
+      setIsListening(true);
+      setInterimText('Recording your answer...');
+      return true;
+    } catch {
+      setTranscript(prev => [...prev, { role: 'system', text: 'Could not access microphone. Please allow microphone permission and try again.' }]);
+      setIsListening(false);
+      setInterimText('');
+      return false;
+    }
+  };
+
+  const startListening = ({ allowRecordingFallback = true, preferRecording = false } = {}) => {
     if (sessionClosedRef.current || ending) return;
+    stopSpeech();
+    if (preferRecording) {
+      startRecordedAnswer();
+      return;
+    }
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
-      setTranscript(prev => [...prev, { role: 'system', text: 'Speech recognition not supported.' }]);
+      if (allowRecordingFallback) startRecordedAnswer();
       return;
     }
     const rec = new SR();
@@ -741,12 +812,109 @@ function LiveSession({ interview, persona, onComplete }) {
         else interim += e.results[i][0].transcript;
       }
       setInterimText(interim);
-      if (final) { setInterimText(''); setTranscript(prev => [...prev, { role: 'candidate', text: final }]); }
+      if (final) { setInterimText(''); addCandidateTranscript(final); }
     };
     rec.onend = () => { if (!sessionClosedRef.current) setIsListening(false); };
-    try { rec.start(); } catch { setIsListening(false); return; }
+    rec.onerror = () => {
+      if (!sessionClosedRef.current && answerCaptureModeRef.current === 'speech' && allowRecordingFallback) {
+        startRecordedAnswer();
+      }
+    };
+    try {
+      rec.start();
+    } catch {
+      if (allowRecordingFallback) startRecordedAnswer();
+      return;
+    }
     recognitionRef.current = rec;
+    answerCaptureModeRef.current = 'speech';
     setIsListening(true);
+  };
+
+  const getAnswerSinceLastQuestion = useCallback(() => {
+    const curr = transcriptRef.current;
+    const lastInterviewerIdx = [...curr].map((m, i) => m.role === 'interviewer' ? i : -1).filter(i => i >= 0).pop() ?? -1;
+    return curr
+      .slice(lastInterviewerIdx + 1)
+      .filter(m => m.role === 'candidate')
+      .map(m => m.text)
+      .join(' ')
+      .trim();
+  }, []);
+
+  const finishRecordedAnswer = async () => {
+    const recorder = answerRecorderRef.current;
+    if (!recorder || answerCaptureModeRef.current !== 'recording') return '';
+
+    const chunksReady = new Promise((resolve) => {
+      recorder.onstop = () => {
+        if (answerStreamRef.current) {
+          answerStreamRef.current.getTracks().forEach(track => track.stop());
+          answerStreamRef.current = null;
+        }
+        resolve();
+      };
+    });
+
+    try { recorder.requestData?.(); } catch {}
+    try {
+      if (recorder.state === 'recording') recorder.stop();
+    } catch {}
+    await chunksReady;
+
+    const usedType = recorder.mimeType || 'audio/webm';
+    answerRecorderRef.current = null;
+    answerCaptureModeRef.current = null;
+    setIsListening(false);
+    setInterimText('');
+
+    if (!answerChunksRef.current.length) return '';
+
+    try {
+      setIsProcessingAnswer(true);
+      const blob = new Blob(answerChunksRef.current, { type: usedType });
+      const formData = new FormData();
+      formData.append('audio', blob, getRecordedAudioFileName('interview-answer', blob.type));
+      const response = await interviewAPI.transcribe(interview._id, formData);
+      const text = response.data?.text || response.data?.transcript || '';
+      addCandidateTranscript(text);
+      return text.trim();
+    } catch {
+      setTranscript(prev => [...prev, { role: 'system', text: 'Could not transcribe your answer. Please try again.' }]);
+      return '';
+    } finally {
+      setIsProcessingAnswer(false);
+      answerChunksRef.current = [];
+    }
+  };
+
+  const finishUserAnswer = async () => {
+    if (ending || isProcessingAnswer) return;
+
+    if (answerCaptureModeRef.current === 'recording') {
+      const recordedAnswer = await finishRecordedAnswer();
+      if (recordedAnswer) submitAnswer(recordedAnswer);
+      return;
+    }
+
+    await stopListening();
+    const ans = getAnswerSinceLastQuestion();
+    if (ans) submitAnswer(ans);
+  };
+
+  const prefersRecordedInput = () =>
+    typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
+
+  const handleAnswerButton = () => {
+    if (ending || isProcessingAnswer) return;
+    if (isListening || answerCaptureModeRef.current) {
+      finishUserAnswer();
+      return;
+    }
+    startListening({
+      allowRecordingFallback: true,
+      preferRecording: prefersRecordedInput(),
+    });
   };
 
   const submitAnswer = async (answerText, skipped = false) => {
@@ -768,13 +936,23 @@ function LiveSession({ interview, persona, onComplete }) {
   const fmtTime = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
   const currentQ = questions[currentIdx];
 
+  const playCurrentQuestion = () => {
+    if (!currentQ?.question || sessionClosedRef.current || ending) return;
+    stopSpeech();
+    const wantMale = persona?.id !== 'us-indian';
+    speakWebSpeech(currentQ.question, {
+      wantMale,
+    });
+    setIsSpeaking(true);
+  };
+
   /* Violation color: green → yellow → orange → red */
   const violationColor = ['#10b981', '#f59e0b', '#f97316', '#ef4444'][Math.min(violations, 3)];
 
   if (terminated) {
     return (
       <div className="iv-terminated">
-        <div className="iv-terminated-icon">🚫</div>
+        <div className="iv-terminated-icon">!</div>
         <h2>Interview Terminated</h2>
         <p>You exceeded <strong>{MAX_VIOLATIONS} integrity violations</strong>.</p>
         <p>Your session has been auto-submitted and flagged for review.</p>
@@ -801,10 +979,10 @@ function LiveSession({ interview, persona, onComplete }) {
         <span className="iv-rec-dot">● REC</span>
         {violations > 0 && (
           <span className="iv-violation-count" style={{ color: violationColor }}>
-            ⚠ {violations}/{MAX_VIOLATIONS} violations
+            {violations}/{MAX_VIOLATIONS} violations
           </span>
         )}
-        <span className="iv-proctor-status">{isSpeaking ? '🔊 Interviewer speaking' : isListening ? '🎙 Listening…' : '⏳ Ready'}</span>
+        <span className="iv-proctor-status">{isSpeaking ? 'Interviewer speaking' : isListening ? 'Listening' : 'Ready'}</span>
       </div>
 
       {violationMsg && (
@@ -852,37 +1030,26 @@ function LiveSession({ interview, persona, onComplete }) {
           <div className="iv-controls">
             <VoiceIndicator audioLevel={isListening ? audioLevel : 0} isActive={isListening} label="" color="blue" />
             <button
-              className={`iv-btn${isListening ? ' iv-btn--danger' : ' iv-btn--primary'}`}
-              disabled={ending}
-              onMouseDown={startListening}
-              onTouchStart={startListening}
-              onMouseUp={async () => {
-                if (ending) return;
-                await stopListening();
-                const curr = transcriptRef.current;
-                const lastInterviewerIdx = [...curr].map((m, i) => m.role === 'interviewer' ? i : -1).filter(i => i >= 0).pop() ?? -1;
-                const ans = curr
-                  .slice(lastInterviewerIdx + 1)
-                  .filter(m => m.role === 'candidate')
-                  .map(m => m.text).join(' ').trim();
-                if (ans) submitAnswer(ans);
-              }}
-              onTouchEnd={async () => {
-                if (ending) return;
-                await stopListening();
-                const curr = transcriptRef.current;
-                const lastInterviewerIdx = [...curr].map((m, i) => m.role === 'interviewer' ? i : -1).filter(i => i >= 0).pop() ?? -1;
-                const ans = curr.slice(lastInterviewerIdx + 1).filter(m => m.role === 'candidate').map(m => m.text).join(' ').trim();
-                if (ans) submitAnswer(ans);
-              }}
+              type="button"
+              className="iv-btn iv-btn--ghost"
+              disabled={ending || isProcessingAnswer || !currentQ}
+              onClick={playCurrentQuestion}
             >
-              {isListening ? '🎙 Release to submit' : '🎙 Hold to speak'}
+              Play question
             </button>
-            <button className="iv-btn iv-btn--ghost" disabled={ending}
+            <button
+              type="button"
+              className={`iv-btn${isListening ? ' iv-btn--danger' : ' iv-btn--primary'}`}
+              disabled={ending || isProcessingAnswer}
+              onClick={handleAnswerButton}
+            >
+              {isProcessingAnswer ? 'Checking answer...' : isListening ? 'Submit answer' : 'Start answer'}
+            </button>
+            <button type="button" className="iv-btn iv-btn--ghost" disabled={ending || isProcessingAnswer}
               onClick={() => { stopListening(); submitAnswer('', true); }}>
               Skip
             </button>
-            <button className="iv-btn iv-btn--ghost iv-btn--finish" disabled={ending}
+            <button type="button" className="iv-btn iv-btn--ghost iv-btn--finish" disabled={ending || isProcessingAnswer}
               onClick={() => finishSession()}>
               {ending
                 ? <span className="iv-btn-loading"><span className="iv-btn-spinner" />Ending</span>

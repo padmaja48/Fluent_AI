@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { sessionAPI } from '../services/api';
+import { createAudioRecorder, getRecordedAudioFileName } from '../lib/audioRecording';
 import '../styles/Practice.css';
 import '../styles/MixedTests.css';
 import '../styles/Writing.css';
@@ -305,8 +306,12 @@ export const MixedTests = ({ onTestActiveChange }) => {
       return;
     }
 
+    let didStartSpeaking = false;
     const speak = () => {
+      if (didStartSpeaking) return;
+      didStartSpeaking = true;
       window.speechSynthesis.cancel();
+      window.speechSynthesis.resume?.();
       const utterance = new SpeechSynthesisUtterance(currentQuestion.passageText || currentQuestion.stem);
       utterance.lang = 'en-US';
       utterance.rate = selectedLevel === 'A1' || selectedLevel === 'A2' ? 0.84 : selectedLevel === 'C1' || selectedLevel === 'C2' ? 1.02 : 0.94;
@@ -324,11 +329,10 @@ export const MixedTests = ({ onTestActiveChange }) => {
     };
 
     const voices = window.speechSynthesis.getVoices();
-    if (voices.length > 0) {
-      speak();
-    } else {
+    if (voices.length === 0) {
       window.speechSynthesis.addEventListener('voiceschanged', speak, { once: true });
     }
+    speak();
   };
 
   const startRecording = async () => {
@@ -336,13 +340,18 @@ export const MixedTests = ({ onTestActiveChange }) => {
       setError(null);
       setSpeakingResult(null);
 
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setError('Microphone recording is not supported in this browser.');
+        return;
+      }
+      if (typeof MediaRecorder === 'undefined') {
+        setError('Audio recording is not supported in this browser.');
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      // Pick the best supported MIME type for cross-browser compatibility
-      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']
-        .find((type) => MediaRecorder.isTypeSupported(type)) || '';
-
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+      const { recorder, mimeType } = createAudioRecorder(stream);
       audioChunksRef.current = [];
       mediaRecorderRef.current = recorder;
 
@@ -352,6 +361,11 @@ export const MixedTests = ({ onTestActiveChange }) => {
 
       recorder.onstop = () => {
         const usedType = recorder.mimeType || mimeType || 'audio/webm';
+        if (!audioChunksRef.current.length) {
+          setError('No audio was captured. Please try recording again.');
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
         const blob = new Blob(audioChunksRef.current, { type: usedType });
         cleanupRecordingUrl();
         setRecordedAudioUrl(URL.createObjectURL(blob));
@@ -369,6 +383,11 @@ export const MixedTests = ({ onTestActiveChange }) => {
 
   const stopRecording = () => {
     if (mediaRecorderRef.current?.state === 'recording') {
+      try {
+        mediaRecorderRef.current.requestData?.();
+      } catch {
+        // Some browsers do not allow requestData during shutdown.
+      }
       mediaRecorderRef.current.stop();
     }
     setRecording(false);
@@ -381,7 +400,7 @@ export const MixedTests = ({ onTestActiveChange }) => {
       setCheckingSpeaking(true);
       setError(null);
       const formData = new FormData();
-      formData.append('audio', recordedBlob, 'mixed-speaking-answer.webm');
+      formData.append('audio', recordedBlob, getRecordedAudioFileName('mixed-speaking-answer', recordedBlob.type));
       formData.append('question', currentQuestion.stem);
       formData.append('expectedAnswer', currentQuestion.correctAnswer || '');
       const response = await sessionAPI.checkSpeaking(formData);

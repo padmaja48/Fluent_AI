@@ -105,6 +105,9 @@
 
 /* ── Buttons ───────────────────────────────────────────────────── */
 .iv-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 0.55rem 1.25rem;
   border-radius: 6px;
   font-size: 0.875rem;
@@ -354,13 +357,59 @@
   .iv-step-actions .iv-btn { width: 100%; text-align: center; justify-content: center; }
 
   /* Live session on mobile */
-  .iv-live { margin: -16px; height: calc(100dvh - 52px - 64px); }
-  .iv-avatar-panel { flex: 0 0 140px; padding: 0.5rem; }
-  .iv-avatar-wrap  { width: 120px; height: 144px; }
-  .iv-transcript-panel { padding: 0.5rem; }
+  .iv-live {
+    margin: -12px;
+    height: calc(100dvh - 52px - 92px);
+    min-height: 0;
+  }
+  .iv-session-body {
+    flex-direction: column;
+    min-height: 0;
+  }
+  .iv-avatar-panel {
+    flex: 0 0 auto;
+    flex-direction: row;
+    justify-content: flex-start;
+    padding: 0.5rem 0.75rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .iv-avatar-wrap  { width: 76px; height: 92px; flex: 0 0 76px; }
+  .iv-avatar-panel .voice-indicator { display: none; }
+  .iv-persona-tag { font-size: 0.72rem; }
+  .iv-transcript-panel {
+    padding: 0.5rem;
+    min-height: 0;
+  }
+  .iv-transcript-scroll { min-height: 120px; }
+  .iv-current-q {
+    font-size: 0.78rem;
+    max-height: 116px;
+    overflow-y: auto;
+  }
   .iv-msg { max-width: 92%; }
   .iv-msg-text { font-size: 0.82rem; padding: 0.4rem 0.6rem; }
-  .iv-controls  { gap: 0.4rem; flex-wrap: wrap; }
+  .iv-controls  {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+    padding: 0.55rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    box-shadow: 0 -4px 18px rgba(15,23,42,0.08);
+  }
+  .iv-controls .voice-indicator {
+    grid-column: 1 / -1;
+    min-height: 28px;
+  }
+  .iv-controls .iv-btn {
+    width: 100%;
+    min-height: 44px;
+    padding: 0.45rem 0.55rem;
+    font-size: 0.78rem;
+    white-space: normal;
+  }
   .iv-proctor-bar { padding: 0.25rem 0.6rem; gap: 0.4rem; font-size: 0.75rem; }
   .iv-pip { width: 48px; height: 36px; }
   .iv-persona-card { padding: 0.75rem; }
@@ -715,6 +764,12 @@
   flex-wrap: nowrap;
 }
 
+.iv-controls .iv-btn {
+  min-height: 42px;
+  text-align: center;
+  touch-action: none;
+}
+
 /* ── Terminated modal ──────────────────────────────────────────── */
 .iv-terminated {
   display: flex;
@@ -976,7 +1031,7 @@
   background: color-mix(in srgb, var(--accent) 6%, var(--bg));
   border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
   border-radius: 10px;
-  padding: 1rem 1.25rem;
+  padding: 1rem;
   margin: 0.75rem 0 1.25rem;
 }
 
@@ -999,10 +1054,15 @@
 .iv-rules-box li {
   font-size: 0.84rem;
   color: var(--text-muted);
-  display: flex;
-  align-items: baseline;
-  gap: 0.4rem;
+  display: grid;
+  grid-template-columns: minmax(86px, 0.42fr) minmax(0, 1fr);
+  column-gap: 0.6rem;
   line-height: 1.4;
+}
+
+.iv-rules-box li strong {
+  color: var(--text);
+  font-weight: 700;
 }
 
 /* ── Proctoring violation flash ────────────────────────────────── */

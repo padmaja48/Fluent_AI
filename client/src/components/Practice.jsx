@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useContext, useRef, useCallback } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { sessionAPI } from '../services/api';
+import { createAudioRecorder, getRecordedAudioFileName } from '../lib/audioRecording';
 import '../styles/Practice.css';
 import '../styles/Writing.css';
 import '../styles/Reading.css';
@@ -11,7 +12,13 @@ const DEFAULT_SET_SIZE = 10;
 const DEFAULT_TOTAL_SETS = 100;
 const DEFAULT_SETS_PER_MODULE = 20;
 
-export const Practice = ({ resumeSession = null, initialSkill = null, onInitialSkillConsumed = null, onMounted = null }) => {
+export const Practice = ({
+  resumeSession = null,
+  initialSkill = null,
+  onInitialSkillConsumed = null,
+  onMounted = null,
+  onGoToDashboard = null,
+}) => {
   const { user } = useContext(AuthContext);
   const [skill, setSkill] = useState('Listening');
   const [level, setLevel] = useState(user?.level || 'A1');
@@ -301,8 +308,12 @@ export const Practice = ({ resumeSession = null, initialSkill = null, onInitialS
       return;
     }
 
+    let didStartSpeaking = false;
     const speak = () => {
+      if (didStartSpeaking) return;
+      didStartSpeaking = true;
       window.speechSynthesis.cancel();
+      window.speechSynthesis.resume?.();
       const utterance = new SpeechSynthesisUtterance(spokenText);
       utterance.lang = 'en-US';
       utterance.rate = level === 'A1' || level === 'A2' ? 0.82 : level === 'C1' || level === 'C2' ? 1.02 : 0.92;
@@ -322,11 +333,10 @@ export const Practice = ({ resumeSession = null, initialSkill = null, onInitialS
     };
 
     const voices = window.speechSynthesis.getVoices();
-    if (voices.length > 0) {
-      speak();
-    } else {
+    if (voices.length === 0) {
       window.speechSynthesis.addEventListener('voiceschanged', speak, { once: true });
     }
+    speak();
   };
 
   const startRecording = async () => {
@@ -334,13 +344,18 @@ export const Practice = ({ resumeSession = null, initialSkill = null, onInitialS
       setError(null);
       setSpeakingResult(null);
 
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setError('Microphone recording is not supported in this browser.');
+        return;
+      }
+      if (typeof MediaRecorder === 'undefined') {
+        setError('Audio recording is not supported in this browser.');
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      // Pick the best supported MIME type for cross-browser compatibility
-      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']
-        .find((type) => MediaRecorder.isTypeSupported(type)) || '';
-
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+      const { recorder, mimeType } = createAudioRecorder(stream);
       audioChunksRef.current = [];
       mediaRecorderRef.current = recorder;
 
@@ -350,6 +365,11 @@ export const Practice = ({ resumeSession = null, initialSkill = null, onInitialS
 
       recorder.onstop = () => {
         const usedType = recorder.mimeType || mimeType || 'audio/webm';
+        if (!audioChunksRef.current.length) {
+          setError('No audio was captured. Please try recording again.');
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
         const blob = new Blob(audioChunksRef.current, { type: usedType });
         setRecordedAudioUrl((currentUrl) => {
           if (currentUrl) URL.revokeObjectURL(currentUrl);
@@ -369,6 +389,11 @@ export const Practice = ({ resumeSession = null, initialSkill = null, onInitialS
 
   const stopRecording = () => {
     if (mediaRecorderRef.current?.state === 'recording') {
+      try {
+        mediaRecorderRef.current.requestData?.();
+      } catch {
+        // Some browsers do not allow requestData during shutdown.
+      }
       mediaRecorderRef.current.stop();
     }
     setRecording(false);
@@ -382,7 +407,7 @@ export const Practice = ({ resumeSession = null, initialSkill = null, onInitialS
       setCheckingSpeaking(true);
       setError(null);
       const formData = new FormData();
-      formData.append('audio', recordedBlob, 'speaking-answer.webm');
+      formData.append('audio', recordedBlob, getRecordedAudioFileName('speaking-answer', recordedBlob.type));
       formData.append('question', currentQuestion.stem);
       formData.append('expectedAnswer', currentQuestion.correctAnswer || '');
       const response = await sessionAPI.checkSpeaking(formData);
@@ -451,6 +476,16 @@ export const Practice = ({ resumeSession = null, initialSkill = null, onInitialS
   if (!sessionStarted) {
     return (
       <div className="practice-journey">
+        <div className="practice-page-actions">
+          <button
+            type="button"
+            className="practice-dashboard-btn"
+            onClick={() => onGoToDashboard?.()}
+          >
+            Back to Dashboard
+          </button>
+        </div>
+
         <div className="journey-hero">
           <div>
             <span className="journey-kicker">Practice Journey</span>

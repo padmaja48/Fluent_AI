@@ -124,6 +124,10 @@ export const interviewAPI = {
   getState: (interviewId) => api.get(`/interviews/${interviewId}/state`),
   speak: (interviewId, text, voiceStyle = 'default') =>
     api.post(`/interviews/${interviewId}/speak`, { text, voiceStyle }),
+  transcribe: (interviewId, formData) =>
+    api.post(`/interviews/${interviewId}/transcribe`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
   uploadRecording: (interviewId, formData) =>
     api.post(`/interviews/${interviewId}/recording`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },

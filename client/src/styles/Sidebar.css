@@ -168,17 +168,18 @@
 ═══════════════════════════════════════════════════ */
 @media (max-width: 768px) {
   .sidebar {
-    width: 100%;
+    width: calc(100% - 16px);
     min-width: 0;
     height: auto;
+    min-height: 64px;
     flex-direction: row;
-    border-right: none;
-    border-top: 1px solid var(--border);
+    border: 1px solid var(--border);
+    border-radius: 16px;
     position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 200;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    left: 8px;
+    right: 8px;
+    z-index: 9999;
     padding: 0;
     background: var(--nav-bg);
     backdrop-filter: blur(12px);
@@ -192,7 +193,7 @@
 
   .sidebar-nav {
     flex-direction: row;
-    padding: 6px 4px;
+    padding: 6px;
     gap: 0;
     justify-content: space-around;
     align-items: stretch;
@@ -203,7 +204,7 @@
   .nav-item {
     flex-direction: column;
     gap: 3px;
-    padding: 8px 4px;
+    padding: 8px 3px;
     font-size: 10px;
     min-width: 0;
     flex: 1;

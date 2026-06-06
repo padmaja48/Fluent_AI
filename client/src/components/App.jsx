@@ -232,7 +232,7 @@ export const App = () => {
   }
 
   return (
-    <div className="app-container" style={{ flexDirection: 'row' }}>
+    <div className="app-container">
       <Sidebar currentView={currentView} onViewChange={handleSetView} onLogout={handleLogout} themeToggle={themeToggle} isDark={isDark} onToggleTheme={toggleTheme} />
       <div className="main-content">
         {navWarning && (
@@ -278,6 +278,7 @@ export const App = () => {
               initialSkill={practiceStartSkill}
               onInitialSkillConsumed={() => setPracticeStartSkill(null)}
               onMounted={() => setResumeTarget(null)}
+              onGoToDashboard={() => handleSetView('dashboard')}
             />
           )}
           {currentView === 'tests' && <MixedTests onTestActiveChange={registerTestActive} />}

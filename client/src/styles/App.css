@@ -477,13 +477,13 @@
   }
 
   .main-content {
-    /* Leave room for fixed bottom nav (64px) */
-    padding-bottom: 64px;
+    /* Leave room for fixed bottom nav plus mobile browser safe area */
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
   }
 
   .content-area {
     padding: 16px;
-    padding-bottom: 80px;     /* extra clearance above bottom nav */
+    padding-bottom: calc(104px + env(safe-area-inset-bottom));
   }
 
   .topbar {
@@ -508,6 +508,6 @@
 
 /* ── Small mobile (≤480px) ────────────────────────── */
 @media (max-width: 480px) {
-  .content-area { padding: 12px; padding-bottom: 80px; }
+  .content-area { padding: 12px; padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
   .topbar h1 { font-size: 14px; }
 }
