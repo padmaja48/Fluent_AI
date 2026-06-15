@@ -3,7 +3,8 @@ import { env } from '../config/env';
 import { AppError } from '../utils/AppError';
 
 export type VoiceStyle = 'default' | 'professional_female' | 'professional_male' | 'neutral';
-export type SarvamSpeaker = 'meera' | 'arjun';
+export type SarvamSpeaker = 'priya' | 'rahul';
+export type SarvamSpeakerInput = SarvamSpeaker | 'meera' | 'arjun';
 export type TtsContext = 'listening' | 'speaking' | 'interview' | 'preview';
 
 type AudioCodec = 'mp3' | 'wav';
@@ -46,11 +47,11 @@ export const getPersonaIntro = (personaId: string): string => {
 };
 
 export const normalizeSarvamSpeaker = (speaker?: string): SarvamSpeaker =>
-  speaker === 'arjun' ? 'arjun' : 'meera';
+  speaker === 'rahul' || speaker === 'arjun' ? 'rahul' : 'priya';
 
 const speakerFromVoiceStyle = (voiceStyle: VoiceStyle = 'default'): SarvamSpeaker => {
-  if (voiceStyle === 'professional_male') return 'arjun';
-  return 'meera';
+  if (voiceStyle === 'professional_male') return 'rahul';
+  return 'priya';
 };
 
 export const getListeningPaceForLevel = (level?: string): number => {
@@ -313,7 +314,7 @@ export const synthesizeSpeech = async (
   text: string,
   voiceStyle: VoiceStyle = 'default',
   personaId?: string,
-  speaker?: SarvamSpeaker | string,
+  speaker?: SarvamSpeakerInput | string,
   options: SynthesizeSpeechOptions = {},
 ): Promise<CachedSpeech> => {
   const selectedSpeaker = speaker

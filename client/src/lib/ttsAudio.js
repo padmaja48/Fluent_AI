@@ -1,18 +1,21 @@
 import { ttsAPI } from '../services/api';
 
 export const TTS_SPEAKERS = [
-  { id: 'meera', label: 'Meera', description: 'Female' },
-  { id: 'arjun', label: 'Arjun', description: 'Male' },
+  { id: 'priya', label: 'Priya', description: 'Female' },
+  { id: 'rahul', label: 'Rahul', description: 'Male' },
 ];
 
 export const TTS_SPEAKER_STORAGE_KEY = 'lsrw_tts_speaker';
 
 const audioBlobCache = new Map();
 
-export const normalizeTtsSpeaker = (speaker) => (speaker === 'arjun' ? 'arjun' : 'meera');
+export const normalizeTtsSpeaker = (speaker) => {
+  if (speaker === 'rahul' || speaker === 'arjun') return 'rahul';
+  return 'priya';
+};
 
 export const getStoredTtsSpeaker = () => {
-  if (typeof window === 'undefined') return 'meera';
+  if (typeof window === 'undefined') return 'priya';
   return normalizeTtsSpeaker(window.localStorage.getItem(TTS_SPEAKER_STORAGE_KEY));
 };
 
@@ -57,7 +60,7 @@ const hashInput = async (text, speaker, options = {}) => {
   return String(hash);
 };
 
-export const getTtsAudioBlob = async (text, speaker = 'meera', options = {}) => {
+export const getTtsAudioBlob = async (text, speaker = 'priya', options = {}) => {
   const cleanText = String(text || '').trim();
   const selectedSpeaker = normalizeTtsSpeaker(speaker);
   const cacheKey = await hashInput(cleanText, selectedSpeaker, options);
@@ -82,7 +85,7 @@ export const stopTtsAudio = (audio) => {
 
 export const playTtsAudio = async ({
   text,
-  speaker = 'meera',
+  speaker = 'priya',
   level,
   context = 'listening',
   onPlay,

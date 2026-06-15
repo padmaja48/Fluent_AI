@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   getStoredTtsSpeaker,
+  normalizeTtsSpeaker,
   storeTtsSpeaker,
   TTS_SPEAKERS,
 } from '../lib/ttsAudio';
@@ -9,8 +10,9 @@ export const useTtsSpeaker = () => {
   const [speaker, setSpeakerState] = useState(getStoredTtsSpeaker);
 
   const setSpeaker = (value) => {
-    setSpeakerState(value);
-    storeTtsSpeaker(value);
+    const normalized = normalizeTtsSpeaker(value);
+    setSpeakerState(normalized);
+    storeTtsSpeaker(normalized);
   };
 
   useEffect(() => {

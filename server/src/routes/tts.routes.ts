@@ -8,7 +8,7 @@ import { normalizeSarvamSpeaker, synthesizeSpeech } from '../services/voice.serv
 const ttsSchema = z.object({
   body: z.object({
     text: z.string().min(1),
-    speaker: z.enum(['meera', 'arjun']).default('meera'),
+    speaker: z.enum(['priya', 'rahul', 'meera', 'arjun']).default('priya'),
     context: z.enum(['listening', 'speaking', 'interview', 'preview']).default('listening'),
     level: z.enum(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']).optional(),
   }),

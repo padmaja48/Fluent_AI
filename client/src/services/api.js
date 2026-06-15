@@ -127,7 +127,7 @@ export const sessionAPI = {
 };
 
 export const ttsAPI = {
-  synthesize: (text, speaker = 'meera', options = {}) =>
+  synthesize: (text, speaker = 'priya', options = {}) =>
     api.post('/tts', { text, speaker, ...options }, { responseType: 'blob' }),
 };
 
@@ -141,7 +141,7 @@ export const interviewAPI = {
   completeInterview: (interviewId, feedback, totalScore) =>
     api.post('/interviews/complete', { interviewId, feedback, totalScore }),
   getState: (interviewId) => api.get(`/interviews/${interviewId}/state`),
-  speak: (interviewId, text, speaker = 'meera', voiceStyle = 'default') =>
+  speak: (interviewId, text, speaker = 'priya', voiceStyle = 'default') =>
     api.post(`/interviews/${interviewId}/speak`, { text, speaker, voiceStyle }, { responseType: 'blob' }),
   transcribe: (interviewId, formData) =>
     api.post(`/interviews/${interviewId}/transcribe`, formData, {
@@ -155,7 +155,7 @@ export const interviewAPI = {
   logViolation: (id, type, description) =>
     api.patch(`/interviews/${id}/violation`, { type, description }),
   getReport: (id) => api.get(`/interviews/${id}/report`),
-  personaPreview: (personaId, speaker = 'meera') =>
+  personaPreview: (personaId, speaker = 'priya') =>
     api.post('/interviews/persona-preview', { personaId, speaker }, { responseType: 'blob' }),
 };
 

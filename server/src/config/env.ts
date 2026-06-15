@@ -69,7 +69,7 @@ const envSchema = z.object({
   ELEVENLABS_PROFESSIONAL_MALE_VOICE_ID: optionalString,
   ELEVENLABS_NEUTRAL_VOICE_ID: optionalString,
   SARVAM_API_KEY: optionalString,
-  SARVAM_TTS_MODEL: defaultedString('bulbul:v1'),
+  SARVAM_TTS_MODEL: defaultedString('bulbul:v3'),
   SARVAM_TTS_LANGUAGE_CODE: defaultedString('en-IN'),
   SARVAM_TTS_ENDPOINT: defaultedString('https://api.sarvam.ai/text-to-speech'),
   SARVAM_STT_ENDPOINT: defaultedString('https://api.sarvam.ai/speech-to-text'),

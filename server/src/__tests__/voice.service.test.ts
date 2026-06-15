@@ -53,7 +53,7 @@ describe('Sarvam listening TTS pacing', () => {
     const clipA10004 =
       'Anita: Hello Ravi. This is LC-A1-0004, a short food message at the service counter. I have the bus ticket and the important detail is the room number. Ravi: I understand. We need to call the front desk at minute 33.';
 
-    const audio = await synthesizeSpeech(clipA10004, 'default', undefined, 'meera', {
+    const audio = await synthesizeSpeech(clipA10004, 'default', undefined, 'priya', {
       context: 'listening',
       level: 'A1',
       sentenceGapMs: 500,
@@ -61,6 +61,7 @@ describe('Sarvam listening TTS pacing', () => {
     const payloads = fetchMock.mock.calls.map((call) => JSON.parse(String(call[1]?.body)));
 
     expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(payloads.every((payload) => payload.speaker === 'priya')).toBe(true);
     expect(payloads.every((payload) => payload.pace === 0.85)).toBe(true);
     expect(payloads.every((payload) => payload.output_audio_codec === 'wav')).toBe(true);
     expect(payloads.map((payload) => payload.text)).toEqual(splitTextIntoSentences(clipA10004));

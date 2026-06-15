@@ -10,7 +10,7 @@ export const PERSONAS = [
     title: 'Engineering Manager',
     company: 'Technical Depth',
     focus: 'Technical depth',
-    voiceStyleLabel: 'Works with Meera or Arjun voice',
+    voiceStyleLabel: 'Works with Priya or Rahul voice',
     voiceStyle: 'professional_male',
     personality:
       'Analytical and thorough. Probes technical depth. Asks detailed follow-up questions. Rewards structured thinking.',
@@ -27,7 +27,7 @@ export const PERSONAS = [
     title: 'Product Director',
     company: 'Communication Clarity',
     focus: 'Communication clarity',
-    voiceStyleLabel: 'Works with Meera or Arjun voice',
+    voiceStyleLabel: 'Works with Priya or Rahul voice',
     voiceStyle: 'neutral',
     personality:
       'Relaxed but sharp. Tests cultural fit and communication clarity. Conversational style but digs into motivations.',
@@ -44,7 +44,7 @@ export const PERSONAS = [
     title: 'Principal Engineer',
     company: 'System Design',
     focus: 'System design',
-    voiceStyleLabel: 'Works with Meera or Arjun voice',
+    voiceStyleLabel: 'Works with Priya or Rahul voice',
     voiceStyle: 'professional_male',
     personality:
       'Precise and methodical. Focuses on algorithmic thinking, system design, and problem-solving depth. Expects rigorous, well-reasoned answers with clear logical structure.',

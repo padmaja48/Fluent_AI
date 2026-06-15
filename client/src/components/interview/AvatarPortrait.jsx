@@ -188,7 +188,7 @@ export const AvatarPortrait = ({ persona, isSpeaking, audioLevel = 0, isListenin
   const [blinking, setBlinking] = useState(false);
   const blinkTimerRef = useRef(null);
   const personaId = persona?.id;
-  const portraitUrl = PHOTO_AVATARS[personaId] || persona?.avatarUrl;
+  const portraitUrl = PHOTO_AVATARS[personaId];
   const usePhoto = Boolean(portraitUrl);
 
   // Only schedule blinking for SVG faces — photo avatars are static

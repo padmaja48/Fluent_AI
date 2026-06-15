@@ -50,7 +50,7 @@ export const speakSchema = z.object({
   body: z.object({
     text: z.string().min(1),
     voiceStyle: z.enum(['default', 'professional_female', 'professional_male', 'neutral']).default('default'),
-    speaker: z.enum(['meera', 'arjun']).optional(),
+    speaker: z.enum(['priya', 'rahul', 'meera', 'arjun']).optional(),
   }),
   params: z.object({
     id: z.string().min(1),
@@ -328,7 +328,7 @@ export const synthesizeQuestion = asyncHandler(async (req, res) => {
 export const personaPreviewSchema = z.object({
   body: z.object({
     personaId: z.enum(['us-american', 'us-indian', 'us-australian', 'ru-russian']),
-    speaker: z.enum(['meera', 'arjun']).optional(),
+    speaker: z.enum(['priya', 'rahul', 'meera', 'arjun']).optional(),
   }),
 });
 
