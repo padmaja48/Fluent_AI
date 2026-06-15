@@ -227,6 +227,33 @@ const scenarios = [
   },
 ];
 
+const curatedPhotoUrls: Record<string, string> = {
+  'coffee-shop': 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=900&q=80',
+  'city-market': 'https://images.unsplash.com/photo-1488459716781-31db52582fe9?auto=format&fit=crop&w=900&q=80',
+  classroom: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=900&q=80',
+  'train-station': 'https://images.unsplash.com/photo-1474487548417-781cb71495f3?auto=format&fit=crop&w=900&q=80',
+  'park-family': 'https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&w=900&q=80',
+  'office-meeting': 'https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=900&q=80',
+  'doctor-visit': 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=900&q=80',
+  'kitchen-cooking': 'https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=900&q=80',
+  'rainy-street': 'https://images.unsplash.com/photo-1519692933481-e162a57d6721?auto=format&fit=crop&w=900&q=80',
+  'grocery-store': 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=900&q=80',
+  'airport-luggage': 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=900&q=80',
+  'graph-presentation': 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=900&q=80',
+  'library-study': 'https://images.unsplash.com/photo-1521587760476-6c12a4b040da?auto=format&fit=crop&w=900&q=80',
+  'sports-practice': 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=900&q=80',
+  'bus-stop': 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=900&q=80',
+  'phone-repair': 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80',
+  'restaurant-table': 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=900&q=80',
+  'construction-site': 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=900&q=80',
+  'beach-cleanup': 'https://images.unsplash.com/photo-1618477461853-cf6ed80faba5?auto=format&fit=crop&w=900&q=80',
+  'home-office': 'https://images.unsplash.com/photo-1587614382346-4ec70e388b28?auto=format&fit=crop&w=900&q=80',
+  'traffic-crossing': 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?auto=format&fit=crop&w=900&q=80',
+  'art-museum': 'https://images.unsplash.com/photo-1518998053901-5348d3961a04?auto=format&fit=crop&w=900&q=80',
+  'garden-plants': 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=900&q=80',
+  'small-business': 'https://images.unsplash.com/photo-1556740758-90de374c12ad?auto=format&fit=crop&w=900&q=80',
+};
+
 const palette = [
   ['#e0f2fe', '#0f766e', '#f59e0b', '#1e293b'],
   ['#fef3c7', '#7c2d12', '#2563eb', '#334155'],
@@ -289,8 +316,7 @@ const sceneElementsFor = (slug: string, colors: string[]) => {
 };
 
 const imageUrlFor = (scenario: (typeof scenarios)[number], level: ImageDescriptionLevel, index: number) => {
-  const lock = 1000 + LEVELS.indexOf(level) * scenarios.length + index;
-  return `https://loremflickr.com/900/600/${encodeURIComponent(scenario.query)}?lock=${lock}`;
+  return curatedPhotoUrls[scenario.slug] ?? `https://picsum.photos/seed/${encodeURIComponent(`${level}-${scenario.slug}-${index}`)}/900/600`;
 };
 
 export const imageDescriptionCatalog: ImageDescriptionItem[] = LEVELS.flatMap((level) =>
@@ -300,7 +326,7 @@ export const imageDescriptionCatalog: ImageDescriptionItem[] = LEVELS.flatMap((l
     title: scenario.title,
     imageUrl: imageUrlFor(scenario, level, index + 1),
     alt: scenario.alt,
-    credit: 'Real photo',
+    credit: 'Unsplash photo',
     prompt: promptByLevel[level],
     keywords: Array.from(new Set([...scenario.keywords, ...levelVocabulary[level]])),
     suggestions: scenario.suggestions,

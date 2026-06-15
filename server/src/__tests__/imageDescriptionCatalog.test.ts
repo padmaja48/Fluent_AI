@@ -6,8 +6,11 @@ describe('image description catalog', () => {
       const items = getImageDescriptionItems(level);
       expect(items.length).toBeGreaterThanOrEqual(20);
       expect(items.every((item) => item.keywords.length >= 6)).toBe(true);
-      expect(items.every((item) => item.credit === 'Real photo')).toBe(true);
-      expect(items.every((item) => item.imageUrl.startsWith('https://loremflickr.com/900/600/'))).toBe(true);
+      expect(items.every((item) => item.credit === 'Unsplash photo')).toBe(true);
+      expect(items.every((item) => item.imageUrl.startsWith('https://images.unsplash.com/photo-'))).toBe(true);
+      expect(items.find((item) => item.id === `${level.toLowerCase()}-office-meeting`)?.imageUrl).toContain(
+        'photo-1552664730-d307ca884978',
+      );
     }
   });
 });
