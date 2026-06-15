@@ -4,6 +4,7 @@ import { sessionAPI } from '../services/api';
 import { createAudioRecorder, getRecordedAudioFileName } from '../lib/audioRecording';
 import { getApiErrorMessage, playTtsAudio, stopTtsAudio } from '../lib/ttsAudio';
 import ImageDescriptionTask from './ImageDescriptionTask';
+import ListeningReferenceTask from './ListeningReferenceTask';
 import TtsVoiceSelector, { useTtsSpeaker } from './TtsVoiceSelector';
 import '../styles/Practice.css';
 import '../styles/Writing.css';
@@ -46,6 +47,7 @@ export const Practice = ({
   const [answerFeedback, setAnswerFeedback] = useState(null);
   const [checkingSpeaking, setCheckingSpeaking] = useState(false);
   const [imageTaskActive, setImageTaskActive] = useState(false);
+  const [listeningReferenceActive, setListeningReferenceActive] = useState(false);
   const [writingText, setWritingText] = useState('');
   const [writingResult, setWritingResult] = useState(null);
   const [checkingWriting, setCheckingWriting] = useState(false);
@@ -499,6 +501,18 @@ export const Practice = ({
       );
     }
 
+    if (listeningReferenceActive) {
+      return (
+        <ListeningReferenceTask
+          level={level}
+          onBack={() => {
+            setListeningReferenceActive(false);
+            loadJourney();
+          }}
+        />
+      );
+    }
+
     return (
       <div className="practice-journey">
         <div className="practice-page-actions">
@@ -618,6 +632,19 @@ export const Practice = ({
                 </div>
                 <button type="button" className="btn-primary" onClick={() => setImageTaskActive(true)}>
                   Describe the image
+                </button>
+              </div>
+            )}
+
+            {skill === 'Listening' && (
+              <div className="speaking-hub-card">
+                <div>
+                  <span className="journey-kicker">Listening Exercise</span>
+                  <h4>IELTS-style listening</h4>
+                  <p>Practise original listening sections inspired by test-style audio resources.</p>
+                </div>
+                <button type="button" className="btn-primary" onClick={() => setListeningReferenceActive(true)}>
+                  IELTS-style listening
                 </button>
               </div>
             )}

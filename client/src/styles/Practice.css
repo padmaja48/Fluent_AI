@@ -922,6 +922,116 @@
 .speaking-feedback p  { font-size: 13px; color: var(--text-muted); line-height: 1.55; margin: 0; }
 .speaking-feedback span { color: var(--accent); font-weight: 700; font-size: 14px; }
 
+/* IELTS-style listening reference task */
+.listening-reference-task {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: fadeIn 0.3s ease;
+}
+
+.listening-reference-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.32fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.listening-set-list {
+  display: grid;
+  gap: 10px;
+}
+
+.listening-set-list button {
+  min-height: 74px;
+  padding: 12px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  display: grid;
+  gap: 5px;
+}
+
+.listening-set-list button.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+.listening-set-list span {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.listening-set-list strong {
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.listening-reference-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.listening-reference-head {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.listening-reference-head h3 {
+  margin: 4px 0 0;
+  font-size: 20px;
+}
+
+.listening-reference-questions {
+  display: grid;
+  gap: 14px;
+}
+
+.listening-reference-question {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.listening-reference-question > strong {
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.listening-reference-result {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+
+.listening-reference-result strong {
+  color: var(--accent);
+}
+
+.listening-reference-result p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
 /* Image description speaking task */
 .image-description-task {
   display: flex;
@@ -1300,6 +1410,8 @@
   .question-actions .btn-secondary { width: 100%; }
   .practice-page-actions,
   .practice-dashboard-btn { width: 100%; }
+  .listening-reference-layout { grid-template-columns: 1fr; }
+  .listening-reference-head { flex-direction: column; }
 }
 
 @media (max-width: 380px) {
