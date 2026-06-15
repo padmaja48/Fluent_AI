@@ -3,6 +3,7 @@ import { AuthContext } from '../context/AuthContext';
 import { Login } from './Login';
 import { Register } from './Register';
 import { Dashboard } from './Dashboard';
+import Profile from './Profile';
 import { Practice } from './Practice';
 import { MixedTests } from './MixedTests';
 import { Interview } from './Interview';
@@ -233,7 +234,7 @@ export const App = () => {
 
   return (
     <div className="app-container">
-      <Sidebar currentView={currentView} onViewChange={handleSetView} onLogout={handleLogout} themeToggle={themeToggle} isDark={isDark} onToggleTheme={toggleTheme} />
+      <Sidebar currentView={currentView} onViewChange={handleSetView} onLogout={handleLogout} themeToggle={themeToggle} isDark={isDark} onToggleTheme={toggleTheme} user={user} />
       <div className="main-content">
         {navWarning && (
           <div className="test-nav-warning">
@@ -251,6 +252,7 @@ export const App = () => {
         <div className="topbar">
           <h1>
             {currentView === 'dashboard' && 'Dashboard'}
+            {currentView === 'profile' && 'Profile'}
             {currentView === 'practice' && 'Practice Hub'}
             {currentView === 'tests' && 'Level Tests'}
             {currentView === 'interview' && 'AI Mock Interview'}
@@ -272,6 +274,7 @@ export const App = () => {
               }}
             />
           )}
+          {currentView === 'profile' && <Profile />}
           {currentView === 'practice' && (
             <Practice
               resumeSession={resumeTarget}

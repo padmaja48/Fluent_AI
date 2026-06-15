@@ -13,6 +13,17 @@ export const updateProfileSchema = z.object({
   body: z.object({
     name: z.string().min(2).optional(),
     level: z.enum(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']).optional(),
+    phone: z.string().max(30).optional(),
+    institution: z.string().max(120).optional(),
+    preferredLanguage: z.enum(['English', 'Telugu', 'Hindi']).optional(),
+    profileImageUrl: z.string().optional(),
+  }),
+});
+
+export const changePasswordSchema = z.object({
+  body: z.object({
+    currentPassword: z.string().min(1),
+    newPassword: z.string().min(8),
   }),
 });
 
@@ -163,6 +174,25 @@ export const updateProfile = asyncHandler(async (req, res) => {
   }
 
   res.json(user);
+});
+
+export const changePassword = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.userId).select('+password');
+  if (!user) {
+    throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+  }
+
+  if (user.authProvider !== 'email') {
+    throw new AppError('Password changes are not available for OAuth accounts.', 400, 'OAUTH_PASSWORD_UNAVAILABLE');
+  }
+
+  if (!(await user.comparePassword(req.body.currentPassword))) {
+    throw new AppError('Current password is incorrect.', 400, 'INVALID_CURRENT_PASSWORD');
+  }
+
+  user.password = req.body.newPassword;
+  await user.save();
+  res.json({ message: 'Password updated successfully.' });
 });
 
 export const getAllUsers = asyncHandler(async (_req, res) => {

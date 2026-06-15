@@ -138,6 +138,58 @@ export const transcribeAudio = async (file: Express.Multer.File) => {
   };
 };
 
+const firstTranscript = (value: unknown): string | undefined => {
+  if (!value) return undefined;
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map(firstTranscript).find(Boolean);
+  if (typeof value !== 'object') return undefined;
+
+  const record = value as Record<string, unknown>;
+  return (
+    firstTranscript(record.transcript) ||
+    firstTranscript(record.text) ||
+    firstTranscript(record.transcription) ||
+    firstTranscript(record.result) ||
+    firstTranscript(record.data)
+  );
+};
+
+export const transcribeAudioWithSarvam = async (file: Express.Multer.File) => {
+  if (!env.SARVAM_API_KEY) {
+    throw new Error('SARVAM_API_KEY is not configured.');
+  }
+
+  const formData = new FormData();
+  const arrayBuffer = file.buffer.buffer.slice(
+    file.buffer.byteOffset,
+    file.buffer.byteOffset + file.buffer.byteLength,
+  ) as ArrayBuffer;
+  const blob = new Blob([arrayBuffer], { type: file.mimetype || 'audio/webm' });
+  formData.append('file', blob, file.originalname || 'speech.webm');
+  formData.append('language_code', 'en-IN');
+
+  const response = await fetch(env.SARVAM_STT_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'api-subscription-key': env.SARVAM_API_KEY,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    throw new Error(`Sarvam STT ${response.status}: ${errorText}`);
+  }
+
+  const payload = await response.json().catch(() => null);
+  const text = firstTranscript(payload)?.trim() ?? '';
+  return {
+    text,
+    model: 'sarvam:speech-to-text',
+    raw: payload,
+  };
+};
+
 const PERSONA_PERSONALITIES: Record<string, string> = {
   'us-american': 'You are Ryan Carter, a Senior Tech Lead from Silicon Valley. You are direct, value concrete examples, and use STAR method prompts. You expect candidates to be specific and results-driven.',
   'us-indian': 'You are Priya Sharma, an Engineering Manager at a Fortune 500 Tech company. You are analytical, probe technical depth, and ask thorough follow-up questions. You value structured thinking.',

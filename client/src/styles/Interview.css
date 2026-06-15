@@ -403,6 +403,13 @@
     grid-column: 1 / -1;
     min-height: 28px;
   }
+  .iv-controls .tts-voice-select {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+  .iv-controls .tts-voice-select select {
+    flex: 1;
+  }
   .iv-controls .iv-btn {
     width: 100%;
     min-height: 44px;
@@ -761,7 +768,7 @@
   align-items: center;
   gap: 0.6rem;
   flex-shrink: 0;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 .iv-controls .iv-btn {
@@ -855,6 +862,29 @@
 .voice-label {
   font-size: 0.7rem;
   color: var(--text-muted);
+}
+
+.tts-voice-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tts-voice-select select {
+  min-width: 128px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.iv-tts-selector {
+  justify-content: flex-start;
 }
 
 /* ── AvatarPortrait ─────────────────────────────────────────────── */

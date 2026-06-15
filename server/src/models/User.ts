@@ -22,6 +22,9 @@ export interface IUser extends Document {
   totalSessions: number;
   averageScore: number;
   streak: number;
+  phone?: string;
+  institution?: string;
+  preferredLanguage: 'English' | 'Telugu' | 'Hindi';
   skills: {
     listening: number;
     speaking: number;
@@ -53,6 +56,9 @@ const userSchema = new Schema<IUser>(
     totalSessions: { type: Number, default: 0 },
     averageScore: { type: Number, default: 0 },
     streak: { type: Number, default: 0 },
+    phone: { type: String, trim: true, default: '' },
+    institution: { type: String, trim: true, default: '' },
+    preferredLanguage: { type: String, enum: ['English', 'Telugu', 'Hindi'], default: 'English' },
     skills: {
       listening: { type: Number, default: 0 },
       speaking: { type: Number, default: 0 },

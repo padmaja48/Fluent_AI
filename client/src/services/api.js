@@ -70,8 +70,12 @@ export const authAPI = {
 // User endpoints
 export const userAPI = {
   getDashboard: () => api.get('/users/dashboard'),
-  updateProfile: (name, level) =>
-    api.put('/users/profile', { name, level }),
+  updateProfile: (dataOrName, level) =>
+    typeof dataOrName === 'object'
+      ? api.put('/users/profile', dataOrName)
+      : api.put('/users/profile', { name: dataOrName, level }),
+  changePassword: (currentPassword, newPassword) =>
+    api.post('/users/change-password', { currentPassword, newPassword }),
   getAllUsers: () => api.get('/users/all'),
 };
 
@@ -88,6 +92,10 @@ export const questionAPI = {
   bulkInsert: (questions) => api.post('/questions/bulk', { questions }),
   getRandom: (skill, level, limit = 10) =>
     api.get('/questions', { params: { skill, level, random: true, limit, status: 'Active' } }),
+};
+
+export const cefrContentAPI = {
+  list: (params = {}) => api.get('/cefr-content', { params }),
 };
 
 // Session endpoints
@@ -108,8 +116,19 @@ export const sessionAPI = {
     api.post('/sessions/speaking/check', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+  getImageDescriptionImages: (level) =>
+    api.get('/sessions/speaking/image-description/images', { params: { level } }),
+  checkImageDescription: (formData) =>
+    api.post('/sessions/speaking/image-description/check', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
   checkWriting: (prompt, level, criteria, userText) =>
     api.post('/sessions/writing/check', { prompt, level, criteria, userText }),
+};
+
+export const ttsAPI = {
+  synthesize: (text, speaker = 'meera', options = {}) =>
+    api.post('/tts', { text, speaker, ...options }, { responseType: 'blob' }),
 };
 
 // Interview endpoints
@@ -122,8 +141,8 @@ export const interviewAPI = {
   completeInterview: (interviewId, feedback, totalScore) =>
     api.post('/interviews/complete', { interviewId, feedback, totalScore }),
   getState: (interviewId) => api.get(`/interviews/${interviewId}/state`),
-  speak: (interviewId, text, voiceStyle = 'default') =>
-    api.post(`/interviews/${interviewId}/speak`, { text, voiceStyle }),
+  speak: (interviewId, text, speaker = 'meera', voiceStyle = 'default') =>
+    api.post(`/interviews/${interviewId}/speak`, { text, speaker, voiceStyle }, { responseType: 'blob' }),
   transcribe: (interviewId, formData) =>
     api.post(`/interviews/${interviewId}/transcribe`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -136,7 +155,8 @@ export const interviewAPI = {
   logViolation: (id, type, description) =>
     api.patch(`/interviews/${id}/violation`, { type, description }),
   getReport: (id) => api.get(`/interviews/${id}/report`),
-  personaPreview: (personaId) => api.post('/interviews/persona-preview', { personaId }),
+  personaPreview: (personaId, speaker = 'meera') =>
+    api.post('/interviews/persona-preview', { personaId, speaker }, { responseType: 'blob' }),
 };
 
 // Test endpoints

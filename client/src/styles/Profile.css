@@ -1,0 +1,230 @@
+.profile-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: fadeIn 0.3s ease;
+}
+
+.profile-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.profile-summary-user {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.profile-summary h2 {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.profile-summary p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.profile-summary-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(86px, 1fr));
+  gap: 8px;
+}
+
+.profile-summary-stats div,
+.image-feedback-grid div {
+  min-width: 0;
+}
+
+.profile-summary-stats div {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.profile-summary-stats span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.profile-summary-stats strong {
+  color: var(--accent);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.profile-panel {
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.profile-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.profile-panel-header h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.profile-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.profile-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  border: 2px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.profile-avatar.large {
+  width: 76px;
+  height: 76px;
+}
+
+.profile-avatar span {
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.profile-upload-btn input {
+  display: none;
+}
+
+.profile-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.profile-form-grid.single {
+  grid-template-columns: 1fr;
+}
+
+.profile-form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profile-form-grid span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.profile-form-grid input,
+.profile-form-grid select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 0 12px;
+  font: inherit;
+}
+
+.profile-form-grid input[readonly] {
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--border) 26%, var(--bg));
+}
+
+.profile-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.profile-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 960px) {
+  .profile-summary {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .profile-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .profile-summary-stats,
+  .profile-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .profile-summary-user {
+    align-items: flex-start;
+  }
+  .profile-actions .btn-primary {
+    width: 100%;
+  }
+}

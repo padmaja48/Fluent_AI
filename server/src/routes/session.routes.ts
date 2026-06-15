@@ -9,8 +9,14 @@ import { Session } from '../models/Session';
 import { User } from '../models/User';
 import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
-import { evaluateAnswer, evaluateWriting, transcribeAudio } from '../services/ai.service';
+import { evaluateAnswer, evaluateWriting, transcribeAudio, transcribeAudioWithSarvam } from '../services/ai.service';
 import { mixedTestReportEmail, queueEmail } from '../services/email.service';
+import {
+  getImageDescriptionItem,
+  getImageDescriptionItems,
+  ImageDescriptionLevel,
+  publicImageDescriptionItem,
+} from '../data/imageDescriptionCatalog';
 
 const createSchema = z.object({
   body: z.object({
@@ -53,6 +59,12 @@ const submitSchema = z.object({
         gist: z.number().optional(),
       })
       .optional(),
+  }),
+});
+
+const imageDescriptionCatalogSchema = z.object({
+  query: z.object({
+    level: z.enum(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']).default('A1'),
   }),
 });
 
@@ -630,6 +642,106 @@ router.get(
     );
 
     res.json(populated);
+  }),
+);
+
+router.get(
+  '/speaking/image-description/images',
+  validate(imageDescriptionCatalogSchema),
+  asyncHandler(async (req, res) => {
+    const level = req.query.level as ImageDescriptionLevel;
+    res.json({
+      level,
+      prepSeconds: 30,
+      speakingSeconds: 60,
+      images: getImageDescriptionItems(level).map(publicImageDescriptionItem),
+    });
+  }),
+);
+
+const countWords = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
+
+const normalizeWord = (word: string) => word.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim();
+
+const keywordMatchesFor = (transcript: string, keywords: string[]) => {
+  const normalizedTranscript = ` ${normalizeWord(transcript).replace(/\s+/g, ' ')} `;
+  return keywords.filter((keyword) => {
+    const normalizedKeyword = normalizeWord(keyword);
+    if (!normalizedKeyword) return false;
+    return normalizedTranscript.includes(` ${normalizedKeyword} `);
+  });
+};
+
+const wordTargetForLevel = (level: ImageDescriptionLevel) => {
+  if (level === 'A1') return 35;
+  if (level === 'A2') return 50;
+  return 80;
+};
+
+router.post(
+  '/speaking/image-description/check',
+  upload.single('audio'),
+  asyncHandler(async (req, res) => {
+    if (!req.file) {
+      throw new AppError('Audio file is required', 400, 'AUDIO_REQUIRED');
+    }
+
+    const level = String(req.body.level || 'A1') as ImageDescriptionLevel;
+    if (!LEVELS.includes(level)) {
+      throw new AppError('Valid CEFR level is required', 400, 'LEVEL_REQUIRED');
+    }
+
+    const imageId = String(req.body.imageId || '');
+    const item = getImageDescriptionItem(imageId, level);
+    if (!item) {
+      throw new AppError('Image description task not found', 404, 'IMAGE_TASK_NOT_FOUND');
+    }
+
+    const durationSeconds = Math.max(1, Number(req.body.durationSeconds || 60));
+    const transcription = await transcribeAudioWithSarvam(req.file);
+    const transcript = transcription.text || '';
+    const wordCount = countWords(transcript);
+    const fluencyWpm = Math.round((wordCount / durationSeconds) * 60);
+    const matchedKeywords = keywordMatchesFor(transcript, item.keywords);
+    const missingSuggestions = item.suggestions.filter(
+      (suggestion) => !keywordMatchesFor(transcript, [suggestion]).length,
+    );
+    const vocabularySuggestions = Array.from(new Set([...missingSuggestions, ...item.suggestions])).slice(0, 3);
+    const targetWordCount = wordTargetForLevel(level);
+    const keywordScore = Math.round((matchedKeywords.length / Math.max(1, item.keywords.length)) * 100);
+    const wordScore = Math.min(100, Math.round((wordCount / targetWordCount) * 100));
+    const fluencyScore = Math.min(100, Math.round((fluencyWpm / 100) * 100));
+
+    res.json({
+      imageId: item.id,
+      level,
+      transcript,
+      transcriptionModel: transcription.model,
+      wordCount,
+      targetWordCount,
+      fluencyWpm,
+      fluencyScore,
+      matchedKeywords,
+      keywordScore,
+      vocabularySuggestions,
+      feedback: [
+        wordCount >= targetWordCount
+          ? `Good length: you reached the ${targetWordCount}-word target.`
+          : `Try to add more detail. Target at least ${targetWordCount} words for this level.`,
+        matchedKeywords.length >= 4
+          ? 'You used several image-related words.'
+          : 'Use more concrete nouns, actions, and location words from the image.',
+        fluencyWpm >= 80
+          ? 'Your speaking pace is fluent.'
+          : 'Try speaking in fuller connected sentences.',
+      ],
+      scores: {
+        wordScore,
+        keywordScore,
+        fluencyScore,
+        overall: Math.round(wordScore * 0.35 + keywordScore * 0.35 + fluencyScore * 0.3),
+      },
+    });
   }),
 );
 

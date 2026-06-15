@@ -7,7 +7,7 @@ import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
 import { evaluateAnswer, generateInterviewQuestions, generateReport, transcribeAudio } from '../services/ai.service';
 import { uploadBuffer, uploadText } from '../services/storage.service';
-import { getPersonaIntro, getPersonaVoiceStyle, synthesizeSpeech } from '../services/voice.service';
+import { getPersonaIntro, getPersonaVoiceStyle, normalizeSarvamSpeaker, synthesizeSpeech } from '../services/voice.service';
 
 const idParams = z.object({
   params: z.object({
@@ -50,6 +50,7 @@ export const speakSchema = z.object({
   body: z.object({
     text: z.string().min(1),
     voiceStyle: z.enum(['default', 'professional_female', 'professional_male', 'neutral']).default('default'),
+    speaker: z.enum(['meera', 'arjun']).optional(),
   }),
   params: z.object({
     id: z.string().min(1),
@@ -314,23 +315,37 @@ export const synthesizeQuestion = asyncHandler(async (req, res) => {
   }
 
   await getInterviewForUser(interviewId, req.userId);
-  const audio = await synthesizeSpeech(req.body.text, req.body.voiceStyle);
-  res.json(audio);
+  const audio = await synthesizeSpeech(req.body.text, req.body.voiceStyle, undefined, req.body.speaker, {
+    context: 'interview',
+    pace: 1.0,
+  });
+  res.setHeader('X-TTS-Cache-Key', audio.cacheKey);
+  res.setHeader('Cache-Control', 'private, max-age=86400');
+  res.type(audio.contentType).send(audio.buffer);
 });
 
 /* ── Persona voice preview (no interview session required) ─────── */
 export const personaPreviewSchema = z.object({
   body: z.object({
     personaId: z.enum(['us-american', 'us-indian', 'us-australian', 'ru-russian']),
+    speaker: z.enum(['meera', 'arjun']).optional(),
   }),
 });
 
 export const personaVoicePreview = asyncHandler(async (req, res) => {
   const { personaId } = req.body as { personaId: string };
+  const speaker = req.body.speaker ? normalizeSarvamSpeaker(req.body.speaker) : undefined;
   const intro = getPersonaIntro(personaId);
   const voiceStyle = getPersonaVoiceStyle(personaId);
-  const audio = await synthesizeSpeech(intro, voiceStyle, personaId);
-  res.json({ ...audio, text: intro, personaId });
+  const audio = await synthesizeSpeech(intro, voiceStyle, personaId, speaker, {
+    context: 'preview',
+    pace: 1.0,
+  });
+  res.setHeader('X-TTS-Cache-Key', audio.cacheKey);
+  res.setHeader('X-TTS-Text', encodeURIComponent(intro));
+  res.setHeader('X-TTS-Persona-Id', personaId);
+  res.setHeader('Cache-Control', 'private, max-age=86400');
+  res.type(audio.contentType).send(audio.buffer);
 });
 
 export const transcribeRecording = asyncHandler(async (req, res) => {

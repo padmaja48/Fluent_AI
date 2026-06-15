@@ -92,6 +92,10 @@ const serializeUser = (user: IUser) => ({
   totalSessions: user.totalSessions,
   averageScore: user.averageScore,
   streak: user.streak,
+  authProvider: user.authProvider,
+  phone: user.phone,
+  institution: user.institution,
+  preferredLanguage: user.preferredLanguage,
   skills: user.skills,
   profileImageUrl: user.profileImageUrl,
 });

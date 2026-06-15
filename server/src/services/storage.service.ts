@@ -11,7 +11,7 @@ export type StoredFile = {
 
 export const uploadBuffer = async (
   file: Express.Multer.File,
-  folder: 'resumes' | 'profiles' | 'recordings' | 'reports',
+  folder: 'resumes' | 'profiles' | 'recordings' | 'reports' | 'listening-audio',
 ): Promise<StoredFile> => {
   if (!env.CLOUDINARY_CLOUD_NAME || !env.CLOUDINARY_API_KEY || !env.CLOUDINARY_API_SECRET) {
     return {

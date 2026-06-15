@@ -54,6 +54,13 @@ export const AuthProvider = ({ children }) => {
     loadProfile();
   }, [token]);
 
+  const refreshProfile = useCallback(async () => {
+    if (!token) return null;
+    const response = await authAPI.getProfile();
+    setUser(response.data);
+    return response.data;
+  }, [token]);
+
   const register = useCallback(async (name, email, password, level) => {
     setLoading(true);
     setError(null);
@@ -126,7 +133,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, initializing, error, register, login, loginWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, initializing, error, register, login, loginWithGoogle, logout, refreshProfile, setUser }}>
       {children}
     </AuthContext.Provider>
   );

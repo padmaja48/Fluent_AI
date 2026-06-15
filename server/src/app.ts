@@ -18,6 +18,8 @@ import resumeRoutes from './routes/resume.routes';
 import scheduleRoutes from './routes/schedule.routes';
 import reportRoutes from './routes/report.routes';
 import testRoutes from './routes/test.routes';
+import ttsRoutes from './routes/tts.routes';
+import cefrContentRoutes from './routes/cefrContent.routes';
 
 export const createApp = () => {
   const app = express();
@@ -79,6 +81,8 @@ export const createApp = () => {
   app.use('/api/schedules', scheduleRoutes);
   app.use('/api/reports', reportRoutes);
   app.use('/api/tests', testRoutes);
+  app.use('/api/tts', ttsRoutes);
+  app.use('/api/cefr-content', cefrContentRoutes);
   app.use('/api/v1/auth', authRoutes);
   app.use('/api/v1/users', userRoutes);
   app.use('/api/v1/questions', questionRoutes);
@@ -88,6 +92,8 @@ export const createApp = () => {
   app.use('/api/v1/schedules', scheduleRoutes);
   app.use('/api/v1/reports', reportRoutes);
   app.use('/api/v1/tests', testRoutes);
+  app.use('/api/v1/tts', ttsRoutes);
+  app.use('/api/v1/cefr-content', cefrContentRoutes);
 
   const clientDistPath = path.resolve(__dirname, '../../client/dist');
   const clientIndexPath = path.join(clientDistPath, 'index.html');

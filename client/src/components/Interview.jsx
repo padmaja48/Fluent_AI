@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { interviewAPI, resumeAPI } from '../services/api';
 import { PERSONAS } from '../lib/personas';
 import { createAudioRecorder, getRecordedAudioFileName } from '../lib/audioRecording';
+import { stopTtsAudio } from '../lib/ttsAudio';
+import TtsVoiceSelector, { useTtsSpeaker } from './TtsVoiceSelector';
 import { AvatarPortrait } from './interview/AvatarPortrait';
 import VoiceIndicator from './interview/VoiceIndicator';
 import '../styles/Interview.css';
@@ -21,55 +23,25 @@ function InterviewLoader({ title = 'Preparing interview', message = 'Please wait
   );
 }
 
-/* Play base64 audio blob */
-function playAudioBlob(base64, contentType) {
-  return new Promise((resolve) => {
-    try {
-      const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-      const blob = new Blob([bytes], { type: contentType || 'audio/mpeg' });
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      const cleanup = () => { URL.revokeObjectURL(url); resolve(); };
-      audio.onended = cleanup;
-      audio.onerror = cleanup;
-      audio.play().catch(cleanup);
-    } catch { resolve(); }
-  });
-}
-
-/* Web Speech fallback */
-function speakWebSpeech(text, { wantMale = false, onEnd } = {}) {
-  if (!window.speechSynthesis) { onEnd?.(); return; }
-  window.speechSynthesis.cancel();
-  const utt = new SpeechSynthesisUtterance(text);
-  utt.lang = 'en-US';
-  utt.rate = 0.92;
-  let started = false;
-  const doSpeak = () => {
-    if (started) return;
-    started = true;
-    const voices = window.speechSynthesis.getVoices();
-    const en = voices.filter(v => v.lang.startsWith('en'));
-    if (wantMale) {
-      utt.pitch = 0.85;
-      utt.voice = en.find(v => /male/i.test(v.name)) ||
-        en.find(v => /david|mark|daniel|james|ryan|george|thomas|fred/i.test(v.name)) ||
-        en.find(v => v.lang === 'en-US') || en[0];
-    } else {
-      utt.pitch = 1.1;
-      utt.voice = en.find(v => /female/i.test(v.name)) ||
-        en.find(v => /samantha|karen|victoria|zira|susan|lisa|moira/i.test(v.name)) ||
-        en.find(v => v.lang === 'en-US') || en[0];
-    }
-    utt.onend = () => onEnd?.();
-    utt.onerror = (e) => { if (e.error !== 'interrupted' && e.error !== 'canceled') onEnd?.(); };
-    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
-    window.speechSynthesis.speak(utt);
+function playAudioBlob(blob, { onPlay, onEnded, onError } = {}) {
+  const url = URL.createObjectURL(blob);
+  const audio = new Audio(url);
+  let cleaned = false;
+  audio._ttsCleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    URL.revokeObjectURL(url);
   };
-  if (window.speechSynthesis.getVoices().length === 0) {
-    window.speechSynthesis.addEventListener('voiceschanged', doSpeak, { once: true });
-  }
-  doSpeak();
+  audio.onplay = () => onPlay?.(audio);
+  audio.onended = () => {
+    audio._ttsCleanup();
+    onEnded?.();
+  };
+  audio.onerror = () => {
+    audio._ttsCleanup();
+    onError?.();
+  };
+  return audio.play().then(() => audio);
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -171,13 +143,11 @@ function PersonaStep({ onNext, onBack }) {
   const [previewing, setPreviewing] = useState(null); // persona id currently previewing
   const [previewError, setPreviewError] = useState('');
   const previewAudioRef = useRef(null);
+  const [ttsSpeaker, setTtsSpeaker] = useTtsSpeaker();
 
   const stopPreview = () => {
-    if (previewAudioRef.current) {
-      previewAudioRef.current.pause();
-      previewAudioRef.current = null;
-    }
-    window.speechSynthesis?.cancel();
+    stopTtsAudio(previewAudioRef.current);
+    previewAudioRef.current = null;
     setPreviewing(null);
   };
 
@@ -188,32 +158,26 @@ function PersonaStep({ onNext, onBack }) {
     setPreviewError('');
     setPreviewing(persona.id);
     try {
-      const res = await interviewAPI.personaPreview(persona.id);
-      const { audioBase64, contentType, text } = res.data;
-      if (audioBase64 && contentType?.includes('audio')) {
-        const bytes = Uint8Array.from(atob(audioBase64), c => c.charCodeAt(0));
-        const blob = new Blob([bytes], { type: contentType });
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        previewAudioRef.current = audio;
-        audio.onended = () => { URL.revokeObjectURL(url); setPreviewing(null); };
-        audio.onerror = () => { URL.revokeObjectURL(url); setPreviewing(null); };
-        await audio.play();
-      } else {
-        // Web Speech fallback
-        const wantMale = persona.id !== 'us-indian';
-        speakWebSpeech(text || `Hi, I'm ${persona.name}.`, {
-          wantMale,
-          onEnd: () => setPreviewing(null),
-        });
-      }
-    } catch {
-      // Silently fall back to Web Speech
-      const wantMale = persona.id !== 'us-indian';
-      speakWebSpeech(`Hi, I'm ${persona.name}. I'll be your interviewer today.`, {
-        wantMale,
-        onEnd: () => setPreviewing(null),
+      const res = await interviewAPI.personaPreview(persona.id, ttsSpeaker);
+      const audio = await playAudioBlob(res.data, {
+        onPlay: (audioElement) => {
+          previewAudioRef.current = audioElement;
+        },
+        onEnded: () => {
+          previewAudioRef.current = null;
+          setPreviewing(null);
+        },
+        onError: () => {
+          previewAudioRef.current = null;
+          setPreviewing(null);
+          setPreviewError('Unable to play voice preview.');
+        },
       });
+      previewAudioRef.current = audio;
+    } catch {
+      previewAudioRef.current = null;
+      setPreviewing(null);
+      setPreviewError('Unable to play voice preview.');
     }
   };
 
@@ -226,6 +190,7 @@ function PersonaStep({ onNext, onBack }) {
       <p className="iv-step-desc">
         Click a card to select. Press <strong>Preview voice</strong> to hear how they sound before deciding.
       </p>
+      <TtsVoiceSelector value={ttsSpeaker} onChange={setTtsSpeaker} className="iv-tts-selector" />
       {previewError && <p className="iv-error">{previewError}</p>}
 
       <div className="iv-persona-grid">
@@ -431,6 +396,7 @@ function LiveSession({ interview, persona, onComplete }) {
   const [interimText, setInterimText] = useState('');
   const [ending, setEnding]           = useState(false);
   const [isProcessingAnswer, setIsProcessingAnswer] = useState(false);
+  const [ttsSpeaker, setTtsSpeaker] = useTtsSpeaker();
 
   const videoRef        = useRef(null);
   const recognitionRef  = useRef(null);
@@ -473,12 +439,8 @@ function LiveSession({ interview, persona, onComplete }) {
   /* ── Stop TTS ───────────────────────────────────── */
   const stopSpeech = useCallback(() => {
     cancelAnimationFrame(animFrameRef.current);
-    window.speechSynthesis?.cancel();
-    if (ttsSourceRef.current) {
-      try { ttsSourceRef.current.pause(); } catch {}
-      if (ttsSourceRef.current._blobUrl) URL.revokeObjectURL(ttsSourceRef.current._blobUrl);
-      ttsSourceRef.current = null;
-    }
+    stopTtsAudio(ttsSourceRef.current);
+    ttsSourceRef.current = null;
     setIsSpeaking(false);
     setAudioLevel(0);
   }, []);
@@ -659,24 +621,16 @@ function LiveSession({ interview, persona, onComplete }) {
 
   useEffect(() => () => { sessionClosedRef.current = true; stopListening(); stopSpeech(); }, [stopListening, stopSpeech]);
 
-  /* ── TTS: play audio base64 ─────────────────────── */
-  const playAudioBase64 = useCallback((base64, contentType, onEnd) => {
-    return new Promise(resolve => {
-      try {
-        if (sessionClosedRef.current) { resolve(false); return; }
-        if (ttsSourceRef.current) {
-          ttsSourceRef.current.pause();
-          if (ttsSourceRef.current._blobUrl) URL.revokeObjectURL(ttsSourceRef.current._blobUrl);
-          ttsSourceRef.current = null;
-        }
-        const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-        const blob = new Blob([bytes], { type: contentType || 'audio/mpeg' });
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        audio._blobUrl = url;
-        ttsSourceRef.current = audio;
+  /* ── TTS: play Sarvam audio blob ────────────────── */
+  const playSpeechBlob = useCallback(async (blob) => {
+    if (sessionClosedRef.current) return false;
+    stopTtsAudio(ttsSourceRef.current);
+    ttsSourceRef.current = null;
 
-        audio.onplay = () => {
+    try {
+      const audio = await playAudioBlob(blob, {
+        onPlay: (audioElement) => {
+          ttsSourceRef.current = audioElement;
           setIsSpeaking(true);
           const tick = () => {
             if (!ttsSourceRef.current || ttsSourceRef.current.paused) return;
@@ -684,27 +638,27 @@ function LiveSession({ interview, persona, onComplete }) {
             animFrameRef.current = requestAnimationFrame(tick);
           };
           tick();
-        };
-        audio.onended = () => {
+        },
+        onEnded: () => {
           cancelAnimationFrame(animFrameRef.current);
-          setAudioLevel(0); setIsSpeaking(false);
-          URL.revokeObjectURL(url); ttsSourceRef.current = null;
-          if (!sessionClosedRef.current) onEnd?.();
-          resolve(true);
-        };
-        audio.onerror = () => {
-          cancelAnimationFrame(animFrameRef.current);
-          setIsSpeaking(false); URL.revokeObjectURL(url); ttsSourceRef.current = null;
-          resolve(false);
-        };
-        audio.play().catch(err => {
-          console.warn('TTS play blocked, using Web Speech:', err);
-          URL.revokeObjectURL(url); ttsSourceRef.current = null;
+          setAudioLevel(0);
           setIsSpeaking(false);
-          resolve(false);
-        });
-      } catch { setIsSpeaking(false); resolve(false); }
-    });
+          ttsSourceRef.current = null;
+        },
+        onError: () => {
+          cancelAnimationFrame(animFrameRef.current);
+          setIsSpeaking(false);
+          ttsSourceRef.current = null;
+        },
+      });
+      ttsSourceRef.current = audio;
+      return true;
+    } catch {
+      cancelAnimationFrame(animFrameRef.current);
+      setIsSpeaking(false);
+      ttsSourceRef.current = null;
+      return false;
+    }
   }, []);
 
   /* ── Speak question ─────────────────────────────── */
@@ -719,29 +673,18 @@ function LiveSession({ interview, persona, onComplete }) {
     }
     try {
       const voiceStyle = persona?.voiceStyle || 'default';
-      const res = await interviewAPI.speak(interview._id, questionText, voiceStyle);
-      const { audioBase64, contentType } = res.data;
+      const res = await interviewAPI.speak(interview._id, questionText, ttsSpeaker, voiceStyle);
       if (sessionClosedRef.current) return;
-      if (audioBase64 && contentType?.includes('audio')) {
-        const played = await playAudioBase64(audioBase64, contentType);
-        if (!played && !sessionClosedRef.current) {
-          const wantMale = persona?.id !== 'us-indian';
-          speakWebSpeech(questionText, { wantMale });
-          setIsSpeaking(true);
-        }
-      } else {
-        const wantMale = persona?.id !== 'us-indian';
-        speakWebSpeech(questionText, { wantMale });
-        setIsSpeaking(true);
+      const played = await playSpeechBlob(res.data);
+      if (!played && !sessionClosedRef.current) {
+        setTranscript(prev => [...prev, { role: 'system', text: 'Could not play interviewer audio.' }]);
       }
     } catch {
       if (!sessionClosedRef.current) {
-        const wantMale = persona?.id !== 'us-indian';
-        speakWebSpeech(questionText, { wantMale });
-        setIsSpeaking(true);
+        setTranscript(prev => [...prev, { role: 'system', text: 'Could not generate interviewer audio.' }]);
       }
     }
-  }, [interview._id, persona, playAudioBase64]);
+  }, [interview._id, persona, playSpeechBlob, ttsSpeaker]);
 
   /* ── Speak first question on mount ─────────────── */
   useEffect(() => {
@@ -939,11 +882,7 @@ function LiveSession({ interview, persona, onComplete }) {
   const playCurrentQuestion = () => {
     if (!currentQ?.question || sessionClosedRef.current || ending) return;
     stopSpeech();
-    const wantMale = persona?.id !== 'us-indian';
-    speakWebSpeech(currentQ.question, {
-      wantMale,
-    });
-    setIsSpeaking(true);
+    speakQuestion(currentQ.question, false);
   };
 
   /* Violation color: green → yellow → orange → red */
@@ -1029,6 +968,7 @@ function LiveSession({ interview, persona, onComplete }) {
 
           <div className="iv-controls">
             <VoiceIndicator audioLevel={isListening ? audioLevel : 0} isActive={isListening} label="" color="blue" />
+            <TtsVoiceSelector value={ttsSpeaker} onChange={setTtsSpeaker} className="iv-tts-selector" />
             <button
               type="button"
               className="iv-btn iv-btn--ghost"

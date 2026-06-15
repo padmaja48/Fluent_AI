@@ -8,6 +8,11 @@ const Icons = {
       <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
     </svg>
   ),
+  profile: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/>
+    </svg>
+  ),
   practice: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
@@ -37,6 +42,7 @@ const Icons = {
 
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: Icons.dashboard },
+  { id: 'profile',   label: 'Profile',   icon: Icons.profile },
   { id: 'practice',  label: 'Practice',  icon: Icons.practice },
   { id: 'tests',     label: 'Tests',     icon: Icons.tests },
   { id: 'interview', label: 'Interview', icon: Icons.interview },
@@ -58,11 +64,30 @@ const ThemeIcon = ({ isDark }) =>
     </svg>
   );
 
-const Sidebar = ({ currentView, onViewChange, onLogout, themeToggle, isDark, onToggleTheme }) => (
+const initialsFor = (name = '') =>
+  name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'U';
+
+const Sidebar = ({ currentView, onViewChange, onLogout, themeToggle, isDark, onToggleTheme, user }) => (
   <aside className="sidebar">
-    <div className="sidebar-header">
-      <div className="logo">F</div>
-      <span className="brand">Fluent<span>AI</span></span>
+    <div className="sidebar-top">
+      <div className="sidebar-header">
+        <div className="logo">F</div>
+        <span className="brand">Fluent<span>AI</span></span>
+      </div>
+      <div className="sidebar-user-card">
+        <div className="sidebar-user-avatar">
+          {user?.profileImageUrl ? <img src={user.profileImageUrl} alt="" /> : <span>{initialsFor(user?.name)}</span>}
+        </div>
+        <div className="sidebar-user-meta">
+          <strong>{user?.name || 'Learner'}</strong>
+          <span>{user?.level || 'A1'}</span>
+        </div>
+      </div>
     </div>
 
     <nav className="sidebar-nav">

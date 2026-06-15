@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { sessionAPI } from '../services/api';
 import { createAudioRecorder, getRecordedAudioFileName } from '../lib/audioRecording';
+import { playTtsAudio, stopTtsAudio } from '../lib/ttsAudio';
+import TtsVoiceSelector, { useTtsSpeaker } from './TtsVoiceSelector';
 import '../styles/Practice.css';
 import '../styles/MixedTests.css';
 import '../styles/Writing.css';
@@ -39,6 +41,8 @@ export const MixedTests = ({ onTestActiveChange }) => {
   const startedAtRef = useRef(null);
   const timerRef = useRef(null);
   const autoSubmitRef = useRef(false);
+  const ttsAudioRef = useRef(null);
+  const [ttsSpeaker, setTtsSpeaker] = useTtsSpeaker();
 
   const currentQuestion = questions[currentIndex];
   const selectedLevelMeta = journey?.levels?.find((level) => level.id === selectedLevel);
@@ -70,6 +74,12 @@ export const MixedTests = ({ onTestActiveChange }) => {
     });
   }, []);
 
+  const stopCurrentTts = useCallback(() => {
+    stopTtsAudio(ttsAudioRef.current);
+    ttsAudioRef.current = null;
+    setAudioPlaying(false);
+  }, []);
+
   const resetQuestionState = useCallback(() => {
     setSelectedAnswer(null);
     setSpeakingResult(null);
@@ -79,8 +89,8 @@ export const MixedTests = ({ onTestActiveChange }) => {
     setAudioPlaying(false);
     setWritingText('');
     setWritingResult(null);
-    window.speechSynthesis?.cancel();
-  }, [cleanupRecordingUrl]);
+    stopCurrentTts();
+  }, [cleanupRecordingUrl, stopCurrentTts]);
 
   const loadJourney = useCallback(async () => {
     try {
@@ -107,13 +117,13 @@ export const MixedTests = ({ onTestActiveChange }) => {
 
   useEffect(() => {
     return () => {
-      window.speechSynthesis?.cancel();
+      stopCurrentTts();
       cleanupRecordingUrl();
       mediaRecorderRef.current?.stream?.getTracks().forEach((track) => track.stop());
       clearInterval(timerRef.current);
       if (isCurrentlyFullscreen()) exitFullscreen();
     };
-  }, [cleanupRecordingUrl]);
+  }, [cleanupRecordingUrl, stopCurrentTts]);
 
   // ── Notify parent about active test state ─────────────────────────
   useEffect(() => {
@@ -292,47 +302,46 @@ export const MixedTests = ({ onTestActiveChange }) => {
     }
   };
 
-  const playListeningAudio = () => {
+  const playListeningAudio = async () => {
     if (!currentQuestion) return;
 
     if (audioPlaying) {
-      window.speechSynthesis?.cancel();
-      setAudioPlaying(false);
+      stopCurrentTts();
       return;
     }
 
-    if (!window.speechSynthesis) {
-      setError('Text-to-speech is not supported in this browser.');
-      return;
-    }
+    const spokenText = currentQuestion.passageText || currentQuestion.stem;
+    if (!spokenText) return;
 
-    let didStartSpeaking = false;
-    const speak = () => {
-      if (didStartSpeaking) return;
-      didStartSpeaking = true;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.resume?.();
-      const utterance = new SpeechSynthesisUtterance(currentQuestion.passageText || currentQuestion.stem);
-      utterance.lang = 'en-US';
-      utterance.rate = selectedLevel === 'A1' || selectedLevel === 'A2' ? 0.84 : selectedLevel === 'C1' || selectedLevel === 'C2' ? 1.02 : 0.94;
-      const voices = window.speechSynthesis.getVoices();
-      const englishVoice = voices.find((v) => v.lang.startsWith('en'));
-      if (englishVoice) utterance.voice = englishVoice;
-      utterance.onend = () => setAudioPlaying(false);
-      utterance.onerror = (e) => {
-        if (e.error === 'interrupted' || e.error === 'canceled') return;
-        setAudioPlaying(false);
-        setError('Unable to play listening audio.');
-      };
+    try {
+      setError(null);
       setAudioPlaying(true);
-      window.speechSynthesis.speak(utterance);
-    };
-
-    const voices = window.speechSynthesis.getVoices();
-    if (voices.length === 0) {
-      window.speechSynthesis.addEventListener('voiceschanged', speak, { once: true });
+      const audio = await playTtsAudio({
+        text: spokenText,
+        speaker: ttsSpeaker,
+        level: selectedLevel,
+        context: 'listening',
+        onPlay: (audioElement) => {
+          ttsAudioRef.current = audioElement;
+          setAudioPlaying(true);
+        },
+        onEnded: () => {
+          ttsAudioRef.current = null;
+          setAudioPlaying(false);
+        },
+        onError: () => {
+          ttsAudioRef.current = null;
+          setAudioPlaying(false);
+          setError('Unable to play listening audio.');
+        },
+      });
+      ttsAudioRef.current = audio;
+    } catch (err) {
+      console.error('Sarvam TTS failed:', err);
+      ttsAudioRef.current = null;
+      setAudioPlaying(false);
+      setError(err.response?.data?.message || 'Unable to play listening audio.');
     }
-    speak();
   };
 
   const startRecording = async () => {
@@ -709,9 +718,12 @@ export const MixedTests = ({ onTestActiveChange }) => {
             {currentQuestion.audioUrl ? (
               <audio controls src={currentQuestion.audioUrl} />
             ) : (
-              <button type="button" className="audio-btn" onClick={playListeningAudio}>
-                {audioPlaying ? 'Stop Audio' : 'Play Listening Audio'}
-              </button>
+              <div className="listening-controls">
+                <TtsVoiceSelector value={ttsSpeaker} onChange={setTtsSpeaker} />
+                <button type="button" className="audio-btn" onClick={playListeningAudio}>
+                  {audioPlaying ? 'Stop Audio' : 'Play Listening Audio'}
+                </button>
+              </div>
             )}
           </div>
         )}

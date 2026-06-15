@@ -2,6 +2,9 @@ import React, { useState, useEffect, useContext, useRef, useCallback } from 'rea
 import { AuthContext } from '../context/AuthContext';
 import { sessionAPI } from '../services/api';
 import { createAudioRecorder, getRecordedAudioFileName } from '../lib/audioRecording';
+import { playTtsAudio, stopTtsAudio } from '../lib/ttsAudio';
+import ImageDescriptionTask from './ImageDescriptionTask';
+import TtsVoiceSelector, { useTtsSpeaker } from './TtsVoiceSelector';
 import '../styles/Practice.css';
 import '../styles/Writing.css';
 import '../styles/Reading.css';
@@ -42,11 +45,20 @@ export const Practice = ({
   const [speakingResult, setSpeakingResult] = useState(null);
   const [answerFeedback, setAnswerFeedback] = useState(null);
   const [checkingSpeaking, setCheckingSpeaking] = useState(false);
+  const [imageTaskActive, setImageTaskActive] = useState(false);
   const [writingText, setWritingText] = useState('');
   const [writingResult, setWritingResult] = useState(null);
   const [checkingWriting, setCheckingWriting] = useState(false);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const ttsAudioRef = useRef(null);
+  const [ttsSpeaker, setTtsSpeaker] = useTtsSpeaker();
+
+  const stopCurrentTts = useCallback(() => {
+    stopTtsAudio(ttsAudioRef.current);
+    ttsAudioRef.current = null;
+    setAudioPlaying(false);
+  }, []);
 
   const setSize = journey?.setSize || DEFAULT_SET_SIZE;
   const totalSets = journey?.totalSetsPerSkillLevel || DEFAULT_TOTAL_SETS;
@@ -84,8 +96,8 @@ export const Practice = ({
     setAudioPlaying(false);
     setWritingText('');
     setWritingResult(null);
-    window.speechSynthesis?.cancel();
-  }, []);
+    stopCurrentTts();
+  }, [stopCurrentTts]);
 
   const loadJourney = useCallback(async () => {
     try {
@@ -105,14 +117,14 @@ export const Practice = ({
 
   useEffect(() => {
     return () => {
-      window.speechSynthesis?.cancel();
+      stopCurrentTts();
       setRecordedAudioUrl((currentUrl) => {
         if (currentUrl) URL.revokeObjectURL(currentUrl);
         return null;
       });
       mediaRecorderRef.current?.stream?.getTracks().forEach((track) => track.stop());
     };
-  }, []);
+  }, [stopCurrentTts]);
 
   useEffect(() => {
     const progress = journey?.progress?.[skill]?.[level];
@@ -292,51 +304,47 @@ export const Practice = ({
     }
   };
 
-  const playListeningAudio = () => {
+  const playListeningAudio = async () => {
     const currentQuestion = questions[currentIndex];
     if (!currentQuestion) return;
 
     if (audioPlaying) {
-      window.speechSynthesis?.cancel();
-      setAudioPlaying(false);
+      stopCurrentTts();
       return;
     }
 
     const spokenText = currentQuestion.passageText || currentQuestion.stem;
-    if (!window.speechSynthesis) {
-      setError('Text-to-speech is not supported in this browser.');
-      return;
-    }
+    if (!spokenText) return;
 
-    let didStartSpeaking = false;
-    const speak = () => {
-      if (didStartSpeaking) return;
-      didStartSpeaking = true;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.resume?.();
-      const utterance = new SpeechSynthesisUtterance(spokenText);
-      utterance.lang = 'en-US';
-      utterance.rate = level === 'A1' || level === 'A2' ? 0.82 : level === 'C1' || level === 'C2' ? 1.02 : 0.92;
-
-      const voices = window.speechSynthesis.getVoices();
-      const englishVoice = voices.find((v) => v.lang.startsWith('en'));
-      if (englishVoice) utterance.voice = englishVoice;
-
-      utterance.onend = () => setAudioPlaying(false);
-      utterance.onerror = (e) => {
-        if (e.error === 'interrupted' || e.error === 'canceled') return;
-        setAudioPlaying(false);
-        setError('Unable to play listening audio.');
-      };
+    try {
+      setError(null);
       setAudioPlaying(true);
-      window.speechSynthesis.speak(utterance);
-    };
-
-    const voices = window.speechSynthesis.getVoices();
-    if (voices.length === 0) {
-      window.speechSynthesis.addEventListener('voiceschanged', speak, { once: true });
+      const audio = await playTtsAudio({
+        text: spokenText,
+        speaker: ttsSpeaker,
+        level,
+        context: 'listening',
+        onPlay: (audioElement) => {
+          ttsAudioRef.current = audioElement;
+          setAudioPlaying(true);
+        },
+        onEnded: () => {
+          ttsAudioRef.current = null;
+          setAudioPlaying(false);
+        },
+        onError: () => {
+          ttsAudioRef.current = null;
+          setAudioPlaying(false);
+          setError('Unable to play listening audio.');
+        },
+      });
+      ttsAudioRef.current = audio;
+    } catch (err) {
+      console.error('Sarvam TTS failed:', err);
+      ttsAudioRef.current = null;
+      setAudioPlaying(false);
+      setError(err.response?.data?.message || 'Unable to play listening audio.');
     }
-    speak();
   };
 
   const startRecording = async () => {
@@ -474,6 +482,18 @@ export const Practice = ({
   };
 
   if (!sessionStarted) {
+    if (imageTaskActive) {
+      return (
+        <ImageDescriptionTask
+          level={level}
+          onBack={() => {
+            setImageTaskActive(false);
+            loadJourney();
+          }}
+        />
+      );
+    }
+
     return (
       <div className="practice-journey">
         <div className="practice-page-actions">
@@ -584,6 +604,19 @@ export const Practice = ({
               </button>
             </div>
 
+            {skill === 'Speaking' && (
+              <div className="speaking-hub-card">
+                <div>
+                  <span className="journey-kicker">Speaking Exercise</span>
+                  <h4>Describe the image</h4>
+                  <p>Prepare for 30 seconds, then speak for 60 seconds about a contextual image.</p>
+                </div>
+                <button type="button" className="btn-primary" onClick={() => setImageTaskActive(true)}>
+                  Describe the image
+                </button>
+              </div>
+            )}
+
             <div className="module-track">
               {(modules.length ? modules : Array.from({ length: 5 }, (_, idx) => ({ moduleOrder: idx + 1, label: `Module ${idx + 1}`, totalSets: totalSetsPerModule, completedCount: 0, locked: idx > 0 }))).map((module) => (
                 <button
@@ -667,7 +700,7 @@ export const Practice = ({
   }[skill];
 
   const handleBackToJourney = () => {
-    window.speechSynthesis?.cancel();
+    stopCurrentTts();
     setSessionStarted(false);
     setSession(null);
     setQuestions([]);
@@ -829,9 +862,12 @@ export const Practice = ({
             {currentQuestion.audioUrl ? (
               <audio controls src={currentQuestion.audioUrl} />
             ) : (
-              <button type="button" className="audio-btn" onClick={playListeningAudio}>
-                {audioPlaying ? 'Stop Audio' : 'Play Listening Audio'}
-              </button>
+              <div className="listening-controls">
+                <TtsVoiceSelector value={ttsSpeaker} onChange={setTtsSpeaker} />
+                <button type="button" className="audio-btn" onClick={playListeningAudio}>
+                  {audioPlaying ? 'Stop Audio' : 'Play Listening Audio'}
+                </button>
+              </div>
             )}
           </div>
         )}

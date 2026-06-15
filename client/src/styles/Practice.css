@@ -544,6 +544,30 @@
   gap: 8px;
 }
 
+.speaking-hub-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+
+.speaking-hub-card h4 {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.speaking-hub-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
 /* ═══════════════════════════════════════════════════════
    PRACTICE SESSION
 ═══════════════════════════════════════════════════════ */
@@ -831,6 +855,32 @@
   white-space: normal;
 }
 
+.tts-voice-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tts-voice-select select {
+  min-width: 128px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.listening-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
 .audio-btn:hover:not(:disabled)  { opacity: 0.88; transform: translateY(-1px); }
 .audio-btn:disabled               { opacity: 0.4; cursor: not-allowed; }
 .record-btn:hover:not(:disabled)  { opacity: 0.88; transform: translateY(-1px); }
@@ -871,6 +921,172 @@
 
 .speaking-feedback p  { font-size: 13px; color: var(--text-muted); line-height: 1.55; margin: 0; }
 .speaking-feedback span { color: var(--accent); font-weight: 700; font-size: 14px; }
+
+/* Image description speaking task */
+.image-description-task {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: fadeIn 0.3s ease;
+}
+
+.image-task-timer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.image-task-timer span {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.image-task-timer strong {
+  color: var(--accent);
+  font-size: 18px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.image-task-timer.active {
+  border-color: #ef4444;
+  background: rgba(239,68,68,0.07);
+}
+
+.image-task-timer.active strong {
+  color: #ef4444;
+}
+
+.image-task-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(320px, 0.85fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.image-task-media {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.image-task-media img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+}
+
+.image-task-media span {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(15,23,42,0.72);
+  color: white;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.image-task-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.image-task-prompt {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.65;
+  font-weight: 600;
+}
+
+.image-task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.image-task-actions button {
+  flex: 1 1 140px;
+}
+
+.image-task-panel audio {
+  width: 100%;
+}
+
+.image-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.image-feedback-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.image-feedback-grid div {
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.image-feedback-grid span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.image-feedback-grid strong {
+  color: var(--accent);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.image-feedback strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.image-feedback p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.image-feedback-note {
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
 
 /* Answer feedback */
 .answer-feedback {
@@ -1052,6 +1268,7 @@
   .set-map            { grid-template-columns: repeat(8, 1fr); }
   .reading-layout     { grid-template-columns: 1fr; }
   .reading-passage-panel { max-height: 320px; }
+  .image-task-layout  { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 768px) {
@@ -1060,6 +1277,7 @@
   .set-map            { grid-template-columns: repeat(6, 1fr); gap: 5px; }
   .set-map-header     { flex-direction: column; align-items: flex-start; gap: 12px; }
   .set-map-header .btn-primary { width: 100%; text-align: center; }
+  .speaking-hub-card  { flex-direction: column; align-items: stretch; }
   .practice-header    { padding: 10px 14px; }
   .module-node        { min-width: 96px; padding: 10px 12px; }
 }
@@ -1076,6 +1294,7 @@
   .question-text      { font-size: 14px; line-height: 1.6; }
   .audio-btn,
   .record-btn         { width: 100%; min-height: 42px; padding: 0 12px; }
+  .image-feedback-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .question-actions   { flex-direction: column; align-items: stretch; }
   .question-actions .btn-primary,
   .question-actions .btn-secondary { width: 100%; }
@@ -1087,6 +1306,7 @@
   .skill-overview     { grid-template-columns: 1fr; }
   .set-map            { grid-template-columns: repeat(4, 1fr); }
   .pq-dot             { width: 7px; height: 7px; }
+  .image-feedback-grid { grid-template-columns: 1fr; }
   .content-area       { padding-left: 10px; padding-right: 10px; }
   .question-card      { padding: 14px; }
 }
