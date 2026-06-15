@@ -289,22 +289,8 @@ const sceneElementsFor = (slug: string, colors: string[]) => {
 };
 
 const imageUrlFor = (scenario: (typeof scenarios)[number], level: ImageDescriptionLevel, index: number) => {
-  const colors = palette[(index + LEVELS.indexOf(level)) % palette.length];
-  const [background, primary, secondary, ink] = colors;
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="900" height="600" viewBox="0 0 900 600">
-      <rect width="900" height="600" fill="${background}"/>
-      <circle cx="120" cy="100" r="82" fill="${primary}" opacity=".12"/>
-      <circle cx="780" cy="120" r="95" fill="${secondary}" opacity=".14"/>
-      <rect x="40" y="455" width="820" height="90" rx="34" fill="#ffffff" opacity=".46"/>
-      ${sceneElementsFor(scenario.slug, colors)}
-      <rect x="42" y="42" width="816" height="516" rx="34" fill="none" stroke="${ink}" stroke-opacity=".12" stroke-width="6"/>
-      <text x="60" y="548" fill="${ink}" font-family="Arial, sans-serif" font-size="30" font-weight="700">${svgText(scenario.title)}</text>
-      <text x="60" y="82" fill="${primary}" font-family="Arial, sans-serif" font-size="18" font-weight="700">${level} speaking scene ${index}</text>
-    </svg>
-  `.replace(/\s+/g, ' ').trim();
-
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+  const lock = 1000 + LEVELS.indexOf(level) * scenarios.length + index;
+  return `https://loremflickr.com/900/600/${encodeURIComponent(scenario.query)}?lock=${lock}`;
 };
 
 export const imageDescriptionCatalog: ImageDescriptionItem[] = LEVELS.flatMap((level) =>
@@ -314,7 +300,7 @@ export const imageDescriptionCatalog: ImageDescriptionItem[] = LEVELS.flatMap((l
     title: scenario.title,
     imageUrl: imageUrlFor(scenario, level, index + 1),
     alt: scenario.alt,
-    credit: 'Original scene',
+    credit: 'Real photo',
     prompt: promptByLevel[level],
     keywords: Array.from(new Set([...scenario.keywords, ...levelVocabulary[level]])),
     suggestions: scenario.suggestions,

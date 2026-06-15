@@ -229,7 +229,14 @@ export default function ImageDescriptionTask({ level, onBack }) {
       {currentImage && (
         <div className="image-task-layout">
           <div className="image-task-media">
-            <img src={currentImage.imageUrl} alt={currentImage.alt || currentImage.title} />
+            <img
+              src={currentImage.imageUrl}
+              alt={currentImage.alt || currentImage.title}
+              onError={(event) => {
+                event.currentTarget.onerror = null;
+                event.currentTarget.src = `https://picsum.photos/seed/${encodeURIComponent(currentImage.id)}/900/600`;
+              }}
+            />
             <span>{currentImage.credit}</span>
           </div>
 

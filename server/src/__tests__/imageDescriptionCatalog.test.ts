@@ -6,6 +6,8 @@ describe('image description catalog', () => {
       const items = getImageDescriptionItems(level);
       expect(items.length).toBeGreaterThanOrEqual(20);
       expect(items.every((item) => item.keywords.length >= 6)).toBe(true);
+      expect(items.every((item) => item.credit === 'Real photo')).toBe(true);
+      expect(items.every((item) => item.imageUrl.startsWith('https://loremflickr.com/900/600/'))).toBe(true);
     }
   });
 });
