@@ -127,7 +127,7 @@ const FacePriya = ({ mouthOpen, blinking }) => (
   </svg>
 );
 
-// James Callahan — pale skin, short light brown hair, male features
+// Alternate male portrait
 const FaceJames = ({ mouthOpen, blinking }) => (
   <svg viewBox="0 0 200 220" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
     <rect width="200" height="220" fill="#e8f5ec" />
@@ -181,8 +181,6 @@ const FACE_MAP = {
 // Photo-based avatars for personas with real portrait images (no blinking)
 const PHOTO_AVATARS = {
   'us-indian': '/avatars/priya-sharma.png',
-  'ru-russian': '/avatars/alexei-volkov.png',
-  'us-australian': '/avatars/james-callahan.png',
 };
 
 /* ── Main AvatarPortrait component ── */
@@ -190,7 +188,8 @@ export const AvatarPortrait = ({ persona, isSpeaking, audioLevel = 0, isListenin
   const [blinking, setBlinking] = useState(false);
   const blinkTimerRef = useRef(null);
   const personaId = persona?.id;
-  const usePhoto = Boolean(PHOTO_AVATARS[personaId]);
+  const portraitUrl = PHOTO_AVATARS[personaId] || persona?.avatarUrl;
+  const usePhoto = Boolean(portraitUrl);
 
   // Only schedule blinking for SVG faces — photo avatars are static
   useEffect(() => {
@@ -221,7 +220,7 @@ export const AvatarPortrait = ({ persona, isSpeaking, audioLevel = 0, isListenin
       <div className={`avatar-img-container ${usePhoto ? 'avatar-img-container--photo' : ''}`}>
         {usePhoto ? (
           <img
-            src={PHOTO_AVATARS[personaId]}
+            src={portraitUrl}
             alt={persona?.name}
             className="avatar-photo"
             draggable={false}
@@ -233,7 +232,6 @@ export const AvatarPortrait = ({ persona, isSpeaking, audioLevel = 0, isListenin
 
       <div className="avatar-nametag">
         <span className="avatar-name">{persona?.name}</span>
-        <span className="avatar-flag">{persona?.flag}</span>
         <span className="avatar-title">{persona?.title}</span>
       </div>
 

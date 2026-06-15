@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { interviewAPI, resumeAPI } from '../services/api';
 import { PERSONAS } from '../lib/personas';
 import { createAudioRecorder, getRecordedAudioFileName } from '../lib/audioRecording';
-import { stopTtsAudio } from '../lib/ttsAudio';
+import { getApiErrorMessage, stopTtsAudio } from '../lib/ttsAudio';
 import TtsVoiceSelector, { useTtsSpeaker } from './TtsVoiceSelector';
 import { AvatarPortrait } from './interview/AvatarPortrait';
 import VoiceIndicator from './interview/VoiceIndicator';
@@ -43,6 +43,14 @@ function playAudioBlob(blob, { onPlay, onEnded, onError } = {}) {
   };
   return audio.play().then(() => audio);
 }
+
+const ttsErrorMessage = async (error, fallback) => {
+  const message = await getApiErrorMessage(error, fallback);
+  if (message.includes('SARVAM_API_KEY')) {
+    return 'Sarvam API key is missing in server/.env. Add SARVAM_API_KEY and restart the server.';
+  }
+  return message;
+};
 
 /* ─────────────────────────────────────────────────────────────────
    Step 1: Resume Upload
@@ -174,10 +182,10 @@ function PersonaStep({ onNext, onBack }) {
         },
       });
       previewAudioRef.current = audio;
-    } catch {
+    } catch (error) {
       previewAudioRef.current = null;
       setPreviewing(null);
-      setPreviewError('Unable to play voice preview.');
+      setPreviewError(await ttsErrorMessage(error, 'Unable to play voice preview.'));
     }
   };
 
@@ -204,10 +212,9 @@ function PersonaStep({ onNext, onBack }) {
               <AvatarPortrait persona={p} isSpeaking={previewing === p.id} audioLevel={previewing === p.id ? 0.6 : 0} />
             </div>
             <div className="iv-persona-info">
-              <span className="iv-persona-flag">{p.flag}</span>
               <h3 className="iv-persona-name">{p.name}</h3>
               <p className="iv-persona-title">{p.title} · {p.company}</p>
-              <p className="iv-persona-accent">{p.accent}</p>
+              <p className="iv-persona-voice-note">{p.voiceStyleLabel}</p>
               <p className="iv-persona-personality">{p.personality}</p>
             </div>
 
@@ -679,9 +686,10 @@ function LiveSession({ interview, persona, onComplete }) {
       if (!played && !sessionClosedRef.current) {
         setTranscript(prev => [...prev, { role: 'system', text: 'Could not play interviewer audio.' }]);
       }
-    } catch {
+    } catch (error) {
       if (!sessionClosedRef.current) {
-        setTranscript(prev => [...prev, { role: 'system', text: 'Could not generate interviewer audio.' }]);
+        const message = await ttsErrorMessage(error, 'Could not generate interviewer audio.');
+        setTranscript(prev => [...prev, { role: 'system', text: message }]);
       }
     }
   }, [interview._id, persona, playSpeechBlob, ttsSpeaker]);
@@ -937,7 +945,7 @@ function LiveSession({ interview, persona, onComplete }) {
             <AvatarPortrait persona={persona} isSpeaking={isSpeaking} audioLevel={audioLevel} isListening={isListening} />
           </div>
           <VoiceIndicator audioLevel={audioLevel} isActive={isSpeaking} label={isSpeaking ? persona?.name : ''} />
-          <p className="iv-persona-tag">{persona?.flag} {persona?.name}</p>
+          <p className="iv-persona-tag">{persona?.name}</p>
         </div>
 
         {/* Right: Transcript */}

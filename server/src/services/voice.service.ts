@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { env } from '../config/env';
+import { AppError } from '../utils/AppError';
 
 export type VoiceStyle = 'default' | 'professional_female' | 'professional_male' | 'neutral';
 export type SarvamSpeaker = 'meera' | 'arjun';
@@ -38,8 +39,8 @@ export const getPersonaVoiceStyle = (personaId: string): VoiceStyle => {
 export const getPersonaIntro = (personaId: string): string => {
   const intros: Record<string, string> = {
     'us-indian': "Hi, I'm Priya Sharma. I'm looking forward to our technical discussion today.",
-    'us-australian': "G'day! I'm James Callahan. Let's have a relaxed but focused conversation.",
-    'ru-russian': 'Good day. I am Alexei Volkov. I expect precise and well-reasoned answers.',
+    'us-australian': "Hi, I'm Ananya Rao. Let's have a relaxed but focused conversation about your experience.",
+    'ru-russian': 'Hello, I am Rahul Menon. I will focus on precise, well-reasoned technical answers.',
   };
   return intros[personaId] ?? 'Hello. I will be your interviewer today.';
 };
@@ -151,7 +152,7 @@ const callSarvam = async (
   codec: AudioCodec,
 ): Promise<Omit<CachedSpeech, 'cacheKey'>> => {
   if (!env.SARVAM_API_KEY) {
-    throw new Error('SARVAM_API_KEY is not configured.');
+    throw new AppError('SARVAM_API_KEY is not configured.', 503, 'SARVAM_NOT_CONFIGURED');
   }
 
   let lastError = '';

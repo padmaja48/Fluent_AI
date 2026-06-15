@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext, useRef, useCallback } from 'rea
 import { AuthContext } from '../context/AuthContext';
 import { sessionAPI } from '../services/api';
 import { createAudioRecorder, getRecordedAudioFileName } from '../lib/audioRecording';
-import { playTtsAudio, stopTtsAudio } from '../lib/ttsAudio';
+import { getApiErrorMessage, playTtsAudio, stopTtsAudio } from '../lib/ttsAudio';
 import ImageDescriptionTask from './ImageDescriptionTask';
 import TtsVoiceSelector, { useTtsSpeaker } from './TtsVoiceSelector';
 import '../styles/Practice.css';
@@ -343,7 +343,12 @@ export const Practice = ({
       console.error('Sarvam TTS failed:', err);
       ttsAudioRef.current = null;
       setAudioPlaying(false);
-      setError(err.response?.data?.message || 'Unable to play listening audio.');
+      const message = await getApiErrorMessage(err, 'Unable to play listening audio.');
+      setError(
+        message.includes('SARVAM_API_KEY')
+          ? 'Sarvam API key is missing in server/.env. Add SARVAM_API_KEY and restart the server.'
+          : message,
+      );
     }
   };
 

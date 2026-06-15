@@ -21,6 +21,22 @@ export const storeTtsSpeaker = (speaker) => {
   window.localStorage.setItem(TTS_SPEAKER_STORAGE_KEY, normalizeTtsSpeaker(speaker));
 };
 
+export const getApiErrorMessage = async (error, fallback = 'Unable to generate audio.') => {
+  const data = error?.response?.data;
+  if (data instanceof Blob) {
+    const text = await data.text().catch(() => '');
+    if (!text) return fallback;
+    try {
+      const parsed = JSON.parse(text);
+      return parsed.error || parsed.message || fallback;
+    } catch {
+      return text;
+    }
+  }
+
+  return data?.error || data?.message || error?.message || fallback;
+};
+
 const hashInput = async (text, speaker, options = {}) => {
   const input = JSON.stringify({
     text,

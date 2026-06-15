@@ -7,13 +7,13 @@ const fmtDt = (v) => v
   : '—';
 
 const PERSONA_NAMES = {
-  'us-indian':    { name: 'Priya Sharma',    flag: '🇮🇳', title: 'Engineering Manager' },
-  'us-australian':{ name: 'James Callahan',  flag: '🇦🇺', title: 'Product Director' },
-  'ru-russian':   { name: 'Alexei Volkov',   flag: '🇷🇺', title: 'Principal Engineer' },
-  'us-american':  { name: 'Ryan Carter',     flag: '🇺🇸', title: 'Senior Tech Lead' },
+  'us-indian':    { name: 'Priya Sharma', title: 'Engineering Manager' },
+  'us-australian':{ name: 'Ananya Rao', title: 'Product Director' },
+  'ru-russian':   { name: 'Rahul Menon', title: 'Principal Engineer' },
+  'us-american':  { name: 'Ryan Carter', title: 'Senior Tech Lead' },
 };
 
-const getPersona = (id) => PERSONA_NAMES[id] || { name: id || 'Interviewer', flag: '🎙', title: 'AI Interviewer' };
+const getPersona = (id) => PERSONA_NAMES[id] || { name: id || 'Interviewer', title: 'AI Interviewer' };
 
 /* Score color based on value */
 const scoreColor = (v) => {
@@ -73,7 +73,7 @@ export const InterviewReportPanel = ({ interviews, selectedInterview, report, on
               >
                 <span className="session-item-dot" />
                 <div className="session-item-body">
-                  <span className="session-item-title">{p.flag} {p.name}</span>
+                  <span className="session-item-title">{p.name}</span>
                   <span className="session-item-sub">{p.title}</span>
                   <span className="session-item-sub">
                     {iv.interviewType || iv.interviewStyle} · {iv.duration} min
@@ -121,7 +121,7 @@ export const InterviewReportPanel = ({ interviews, selectedInterview, report, on
                   </div>
                 </div>
                 <div className="results-info">
-                  <h3>{p.flag} {p.name} · {p.title}</h3>
+                  <h3>{p.name} · {p.title}</h3>
                   <p>{selectedInterview.interviewType || selectedInterview.interviewStyle} interview · {selectedInterview.duration} min</p>
                   <p>{selectedInterview.roleDomain} · {selectedInterview.roleLevel}</p>
                   <div className="results-info-badges">

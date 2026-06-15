@@ -476,10 +476,9 @@
 }
 
 .iv-persona-info { text-align: center; }
-.iv-persona-flag { font-size: 1.25rem; }
 .iv-persona-name { font-size: 1rem; font-weight: 700; margin: 0.25rem 0 0; color: var(--text); }
 .iv-persona-title { font-size: 0.78rem; color: var(--text-muted); margin: 0.2rem 0; }
-.iv-persona-accent { font-size: 0.75rem; color: var(--accent); font-weight: 500; }
+.iv-persona-voice-note { font-size: 0.75rem; color: var(--accent); font-weight: 500; }
 .iv-persona-personality { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.4rem; font-style: italic; }
 
 .iv-persona-check {

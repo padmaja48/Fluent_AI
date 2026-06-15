@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { sessionAPI } from '../services/api';
 import { createAudioRecorder, getRecordedAudioFileName } from '../lib/audioRecording';
-import { playTtsAudio, stopTtsAudio } from '../lib/ttsAudio';
+import { getApiErrorMessage, playTtsAudio, stopTtsAudio } from '../lib/ttsAudio';
 import TtsVoiceSelector, { useTtsSpeaker } from './TtsVoiceSelector';
 import '../styles/Practice.css';
 import '../styles/MixedTests.css';
@@ -340,7 +340,12 @@ export const MixedTests = ({ onTestActiveChange }) => {
       console.error('Sarvam TTS failed:', err);
       ttsAudioRef.current = null;
       setAudioPlaying(false);
-      setError(err.response?.data?.message || 'Unable to play listening audio.');
+      const message = await getApiErrorMessage(err, 'Unable to play listening audio.');
+      setError(
+        message.includes('SARVAM_API_KEY')
+          ? 'Sarvam API key is missing in server/.env. Add SARVAM_API_KEY and restart the server.'
+          : message,
+      );
     }
   };
 

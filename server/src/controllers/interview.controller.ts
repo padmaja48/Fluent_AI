@@ -84,7 +84,7 @@ const writeInterviewState = async (interviewId: string, state: unknown) => {
 const PERSONA_PERSONALITIES: Record<string, string> = {
   'us-american': 'Direct, confident, values concrete examples and measurable outcomes. Uses STAR method prompts.',
   'us-indian': 'Analytical, probes technical depth, asks detailed follow-up questions.',
-  'us-australian': 'Relaxed but sharp, tests cultural fit and communication clarity.',
+  'us-australian': 'Relaxed but sharp, tests product thinking and communication clarity.',
   'ru-russian': 'Precise and methodical, focuses on algorithmic thinking and system design, expects rigorous well-reasoned answers.',
 };
 
