@@ -7,9 +7,18 @@ describe('image description catalog', () => {
       expect(items.length).toBeGreaterThanOrEqual(20);
       expect(items.every((item) => item.keywords.length >= 6)).toBe(true);
       expect(items.every((item) => item.credit === 'Unsplash photo')).toBe(true);
-      expect(items.every((item) => item.imageUrl.startsWith('https://images.unsplash.com/photo-'))).toBe(true);
+      expect(
+        items.every(
+          (item) =>
+            item.imageUrl.startsWith('https://images.unsplash.com/photo-') ||
+            item.imageUrl.startsWith('https://unsplash.com/photos/'),
+        ),
+      ).toBe(true);
       expect(items.find((item) => item.id === `${level.toLowerCase()}-office-meeting`)?.imageUrl).toContain(
         'photo-1552664730-d307ca884978',
+      );
+      expect(items.find((item) => item.id === `${level.toLowerCase()}-park-family`)?.imageUrl).toContain(
+        'vv6SmRJVrrk',
       );
     }
   });
