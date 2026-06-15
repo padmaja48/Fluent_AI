@@ -24,7 +24,16 @@ import cefrContentRoutes from './routes/cefrContent.routes';
 export const createApp = () => {
   const app = express();
 
-  app.use(helmet());
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+          mediaSrc: ["'self'", 'data:', 'blob:'],
+        },
+      },
+    }),
+  );
   app.use(
     cors({
       origin: (origin, callback) => {
