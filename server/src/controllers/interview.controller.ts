@@ -7,7 +7,7 @@ import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
 import { evaluateAnswer, generateInterviewQuestions, generateReport, transcribeAudio } from '../services/ai.service';
 import { uploadBuffer, uploadText } from '../services/storage.service';
-import { getPersonaIntro, getPersonaVoiceStyle, normalizeTtsSpeaker, synthesizeSpeech } from '../services/voice.service';
+import { getPersonaIntro, getPersonaVoiceStyle, synthesizeSpeech } from '../services/voice.service';
 
 const idParams = z.object({
   params: z.object({
@@ -50,7 +50,7 @@ export const speakSchema = z.object({
   body: z.object({
     text: z.string().min(1),
     voiceStyle: z.enum(['default', 'professional_female', 'professional_male', 'neutral']).default('default'),
-    speaker: z.enum(['priya', 'rahul', 'meera', 'arjun']).optional(),
+    voiceId: z.string().min(1).optional(),
   }),
   params: z.object({
     id: z.string().min(1),
@@ -315,9 +315,10 @@ export const synthesizeQuestion = asyncHandler(async (req, res) => {
   }
 
   await getInterviewForUser(interviewId, req.userId);
-  const audio = await synthesizeSpeech(req.body.text, req.body.voiceStyle, undefined, req.body.speaker, {
+  const audio = await synthesizeSpeech(req.body.text, req.body.voiceStyle, undefined, undefined, {
     context: 'interview',
     pace: 1.0,
+    voiceId: req.body.voiceId,
   });
   res.setHeader('X-TTS-Cache-Key', audio.cacheKey);
   res.setHeader('Cache-Control', 'private, max-age=86400');
@@ -328,18 +329,18 @@ export const synthesizeQuestion = asyncHandler(async (req, res) => {
 export const personaPreviewSchema = z.object({
   body: z.object({
     personaId: z.enum(['us-american', 'us-indian', 'us-australian', 'ru-russian']),
-    speaker: z.enum(['priya', 'rahul', 'meera', 'arjun']).optional(),
+    voiceId: z.string().min(1),
   }),
 });
 
 export const personaVoicePreview = asyncHandler(async (req, res) => {
-  const { personaId } = req.body as { personaId: string };
-  const speaker = req.body.speaker ? normalizeTtsSpeaker(req.body.speaker) : undefined;
+  const { personaId, voiceId } = req.body as { personaId: string; voiceId: string };
   const intro = getPersonaIntro(personaId);
   const voiceStyle = getPersonaVoiceStyle(personaId);
-  const audio = await synthesizeSpeech(intro, voiceStyle, personaId, speaker, {
+  const audio = await synthesizeSpeech(intro, voiceStyle, personaId, undefined, {
     context: 'preview',
     pace: 1.0,
+    voiceId,
   });
   res.setHeader('X-TTS-Cache-Key', audio.cacheKey);
   res.setHeader('X-TTS-Text', encodeURIComponent(intro));

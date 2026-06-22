@@ -141,8 +141,8 @@ export const interviewAPI = {
   completeInterview: (interviewId, feedback, totalScore) =>
     api.post('/interviews/complete', { interviewId, feedback, totalScore }),
   getState: (interviewId) => api.get(`/interviews/${interviewId}/state`),
-  speak: (interviewId, text, speaker = 'priya', voiceStyle = 'default') =>
-    api.post(`/interviews/${interviewId}/speak`, { text, speaker, voiceStyle }, { responseType: 'blob' }),
+  speak: (interviewId, text, voiceId, voiceStyle = 'default') =>
+    api.post(`/interviews/${interviewId}/speak`, { text, voiceId, voiceStyle }, { responseType: 'blob' }),
   transcribe: (interviewId, formData) =>
     api.post(`/interviews/${interviewId}/transcribe`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -155,8 +155,8 @@ export const interviewAPI = {
   logViolation: (id, type, description) =>
     api.patch(`/interviews/${id}/violation`, { type, description }),
   getReport: (id) => api.get(`/interviews/${id}/report`),
-  personaPreview: (personaId, speaker = 'priya') =>
-    api.post('/interviews/persona-preview', { personaId, speaker }, { responseType: 'blob' }),
+  personaPreview: (personaId, voiceId) =>
+    api.post('/interviews/persona-preview', { personaId, voiceId }, { responseType: 'blob' }),
 };
 
 // Test endpoints

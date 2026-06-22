@@ -12,6 +12,7 @@ type SynthesizeSpeechOptions = {
   level?: string;
   pace?: number;
   sentenceGapMs?: number;
+  voiceId?: string;
 };
 
 type CachedSpeech = {
@@ -196,7 +197,7 @@ export const synthesizeSpeech = async (
   const selectedSpeaker = speaker
     ? normalizeTtsSpeaker(speaker)
     : speakerFromVoiceStyle(resolvedVoiceStyle);
-  const voiceId = resolveVoiceId(selectedSpeaker, resolvedVoiceStyle);
+  const voiceId = configuredValue(options.voiceId) ?? resolveVoiceId(selectedSpeaker, resolvedVoiceStyle);
   if (!voiceId) {
     throw new AppError('ELEVENLABS_VOICE_ID is not configured.', 503, 'ELEVENLABS_VOICE_NOT_CONFIGURED');
   }

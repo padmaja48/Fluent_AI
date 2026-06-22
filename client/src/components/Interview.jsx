@@ -2,8 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { interviewAPI, resumeAPI } from '../services/api';
 import { PERSONAS } from '../lib/personas';
 import { createAudioRecorder, getRecordedAudioFileName } from '../lib/audioRecording';
-import { getApiErrorMessage, stopTtsAudio } from '../lib/ttsAudio';
-import TtsVoiceSelector, { useTtsSpeaker } from './TtsVoiceSelector';
+import { stopTtsAudio } from '../lib/ttsAudio';
 import { AvatarPortrait } from './interview/AvatarPortrait';
 import VoiceIndicator from './interview/VoiceIndicator';
 import '../styles/Interview.css';
@@ -44,16 +43,7 @@ function playAudioBlob(blob, { onPlay, onEnded, onError } = {}) {
   return audio.play().then(() => audio);
 }
 
-const ttsErrorMessage = async (error, fallback) => {
-  const message = await getApiErrorMessage(error, fallback);
-  if (message.includes('ELEVENLABS_API_KEY')) {
-    return 'ElevenLabs API key is missing in server/.env. Add ELEVENLABS_API_KEY and restart the server.';
-  }
-  if (message.includes('ELEVENLABS_VOICE_ID')) {
-    return 'ElevenLabs voice ID is missing in server/.env. Add ELEVENLABS_VOICE_ID and restart the server.';
-  }
-  return message;
-};
+const ttsErrorMessage = async (_error, fallback) => fallback;
 
 /* ─────────────────────────────────────────────────────────────────
    Step 1: Resume Upload
@@ -154,7 +144,6 @@ function PersonaStep({ onNext, onBack }) {
   const [previewing, setPreviewing] = useState(null); // persona id currently previewing
   const [previewError, setPreviewError] = useState('');
   const previewAudioRef = useRef(null);
-  const [ttsSpeaker, setTtsSpeaker] = useTtsSpeaker();
 
   const stopPreview = () => {
     stopTtsAudio(previewAudioRef.current);
@@ -169,7 +158,7 @@ function PersonaStep({ onNext, onBack }) {
     setPreviewError('');
     setPreviewing(persona.id);
     try {
-      const res = await interviewAPI.personaPreview(persona.id, ttsSpeaker);
+      const res = await interviewAPI.personaPreview(persona.id, persona.voiceId);
       const audio = await playAudioBlob(res.data, {
         onPlay: (audioElement) => {
           previewAudioRef.current = audioElement;
@@ -181,14 +170,14 @@ function PersonaStep({ onNext, onBack }) {
         onError: () => {
           previewAudioRef.current = null;
           setPreviewing(null);
-          setPreviewError('Unable to play voice preview.');
+          setPreviewError('Voice preview unavailable, please try again later.');
         },
       });
       previewAudioRef.current = audio;
     } catch (error) {
       previewAudioRef.current = null;
       setPreviewing(null);
-      setPreviewError(await ttsErrorMessage(error, 'Unable to play voice preview.'));
+      setPreviewError(await ttsErrorMessage(error, 'Voice preview unavailable, please try again later.'));
     }
   };
 
@@ -201,7 +190,6 @@ function PersonaStep({ onNext, onBack }) {
       <p className="iv-step-desc">
         Click a card to select. Press <strong>Preview voice</strong> to hear how they sound before deciding.
       </p>
-      <TtsVoiceSelector value={ttsSpeaker} onChange={setTtsSpeaker} className="iv-tts-selector" />
       {previewError && <p className="iv-error">{previewError}</p>}
 
       <div className="iv-persona-grid">
@@ -217,7 +205,6 @@ function PersonaStep({ onNext, onBack }) {
             <div className="iv-persona-info">
               <h3 className="iv-persona-name">{p.name}</h3>
               <p className="iv-persona-title">{p.title} · {p.company}</p>
-              <p className="iv-persona-voice-note">{p.voiceStyleLabel}</p>
               <p className="iv-persona-personality">{p.personality}</p>
             </div>
 
@@ -406,7 +393,6 @@ function LiveSession({ interview, persona, onComplete }) {
   const [interimText, setInterimText] = useState('');
   const [ending, setEnding]           = useState(false);
   const [isProcessingAnswer, setIsProcessingAnswer] = useState(false);
-  const [ttsSpeaker, setTtsSpeaker] = useTtsSpeaker();
 
   const videoRef        = useRef(null);
   const recognitionRef  = useRef(null);
@@ -683,7 +669,7 @@ function LiveSession({ interview, persona, onComplete }) {
     }
     try {
       const voiceStyle = persona?.voiceStyle || 'default';
-      const res = await interviewAPI.speak(interview._id, questionText, ttsSpeaker, voiceStyle);
+      const res = await interviewAPI.speak(interview._id, questionText, persona?.voiceId, voiceStyle);
       if (sessionClosedRef.current) return;
       const played = await playSpeechBlob(res.data);
       if (!played && !sessionClosedRef.current) {
@@ -691,11 +677,11 @@ function LiveSession({ interview, persona, onComplete }) {
       }
     } catch (error) {
       if (!sessionClosedRef.current) {
-        const message = await ttsErrorMessage(error, 'Could not generate interviewer audio.');
+        const message = await ttsErrorMessage(error, 'Interviewer audio unavailable, please continue with the text question.');
         setTranscript(prev => [...prev, { role: 'system', text: message }]);
       }
     }
-  }, [interview._id, persona, playSpeechBlob, ttsSpeaker]);
+  }, [interview._id, persona, playSpeechBlob]);
 
   /* ── Speak first question on mount ─────────────── */
   useEffect(() => {
@@ -979,7 +965,6 @@ function LiveSession({ interview, persona, onComplete }) {
 
           <div className="iv-controls">
             <VoiceIndicator audioLevel={isListening ? audioLevel : 0} isActive={isListening} label="" color="blue" />
-            <TtsVoiceSelector value={ttsSpeaker} onChange={setTtsSpeaker} className="iv-tts-selector" />
             <button
               type="button"
               className="iv-btn iv-btn--ghost"
