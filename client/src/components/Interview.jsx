@@ -46,8 +46,11 @@ function playAudioBlob(blob, { onPlay, onEnded, onError } = {}) {
 
 const ttsErrorMessage = async (error, fallback) => {
   const message = await getApiErrorMessage(error, fallback);
-  if (message.includes('SARVAM_API_KEY')) {
-    return 'Sarvam API key is missing in server/.env. Add SARVAM_API_KEY and restart the server.';
+  if (message.includes('ELEVENLABS_API_KEY')) {
+    return 'ElevenLabs API key is missing in server/.env. Add ELEVENLABS_API_KEY and restart the server.';
+  }
+  if (message.includes('ELEVENLABS_VOICE_ID')) {
+    return 'ElevenLabs voice ID is missing in server/.env. Add ELEVENLABS_VOICE_ID and restart the server.';
   }
   return message;
 };
@@ -628,7 +631,7 @@ function LiveSession({ interview, persona, onComplete }) {
 
   useEffect(() => () => { sessionClosedRef.current = true; stopListening(); stopSpeech(); }, [stopListening, stopSpeech]);
 
-  /* ── TTS: play Sarvam audio blob ────────────────── */
+  /* ── TTS: play interviewer audio blob ───────────── */
   const playSpeechBlob = useCallback(async (blob) => {
     if (sessionClosedRef.current) return false;
     stopTtsAudio(ttsSourceRef.current);

@@ -1,29 +1,9 @@
 import { env } from '../config/env';
 import { getListeningPaceForLevel, splitTextIntoSentences, synthesizeSpeech } from '../services/voice.service';
 
-const makeWav = (sampleCount = 100) => {
-  const sampleRate = 8000;
-  const blockAlign = 2;
-  const data = Buffer.alloc(sampleCount * blockAlign);
-  const buffer = Buffer.alloc(44 + data.length);
-  buffer.write('RIFF', 0, 'ascii');
-  buffer.writeUInt32LE(36 + data.length, 4);
-  buffer.write('WAVE', 8, 'ascii');
-  buffer.write('fmt ', 12, 'ascii');
-  buffer.writeUInt32LE(16, 16);
-  buffer.writeUInt16LE(1, 20);
-  buffer.writeUInt16LE(1, 22);
-  buffer.writeUInt32LE(sampleRate, 24);
-  buffer.writeUInt32LE(sampleRate * blockAlign, 28);
-  buffer.writeUInt16LE(blockAlign, 32);
-  buffer.writeUInt16LE(16, 34);
-  buffer.write('data', 36, 'ascii');
-  buffer.writeUInt32LE(data.length, 40);
-  data.copy(buffer, 44);
-  return buffer;
-};
+const makeMp3 = () => Buffer.from([0xff, 0xfb, 0x90, 0x64]);
 
-describe('Sarvam listening TTS pacing', () => {
+describe('ElevenLabs listening TTS pacing', () => {
   afterEach(() => {
     jest.restoreAllMocks();
   });
@@ -42,12 +22,16 @@ describe('Sarvam listening TTS pacing', () => {
     ]);
   });
 
-  it('calls Sarvam per A1.0004 sentence with A1 pace before returning stitched audio', async () => {
-    (env as typeof env & { SARVAM_API_KEY: string }).SARVAM_API_KEY = 'test-key';
+  it('calls ElevenLabs with the A1 pace as voice speed', async () => {
+    (env as typeof env & { ELEVENLABS_API_KEY: string }).ELEVENLABS_API_KEY = 'test-key';
+    (env as typeof env & { ELEVENLABS_VOICE_ID: string }).ELEVENLABS_VOICE_ID = 'test-voice-id';
+    (env as typeof env & { ELEVENLABS_PROFESSIONAL_FEMALE_VOICE_ID: string }).ELEVENLABS_PROFESSIONAL_FEMALE_VOICE_ID = 'test-voice-id';
+    (env as typeof env & { ELEVENLABS_OUTPUT_FORMAT: string }).ELEVENLABS_OUTPUT_FORMAT = 'mp3_44100_128';
+    (env as typeof env & { ELEVENLABS_MODEL_ID: string }).ELEVENLABS_MODEL_ID = 'eleven_multilingual_v2';
     const fetchMock = jest.spyOn(global, 'fetch').mockImplementation(async () =>
-      new Response(makeWav(), {
+      new Response(makeMp3(), {
         status: 200,
-        headers: { 'content-type': 'audio/wav' },
+        headers: { 'content-type': 'audio/mpeg' },
       }),
     );
     const clipA10004 =
@@ -58,15 +42,17 @@ describe('Sarvam listening TTS pacing', () => {
       level: 'A1',
       sentenceGapMs: 500,
     });
-    const payloads = fetchMock.mock.calls.map((call) => JSON.parse(String(call[1]?.body)));
+    const [url, init] = fetchMock.mock.calls[0];
+    const payload = JSON.parse(String(init?.body));
 
-    expect(fetchMock).toHaveBeenCalledTimes(5);
-    expect(payloads.every((payload) => payload.speaker === 'priya')).toBe(true);
-    expect(payloads.every((payload) => payload.pace === 0.85)).toBe(true);
-    expect(payloads.every((payload) => payload.output_audio_codec === 'wav')).toBe(true);
-    expect(payloads.map((payload) => payload.text)).toEqual(splitTextIntoSentences(clipA10004));
-    expect(audio.contentType).toBe('audio/wav');
-    expect(audio.buffer.length).toBeGreaterThan(makeWav().length * 5);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(url)).toBe('https://api.elevenlabs.io/v1/text-to-speech/test-voice-id?output_format=mp3_44100_128');
+    expect(init?.headers).toMatchObject({ 'xi-api-key': 'test-key' });
+    expect(payload.text).toBe(clipA10004);
+    expect(payload.model_id).toBe('eleven_multilingual_v2');
+    expect(payload.voice_settings.speed).toBe(0.85);
+    expect(audio.contentType).toBe('audio/mpeg');
+    expect(audio.buffer).toEqual(makeMp3());
   });
 
   it('keeps higher levels closer to natural speed', () => {

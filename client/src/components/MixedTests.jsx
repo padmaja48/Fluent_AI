@@ -337,13 +337,15 @@ export const MixedTests = ({ onTestActiveChange }) => {
       });
       ttsAudioRef.current = audio;
     } catch (err) {
-      console.error('Sarvam TTS failed:', err);
+      console.error('ElevenLabs TTS failed:', err);
       ttsAudioRef.current = null;
       setAudioPlaying(false);
       const message = await getApiErrorMessage(err, 'Unable to play listening audio.');
       setError(
-        message.includes('SARVAM_API_KEY')
-          ? 'Sarvam API key is missing in server/.env. Add SARVAM_API_KEY and restart the server.'
+        message.includes('ELEVENLABS_API_KEY')
+          ? 'ElevenLabs API key is missing in server/.env. Add ELEVENLABS_API_KEY and restart the server.'
+          : message.includes('ELEVENLABS_VOICE_ID')
+            ? 'ElevenLabs voice ID is missing in server/.env. Add ELEVENLABS_VOICE_ID and restart the server.'
           : message,
       );
     }

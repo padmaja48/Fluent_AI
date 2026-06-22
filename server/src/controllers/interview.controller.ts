@@ -7,7 +7,7 @@ import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
 import { evaluateAnswer, generateInterviewQuestions, generateReport, transcribeAudio } from '../services/ai.service';
 import { uploadBuffer, uploadText } from '../services/storage.service';
-import { getPersonaIntro, getPersonaVoiceStyle, normalizeSarvamSpeaker, synthesizeSpeech } from '../services/voice.service';
+import { getPersonaIntro, getPersonaVoiceStyle, normalizeTtsSpeaker, synthesizeSpeech } from '../services/voice.service';
 
 const idParams = z.object({
   params: z.object({
@@ -334,7 +334,7 @@ export const personaPreviewSchema = z.object({
 
 export const personaVoicePreview = asyncHandler(async (req, res) => {
   const { personaId } = req.body as { personaId: string };
-  const speaker = req.body.speaker ? normalizeSarvamSpeaker(req.body.speaker) : undefined;
+  const speaker = req.body.speaker ? normalizeTtsSpeaker(req.body.speaker) : undefined;
   const intro = getPersonaIntro(personaId);
   const voiceStyle = getPersonaVoiceStyle(personaId);
   const audio = await synthesizeSpeech(intro, voiceStyle, personaId, speaker, {

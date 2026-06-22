@@ -254,8 +254,8 @@ const buildSpeaking = (): ContentItem[] =>
 const buildContent = () => [...buildListening(), ...buildReading(), ...buildWriting(), ...buildSpeaking()];
 
 const uploadListeningAudio = async (item: ContentItem) => {
-  if (!env.SARVAM_API_KEY) {
-    return { audioUrl: undefined, audioContentType: undefined, skipped: 'SARVAM_API_KEY is not configured' };
+  if (!env.ELEVENLABS_API_KEY) {
+    return { audioUrl: undefined, audioContentType: undefined, skipped: 'ELEVENLABS_API_KEY is not configured' };
   }
 
   const audio = await synthesizeSpeech(item.content, 'default', undefined, 'meera', {

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
-import { normalizeSarvamSpeaker, synthesizeSpeech } from '../services/voice.service';
+import { normalizeTtsSpeaker, synthesizeSpeech } from '../services/voice.service';
 
 const ttsSchema = z.object({
   body: z.object({
@@ -22,7 +22,7 @@ router.post(
   '/',
   validate(ttsSchema),
   asyncHandler(async (req, res) => {
-    const speaker = normalizeSarvamSpeaker(req.body.speaker);
+    const speaker = normalizeTtsSpeaker(req.body.speaker);
     const audio = await synthesizeSpeech(req.body.text, 'default', undefined, speaker, {
       context: req.body.context,
       level: req.body.level,
