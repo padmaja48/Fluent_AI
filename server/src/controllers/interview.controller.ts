@@ -8,7 +8,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { evaluateAnswer, generateInterviewQuestions, generateReport, transcribeAudio } from '../services/ai.service';
 import { uploadBuffer, uploadText } from '../services/storage.service';
 import { getPersonaIntro, getPersonaVoiceStyle, synthesizeSpeech } from '../services/voice.service';
-import { buildInterviewQuestionSet, COMPANY_KEYS } from '../services/companyQuestions.service';
+import { buildInterviewQuestionSet, isKnownCompany } from '../services/companyQuestions.service';
 
 const idParams = z.object({
   params: z.object({
@@ -30,7 +30,7 @@ export const createInterviewSchema = z.object({
     personaId: z.enum(['us-american', 'us-indian', 'us-australian', 'ru-russian']).optional(),
     interviewType: z.enum(['Behavioural', 'Technical', 'Mixed']).optional(),
     complexity: z.enum(['Beginner', 'Intermediate', 'Advanced']).optional(),
-    targetCompany: z.enum(COMPANY_KEYS).optional(),
+    targetCompany: z.string().refine(isKnownCompany, 'Unknown target company').optional(),
   }),
 });
 

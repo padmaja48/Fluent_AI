@@ -37,4 +37,28 @@ describe('company question composition', () => {
     expect(questions[1].question).toContain('TCS');
     expect(questions).toHaveLength(6);
   });
+
+  it('adds finance-specific questions for banking companies', () => {
+    const questions = buildInterviewQuestionSet({
+      duration: 30,
+      targetCompany: 'jpmorgan-chase',
+      generatedQuestions: [],
+    });
+
+    expect(questions[0].question).toBe('Introduce yourself.');
+    expect(questions[1].question).toContain('JPMorgan Chase');
+    expect(questions.some((item) => item.resumeReference?.includes('financial'))).toBe(true);
+  });
+
+  it('adds healthcare-specific questions for healthcare companies', () => {
+    const questions = buildInterviewQuestionSet({
+      duration: 30,
+      targetCompany: 'medtronic',
+      generatedQuestions: [],
+    });
+
+    expect(questions[0].question).toBe('Introduce yourself.');
+    expect(questions[1].question).toContain('Medtronic');
+    expect(questions.some((item) => item.resumeReference?.includes('health'))).toBe(true);
+  });
 });

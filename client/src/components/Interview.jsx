@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { interviewAPI, resumeAPI } from '../services/api';
 import { PERSONAS } from '../lib/personas';
+import { COMPANY_OPTIONS } from '../lib/companyOptions';
 import { createAudioRecorder, getRecordedAudioFileName } from '../lib/audioRecording';
 import { stopTtsAudio } from '../lib/ttsAudio';
 import { AvatarPortrait } from './interview/AvatarPortrait';
@@ -9,21 +10,6 @@ import '../styles/Interview.css';
 
 const STEPS = ['Resume', 'Persona', 'Config', 'System Check'];
 const MAX_VIOLATIONS = 3;
-const COMPANY_OPTIONS = [
-  { value: '', label: 'No specific company' },
-  { value: 'tcs', label: 'TCS' },
-  { value: 'infosys', label: 'Infosys' },
-  { value: 'wipro', label: 'Wipro' },
-  { value: 'accenture', label: 'Accenture' },
-  { value: 'cognizant', label: 'Cognizant' },
-  { value: 'capgemini', label: 'Capgemini' },
-  { value: 'hcltech', label: 'HCLTech' },
-  { value: 'deloitte', label: 'Deloitte' },
-  { value: 'ibm', label: 'IBM' },
-  { value: 'amazon', label: 'Amazon' },
-  { value: 'microsoft', label: 'Microsoft' },
-  { value: 'google', label: 'Google' },
-];
 
 /* ─────────────────────────────────────────────────────────────────
    Shared helpers
