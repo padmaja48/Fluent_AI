@@ -18,6 +18,7 @@ type InterviewContext = {
   personaPersonality?: string;
   interviewType?: string;
   complexity?: string;
+  targetCompany?: string;
   resumeSkills?: string[];
   resumeExperienceLevel?: string;
   resumeSuggestedQuestions?: string[];
@@ -250,9 +251,10 @@ You are generating ${questionCount} interview questions for a LIVE interview ses
 ${personaBlock}
 ${resumeBlock}
 
-INTERVIEW TYPE: ${context.interviewType ?? 'Mixed'} | ROLE: ${context.roleDomain} ${context.roleLevel} | COMPLEXITY: ${context.complexity ?? 'Intermediate'}
+INTERVIEW TYPE: ${context.interviewType ?? 'Mixed'} | ROLE: ${context.roleDomain} ${context.roleLevel} | COMPLEXITY: ${context.complexity ?? 'Intermediate'} | TARGET COMPANY: ${context.targetCompany ?? 'None'}
 STYLE RULE: ${styleInstruction}
 COMPLEXITY RULE: ${complexityNote}
+COMPANY RULE: If a target company is provided, align follow-up questions with that company's likely interview style, service/product context, and role expectations while still grounding questions in the resume.
 
 ABSOLUTE RULES — violating any rule makes the output unusable:
 1. Generate EXACTLY ${questionCount} questions — no more, no fewer

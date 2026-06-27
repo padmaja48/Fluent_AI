@@ -49,6 +49,7 @@ export interface IInterview extends Document {
   personaId?: 'us-american' | 'us-indian' | 'us-australian' | 'ru-russian';
   interviewType?: 'Behavioural' | 'Technical' | 'Mixed';
   complexity?: 'Beginner' | 'Intermediate' | 'Advanced';
+  targetCompany?: string;
   violations: IInterviewViolation[];
   resumeSkills: string[];
   resumeExperienceLevel?: string;
@@ -106,6 +107,7 @@ const interviewSchema = new Schema<IInterview>(
     personaId: { type: String, enum: ['us-american', 'us-indian', 'us-australian', 'ru-russian'] },
     interviewType: { type: String, enum: ['Behavioural', 'Technical', 'Mixed'], default: 'Mixed' },
     complexity: { type: String, enum: ['Beginner', 'Intermediate', 'Advanced'], default: 'Intermediate' },
+    targetCompany: { type: String, trim: true, lowercase: true },
     violations: [
       {
         type: { type: String },

@@ -9,6 +9,21 @@ import '../styles/Interview.css';
 
 const STEPS = ['Resume', 'Persona', 'Config', 'System Check'];
 const MAX_VIOLATIONS = 3;
+const COMPANY_OPTIONS = [
+  { value: '', label: 'No specific company' },
+  { value: 'tcs', label: 'TCS' },
+  { value: 'infosys', label: 'Infosys' },
+  { value: 'wipro', label: 'Wipro' },
+  { value: 'accenture', label: 'Accenture' },
+  { value: 'cognizant', label: 'Cognizant' },
+  { value: 'capgemini', label: 'Capgemini' },
+  { value: 'hcltech', label: 'HCLTech' },
+  { value: 'deloitte', label: 'Deloitte' },
+  { value: 'ibm', label: 'IBM' },
+  { value: 'amazon', label: 'Amazon' },
+  { value: 'microsoft', label: 'Microsoft' },
+  { value: 'google', label: 'Google' },
+];
 
 /* ─────────────────────────────────────────────────────────────────
    Shared helpers
@@ -247,6 +262,7 @@ function ConfigStep({ persona, onNext, onBack }) {
     interviewType: 'Mixed',
     complexity: 'Intermediate',
     duration: 30,
+    targetCompany: '',
   });
   const toggle = (key, val) => setConfig(prev => ({ ...prev, [key]: val }));
   const opts = (key, items) => (
@@ -269,6 +285,18 @@ function ConfigStep({ persona, onNext, onBack }) {
         <input className="iv-input" value={config.roleDomain}
           onChange={e => toggle('roleDomain', e.target.value)}
           placeholder="e.g. Backend Engineering, Product Management" />
+        <label className="iv-label">Target Company</label>
+        <select
+          className="iv-input"
+          value={config.targetCompany}
+          onChange={e => toggle('targetCompany', e.target.value)}
+        >
+          {COMPANY_OPTIONS.map(company => (
+            <option key={company.value || 'none'} value={company.value}>
+              {company.label}
+            </option>
+          ))}
+        </select>
         <label className="iv-label">Experience Level</label>
         {opts('roleLevel', ['Fresher', 'Mid', 'Senior', 'Lead'])}
         <label className="iv-label">Interview Type</label>
@@ -1025,6 +1053,7 @@ export const Interview = ({ setCurrentView }) => {
         personaId:       data.persona?.id,
         interviewType:   data.config?.interviewType,
         complexity:      data.config?.complexity,
+        targetCompany:   data.config?.targetCompany || undefined,
       };
       const res = await interviewAPI.createInterview(payload);
       const startRes = await interviewAPI.startInterview(res.data._id);

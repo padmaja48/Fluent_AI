@@ -8,6 +8,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { evaluateAnswer, generateInterviewQuestions, generateReport, transcribeAudio } from '../services/ai.service';
 import { uploadBuffer, uploadText } from '../services/storage.service';
 import { getPersonaIntro, getPersonaVoiceStyle, synthesizeSpeech } from '../services/voice.service';
+import { buildInterviewQuestionSet, COMPANY_KEYS } from '../services/companyQuestions.service';
 
 const idParams = z.object({
   params: z.object({
@@ -29,6 +30,7 @@ export const createInterviewSchema = z.object({
     personaId: z.enum(['us-american', 'us-indian', 'us-australian', 'ru-russian']).optional(),
     interviewType: z.enum(['Behavioural', 'Technical', 'Mixed']).optional(),
     complexity: z.enum(['Beginner', 'Intermediate', 'Advanced']).optional(),
+    targetCompany: z.enum(COMPANY_KEYS).optional(),
   }),
 });
 
@@ -177,13 +179,18 @@ export const startInterview = asyncHandler(async (req, res) => {
       personaPersonality: getPersonaPersonality((interview as any).personaId),
       interviewType: (interview as any).interviewType,
       complexity: (interview as any).complexity,
+      targetCompany: (interview as any).targetCompany,
       resumeSkills: (interview as any).resumeSkills ?? [],
       resumeExperienceLevel: (interview as any).resumeExperienceLevel ?? '',
       resumeSuggestedQuestions: (interview as any).resumeSuggestedQuestions ?? [],
       resumeSummary: (interview as any).resumeSummary ?? '',
     });
 
-    interview.questions = generated.questions;
+    interview.questions = buildInterviewQuestionSet({
+      generatedQuestions: generated.questions,
+      targetCompany: (interview as any).targetCompany,
+      duration: interview.duration,
+    });
   }
 
   interview.status = 'In Progress';
