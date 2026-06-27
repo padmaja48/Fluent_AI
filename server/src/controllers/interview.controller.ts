@@ -314,11 +314,12 @@ export const synthesizeQuestion = asyncHandler(async (req, res) => {
     throw new AppError('Interview id is required', 400, 'INTERVIEW_ID_REQUIRED');
   }
 
-  await getInterviewForUser(interviewId, req.userId);
-  const audio = await synthesizeSpeech(req.body.text, req.body.voiceStyle, undefined, undefined, {
+  const interview = await getInterviewForUser(interviewId, req.userId);
+  const personaId = (interview as any).personaId as string | undefined;
+  const voiceStyle = personaId ? getPersonaVoiceStyle(personaId) : req.body.voiceStyle;
+  const audio = await synthesizeSpeech(req.body.text, voiceStyle, personaId, undefined, {
     context: 'interview',
     pace: 1.0,
-    voiceId: req.body.voiceId,
   });
   res.setHeader('X-TTS-Cache-Key', audio.cacheKey);
   res.setHeader('Cache-Control', 'private, max-age=86400');
@@ -329,18 +330,17 @@ export const synthesizeQuestion = asyncHandler(async (req, res) => {
 export const personaPreviewSchema = z.object({
   body: z.object({
     personaId: z.enum(['us-american', 'us-indian', 'us-australian', 'ru-russian']),
-    voiceId: z.string().min(1),
+    voiceId: z.string().min(1).optional(),
   }),
 });
 
 export const personaVoicePreview = asyncHandler(async (req, res) => {
-  const { personaId, voiceId } = req.body as { personaId: string; voiceId: string };
+  const { personaId } = req.body as { personaId: string };
   const intro = getPersonaIntro(personaId);
   const voiceStyle = getPersonaVoiceStyle(personaId);
   const audio = await synthesizeSpeech(intro, voiceStyle, personaId, undefined, {
     context: 'preview',
     pace: 1.0,
-    voiceId,
   });
   res.setHeader('X-TTS-Cache-Key', audio.cacheKey);
   res.setHeader('X-TTS-Text', encodeURIComponent(intro));

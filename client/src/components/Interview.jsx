@@ -158,7 +158,7 @@ function PersonaStep({ onNext, onBack }) {
     setPreviewError('');
     setPreviewing(persona.id);
     try {
-      const res = await interviewAPI.personaPreview(persona.id, persona.voiceId);
+      const res = await interviewAPI.personaPreview(persona.id);
       const audio = await playAudioBlob(res.data, {
         onPlay: (audioElement) => {
           previewAudioRef.current = audioElement;
@@ -669,7 +669,7 @@ function LiveSession({ interview, persona, onComplete }) {
     }
     try {
       const voiceStyle = persona?.voiceStyle || 'default';
-      const res = await interviewAPI.speak(interview._id, questionText, persona?.voiceId, voiceStyle);
+      const res = await interviewAPI.speak(interview._id, questionText, voiceStyle);
       if (sessionClosedRef.current) return;
       const played = await playSpeechBlob(res.data);
       if (!played && !sessionClosedRef.current) {

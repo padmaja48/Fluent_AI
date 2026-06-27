@@ -23,6 +23,14 @@ type CachedSpeech = {
 
 const speechCache = new Map<string, CachedSpeech>();
 const MAX_CACHE_ITEMS = 250;
+const SARVAM_OUTPUT_CODEC = 'wav';
+const SARVAM_SAMPLE_RATE = 24000;
+
+const SARVAM_PERSONA_SPEAKERS: Record<string, string> = {
+  'us-indian': 'priya',
+  'us-australian': 'ishita',
+  'ru-russian': 'ratan',
+};
 
 /* ── Per-persona voice style mapping ───────────────── */
 export const getPersonaVoiceStyle = (personaId: string): VoiceStyle => {
@@ -101,6 +109,16 @@ const contentTypeForOutputFormat = (outputFormat: string) => {
   return 'audio/mpeg';
 };
 
+const contentTypeForSarvamCodec = (codec: string) => {
+  if (codec === 'mp3') return 'audio/mpeg';
+  if (codec === 'opus') return 'audio/ogg';
+  if (codec === 'flac') return 'audio/flac';
+  if (codec === 'aac') return 'audio/aac';
+  if (codec === 'linear16') return 'audio/L16';
+  if (codec === 'mulaw' || codec === 'alaw') return 'audio/basic';
+  return 'audio/wav';
+};
+
 const cacheKeyFor = (
   text: string,
   speaker: TtsSpeaker,
@@ -120,6 +138,28 @@ const cacheKeyFor = (
         languageCode: env.ELEVENLABS_LANGUAGE_CODE,
         model: env.ELEVENLABS_MODEL_ID,
         provider: 'elevenlabs',
+      }),
+    )
+    .digest('hex');
+
+const cacheKeyForSarvam = (
+  text: string,
+  speaker: string,
+  options: Required<Pick<SynthesizeSpeechOptions, 'context'>> & { pace: number },
+) =>
+  crypto
+    .createHash('sha256')
+    .update(
+      JSON.stringify({
+        text,
+        speaker,
+        context: options.context,
+        pace: options.pace,
+        languageCode: env.SARVAM_TTS_LANGUAGE_CODE,
+        model: env.SARVAM_TTS_MODEL,
+        outputCodec: SARVAM_OUTPUT_CODEC,
+        sampleRate: SARVAM_SAMPLE_RATE,
+        provider: 'sarvam',
       }),
     )
     .digest('hex');
@@ -186,6 +226,55 @@ const callElevenLabs = async (
   };
 };
 
+const callSarvam = async (
+  text: string,
+  speaker: string,
+  pace: number,
+): Promise<Omit<CachedSpeech, 'cacheKey'>> => {
+  if (!env.SARVAM_API_KEY) {
+    throw new AppError('SARVAM_API_KEY is not configured.', 503, 'SARVAM_NOT_CONFIGURED');
+  }
+
+  const response = await fetch(env.SARVAM_TTS_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'api-subscription-key': env.SARVAM_API_KEY,
+      'content-type': 'application/json',
+      accept: 'application/json',
+    },
+    body: JSON.stringify({
+      text,
+      target_language_code: env.SARVAM_TTS_LANGUAGE_CODE,
+      model: env.SARVAM_TTS_MODEL,
+      speaker,
+      pace: Math.max(0.5, Math.min(2, Number(pace.toFixed(2)))),
+      speech_sample_rate: SARVAM_SAMPLE_RATE,
+      output_audio_codec: SARVAM_OUTPUT_CODEC,
+      temperature: 0.55,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    throw new AppError(
+      `Sarvam TTS ${response.status}: ${errorText || response.statusText}`,
+      502,
+      'SARVAM_TTS_FAILED',
+    );
+  }
+
+  const payload = (await response.json()) as { audios?: string[] };
+  const audioBase64 = payload.audios?.[0];
+  if (!audioBase64) {
+    throw new AppError('Sarvam TTS returned no audio.', 502, 'SARVAM_TTS_EMPTY_AUDIO');
+  }
+
+  return {
+    buffer: Buffer.from(audioBase64, 'base64'),
+    contentType: contentTypeForSarvamCodec(SARVAM_OUTPUT_CODEC),
+  };
+};
+
 export const synthesizeSpeech = async (
   text: string,
   voiceStyle: VoiceStyle = 'default',
@@ -197,14 +286,37 @@ export const synthesizeSpeech = async (
   const selectedSpeaker = speaker
     ? normalizeTtsSpeaker(speaker)
     : speakerFromVoiceStyle(resolvedVoiceStyle);
+
+  const normalizedText = text.trim();
+  const context = options.context ?? 'interview';
+  const pace = resolvePace({ ...options, context });
+  const sarvamSpeaker = personaId ? SARVAM_PERSONA_SPEAKERS[personaId] : undefined;
+  if (sarvamSpeaker && configuredValue(env.SARVAM_API_KEY)) {
+    const cacheKey = cacheKeyForSarvam(normalizedText, sarvamSpeaker, {
+      context,
+      pace,
+    });
+    const cached = speechCache.get(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const audio = await callSarvam(normalizedText, sarvamSpeaker, pace);
+      const item = {
+        ...audio,
+        cacheKey,
+      };
+      remember(item);
+      return item;
+    } catch (error) {
+      if (!configuredValue(env.ELEVENLABS_API_KEY)) throw error;
+    }
+  }
+
   const voiceId = configuredValue(options.voiceId) ?? resolveVoiceId(selectedSpeaker, resolvedVoiceStyle);
   if (!voiceId) {
     throw new AppError('ELEVENLABS_VOICE_ID is not configured.', 503, 'ELEVENLABS_VOICE_NOT_CONFIGURED');
   }
 
-  const normalizedText = text.trim();
-  const context = options.context ?? 'interview';
-  const pace = resolvePace({ ...options, context });
   const outputFormat = env.ELEVENLABS_OUTPUT_FORMAT;
   const cacheKey = cacheKeyFor(normalizedText, selectedSpeaker, voiceId, {
     context,

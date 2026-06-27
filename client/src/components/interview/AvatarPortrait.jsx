@@ -181,6 +181,8 @@ const FACE_MAP = {
 // Photo-based avatars for personas with real portrait images (no blinking)
 const PHOTO_AVATARS = {
   'us-indian': '/avatars/priya-sharma.png',
+  'us-australian': '/avatars/ananya-rao.png',
+  'ru-russian': '/avatars/rahul-menon.png',
 };
 
 /* ── Main AvatarPortrait component ── */

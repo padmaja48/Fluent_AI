@@ -55,6 +55,42 @@ describe('ElevenLabs listening TTS pacing', () => {
     expect(audio.buffer).toEqual(makeMp3());
   });
 
+  it('uses Sarvam Indian English speakers for interview personas', async () => {
+    (env as typeof env & { SARVAM_API_KEY: string }).SARVAM_API_KEY = 'test-sarvam-key';
+    (env as typeof env & { SARVAM_TTS_ENDPOINT: string }).SARVAM_TTS_ENDPOINT = 'https://api.sarvam.ai/text-to-speech';
+    (env as typeof env & { SARVAM_TTS_MODEL: string }).SARVAM_TTS_MODEL = 'bulbul:v3';
+    (env as typeof env & { SARVAM_TTS_LANGUAGE_CODE: string }).SARVAM_TTS_LANGUAGE_CODE = 'en-IN';
+    const wav = Buffer.from('RIFF');
+    const fetchMock = jest.spyOn(global, 'fetch').mockImplementation(async () =>
+      new Response(JSON.stringify({ audios: [wav.toString('base64')] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    const audio = await synthesizeSpeech('Welcome to the interview.', 'neutral', 'us-australian', undefined, {
+      context: 'preview',
+      pace: 0.95,
+    });
+    const [url, init] = fetchMock.mock.calls[0];
+    const payload = JSON.parse(String(init?.body));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(url)).toBe('https://api.sarvam.ai/text-to-speech');
+    expect(init?.headers).toMatchObject({ 'api-subscription-key': 'test-sarvam-key' });
+    expect(payload).toMatchObject({
+      text: 'Welcome to the interview.',
+      target_language_code: 'en-IN',
+      model: 'bulbul:v3',
+      speaker: 'ishita',
+      output_audio_codec: 'wav',
+      speech_sample_rate: 24000,
+      pace: 0.95,
+    });
+    expect(audio.contentType).toBe('audio/wav');
+    expect(audio.buffer).toEqual(wav);
+  });
+
   it('keeps higher levels closer to natural speed', () => {
     expect(getListeningPaceForLevel('A2')).toBe(0.85);
     expect(getListeningPaceForLevel('B1')).toBe(0.95);
