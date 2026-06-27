@@ -257,56 +257,6 @@
 .iv-drop-icon { font-size: 2rem; }
 .iv-drop-success { color: var(--accent); font-weight: 600; font-size: 1rem; }
 
-.iv-resume-preview {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.75rem 1rem;
-  margin-bottom: 1rem;
-  font-size: 0.85rem;
-  color: var(--text);
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.iv-resume-summary {
-  font-size: 0.84rem;
-  color: var(--text-muted);
-  font-style: italic;
-  margin: 0;
-  line-height: 1.5;
-}
-
-.iv-resume-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  font-size: 0.83rem;
-  color: var(--text);
-}
-
-.iv-skill-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  max-height: 120px;
-  overflow-y: auto;
-  padding-right: 0.25rem;
-}
-
-.iv-skill-tag {
-  display: inline-block;
-  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
-  color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  border-radius: 4px;
-  padding: 0.15rem 0.5rem;
-  font-size: 0.76rem;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
 .iv-info-note {
   font-size: 0.82rem;
   color: var(--success, #10b981);
@@ -580,6 +530,12 @@
 .iv-check-item--ok { color: var(--text); }
 .iv-check-icon { font-size: 1rem; color: var(--accent); }
 
+.iv-check-note {
+  margin: -0.15rem 0 0.25rem 1.75rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
 .iv-mic-bars { margin-top: 0.5rem; }
 
 .iv-agree-label {
@@ -649,10 +605,38 @@
   flex-shrink: 0;
 }
 
+.iv-hidden-canvas {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  left: -9999px;
+  top: -9999px;
+}
+
 .iv-timer { font-variant-numeric: tabular-nums; font-weight: 600; color: #eee; }
 .iv-timer[data-warn='true'] { color: #f87171; }
 .iv-q-counter { color: #999; }
 .iv-rec-dot { color: #f87171; }
+.iv-camera-status {
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.16);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 999px;
+  padding: 0.16rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.iv-camera-status--ok {
+  color: #bbf7d0;
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
 .iv-violation-count { margin-left: auto; color: #fbbf24; }
 
 .iv-violation-banner {

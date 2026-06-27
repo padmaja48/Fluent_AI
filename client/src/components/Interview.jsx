@@ -10,6 +10,80 @@ import '../styles/Interview.css';
 
 const STEPS = ['Resume', 'Persona', 'Config', 'System Check'];
 const MAX_VIOLATIONS = 3;
+const PERSON_CHECK_INTERVAL_MS = 1500;
+const PERSON_MISSING_GRACE_MS = 5000;
+
+const isClipboardShortcut = (event) => {
+  const key = event.key.toUpperCase();
+  return (
+    ((event.ctrlKey || event.metaKey) && ['C', 'X', 'V'].includes(key)) ||
+    (event.shiftKey && event.key === 'Insert')
+  );
+};
+
+const isBlockedInterviewShortcut = (event) => {
+  const key = event.key.toUpperCase();
+  return (
+    isClipboardShortcut(event) ||
+    event.key === 'F12' ||
+    ((event.ctrlKey || event.metaKey) && event.shiftKey && ['I', 'J', 'C', 'U'].includes(key)) ||
+    ((event.ctrlKey || event.metaKey) && ['A', 'P', 'S', 'U'].includes(key)) ||
+    (event.altKey && event.key === 'Tab')
+  );
+};
+
+const getVideoFrameStats = (video, canvas) => {
+  if (!video || !canvas || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+    return { visible: false, variance: 0 };
+  }
+
+  const width = 96;
+  const height = Math.max(54, Math.round((video.videoHeight / video.videoWidth) * width));
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return { visible: false, variance: 0 };
+
+  ctx.drawImage(video, 0, 0, width, height);
+  const { data } = ctx.getImageData(0, 0, width, height);
+  let total = 0;
+  let totalSquared = 0;
+  for (let i = 0; i < data.length; i += 16) {
+    const luminance = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    total += luminance;
+    totalSquared += luminance * luminance;
+  }
+
+  const samples = data.length / 16;
+  const mean = total / samples;
+  const variance = totalSquared / samples - mean * mean;
+  return {
+    visible: mean > 18 && mean < 242 && variance > 12,
+    variance,
+  };
+};
+
+const detectPersonPresence = async (video, canvas) => {
+  if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+    return { detected: false, method: 'camera', reason: 'Camera feed is not ready.' };
+  }
+
+  if ('FaceDetector' in window) {
+    try {
+      const detector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
+      const faces = await detector.detect(video);
+      if (faces.length > 0) return { detected: true, method: 'face' };
+      return { detected: false, method: 'face', reason: 'No face detected in camera view.' };
+    } catch {
+      // Fall through to frame analysis when native detection is unavailable at runtime.
+    }
+  }
+
+  const frame = getVideoFrameStats(video, canvas);
+  return frame.visible
+    ? { detected: true, method: 'camera' }
+    : { detected: false, method: 'camera', reason: 'Camera view is blocked or too dark.' };
+};
 
 /* ─────────────────────────────────────────────────────────────────
    Shared helpers
@@ -97,27 +171,6 @@ function ResumeStep({ onNext }) {
       {resume?._duplicate && (
         <p className="iv-info-note">✓ Same resume detected — reusing your existing analysis.</p>
       )}
-      {(resume?.analysis || resume?.parsedData) && (() => {
-        const skills = resume.analysis?.skills || resume.parsedData?.skills || [];
-        const level  = resume.analysis?.experienceLevel || resume.parsedData?.experienceLevel || 'N/A';
-        const yoe    = resume.analysis?.yearsOfExperience;
-        const summary = resume.analysis?.summary;
-        return (
-          <div className="iv-resume-preview">
-            {summary && <p className="iv-resume-summary">{summary}</p>}
-            <div className="iv-resume-meta">
-              <span><strong>Level:</strong> {level}</span>
-              {yoe != null && <span><strong>Experience:</strong> {yoe} yr{yoe !== 1 ? 's' : ''}</span>}
-              <span><strong>Skills found:</strong> {skills.length}</span>
-            </div>
-            {skills.length > 0 && (
-              <div className="iv-skill-tags">
-                {skills.map(s => <span key={s} className="iv-skill-tag">{s}</span>)}
-              </div>
-            )}
-          </div>
-        );
-      })()}
       {history.length > 0 && !resume && (
         <div className="iv-resume-history">
           <p className="iv-resume-history-label">Or use a previous resume:</p>
@@ -305,21 +358,42 @@ function ConfigStep({ persona, onNext, onBack }) {
 ───────────────────────────────────────────────────────────────── */
 function SystemCheckStep({ onStart, onBack, loading }) {
   const videoRef = useRef(null);
+  const personCanvasRef = useRef(null);
   const analyserRef = useRef(null);
   const animRef = useRef(null);
   const [camOk, setCamOk] = useState(false);
   const [micOk, setMicOk] = useState(false);
+  const [personOk, setPersonOk] = useState(false);
+  const [personMessage, setPersonMessage] = useState('Checking camera view...');
   const [micLevel, setMicLevel] = useState(0);
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     let stream;
+    let personCheck;
     (async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}); }
+        stream.getVideoTracks().forEach((track) => {
+          track.onended = () => {
+            setCamOk(false);
+            setPersonOk(false);
+            setPersonMessage('Camera was turned off.');
+          };
+        });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play().catch(() => {});
+        }
         setCamOk(true); setMicOk(true);
+        const checkPerson = async () => {
+          const result = await detectPersonPresence(videoRef.current, personCanvasRef.current);
+          setPersonOk(result.detected);
+          setPersonMessage(result.detected ? 'Person detected' : result.reason || 'No person detected');
+        };
+        personCheck = setInterval(checkPerson, PERSON_CHECK_INTERVAL_MS);
+        await checkPerson();
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
         const src = ctx.createMediaStreamSource(stream);
         const analyser = ctx.createAnalyser(); analyser.fftSize = 256;
@@ -331,9 +405,14 @@ function SystemCheckStep({ onStart, onBack, loading }) {
           animRef.current = requestAnimationFrame(tick);
         };
         tick();
-      } catch { setError('Could not access camera/microphone. Please grant permissions.'); }
+      } catch {
+        setCamOk(false);
+        setPersonOk(false);
+        setError('Could not access camera/microphone. Please grant permissions.');
+      }
     })();
     return () => {
+      clearInterval(personCheck);
       if (stream) stream.getTracks().forEach(t => t.stop());
       if (animRef.current) cancelAnimationFrame(animRef.current);
     };
@@ -347,11 +426,16 @@ function SystemCheckStep({ onStart, onBack, loading }) {
       <div className="iv-sys-check">
         <div className="iv-cam-preview">
           <video ref={videoRef} muted playsInline className="iv-cam-video" />
+          <canvas ref={personCanvasRef} className="iv-hidden-canvas" aria-hidden="true" />
         </div>
         <div className="iv-check-list">
           <div className={`iv-check-item${camOk ? ' iv-check-item--ok' : ''}`}>
             <span className="iv-check-icon">{camOk ? '✓' : '○'}</span> Camera
           </div>
+          <div className={`iv-check-item${personOk ? ' iv-check-item--ok' : ''}`}>
+            <span className="iv-check-icon">{personOk ? '✓' : '○'}</span> Person detected
+          </div>
+          {!personOk && camOk && <p className="iv-check-note">{personMessage}</p>}
           <div className={`iv-check-item${micOk ? ' iv-check-item--ok' : ''}`}>
             <span className="iv-check-icon">{micOk ? '✓' : '○'}</span> Microphone
           </div>
@@ -378,7 +462,7 @@ function SystemCheckStep({ onStart, onBack, loading }) {
 
       <div className="iv-step-actions">
         <button className="iv-btn iv-btn--ghost" onClick={onBack}>← Back</button>
-        <button className="iv-btn iv-btn--primary" disabled={!camOk || !agreed || loading} onClick={onStart}>
+        <button className="iv-btn iv-btn--primary" disabled={!camOk || !personOk || !micOk || !agreed || loading} onClick={onStart}>
           {loading
             ? <span className="iv-btn-loading"><span className="iv-btn-spinner" />Creating interview</span>
             : 'Start Interview'}
@@ -407,8 +491,11 @@ function LiveSession({ interview, persona, onComplete }) {
   const [interimText, setInterimText] = useState('');
   const [ending, setEnding]           = useState(false);
   const [isProcessingAnswer, setIsProcessingAnswer] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [personDetected, setPersonDetected] = useState(false);
 
   const videoRef        = useRef(null);
+  const personCanvasRef = useRef(null);
   const recognitionRef  = useRef(null);
   const answerRecorderRef = useRef(null);
   const answerStreamRef = useRef(null);
@@ -423,6 +510,8 @@ function LiveSession({ interview, persona, onComplete }) {
   const finishingRef        = useRef(false);
   const sessionClosedRef    = useRef(false);
   const transcriptRef       = useRef([]);
+  const personMissingSinceRef = useRef(null);
+  const lastCameraViolationAtRef = useRef(0);
 
   // Keep transcriptRef in sync
   useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
@@ -528,18 +617,14 @@ function LiveSession({ interview, persona, onComplete }) {
       logViolation('right_click', 'Right-click menu attempted');
     };
 
-    // 7. Keyboard shortcuts (F12, Ctrl+Shift+I/J/C/U, Ctrl+U, Alt+Tab)
+    // 7. Keyboard shortcuts (clipboard, print/save/select-all, devtools, Alt+Tab)
     const onKeyDown = e => {
       if (autoSubmittedRef.current) return;
-      const blocked =
-        e.key === 'F12' ||
-        (e.ctrlKey && e.shiftKey && ['I','J','C','U'].includes(e.key.toUpperCase())) ||
-        (e.ctrlKey && e.key.toUpperCase() === 'U') ||
-        (e.ctrlKey && e.key.toUpperCase() === 'S') ||
-        (e.altKey && e.key === 'Tab');
-      if (blocked) {
+      if (isBlockedInterviewShortcut(e)) {
         e.preventDefault();
-        logViolation('devtools_shortcut', `Blocked keyboard shortcut: ${e.key}`);
+        e.stopPropagation();
+        const type = isClipboardShortcut(e) ? 'clipboard_shortcut' : 'blocked_shortcut';
+        logViolation(type, `Blocked keyboard shortcut: ${e.key}`);
       }
     };
 
@@ -557,22 +642,22 @@ function LiveSession({ interview, persona, onComplete }) {
 
     document.addEventListener('fullscreenchange', onFSChange);
     document.addEventListener('visibilitychange', onVisibility);
-    document.addEventListener('copy', onCopy);
-    document.addEventListener('cut', onCut);
-    document.addEventListener('paste', onPaste);
-    document.addEventListener('contextmenu', onContextMenu);
+    document.addEventListener('copy', onCopy, true);
+    document.addEventListener('cut', onCut, true);
+    document.addEventListener('paste', onPaste, true);
+    document.addEventListener('contextmenu', onContextMenu, true);
     window.addEventListener('blur', onBlur);
-    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, true);
 
     return () => {
       document.removeEventListener('fullscreenchange', onFSChange);
       document.removeEventListener('visibilitychange', onVisibility);
-      document.removeEventListener('copy', onCopy);
-      document.removeEventListener('cut', onCut);
-      document.removeEventListener('paste', onPaste);
-      document.removeEventListener('contextmenu', onContextMenu);
+      document.removeEventListener('copy', onCopy, true);
+      document.removeEventListener('cut', onCut, true);
+      document.removeEventListener('paste', onPaste, true);
+      document.removeEventListener('contextmenu', onContextMenu, true);
       window.removeEventListener('blur', onBlur);
-      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keydown', onKeyDown, true);
       clearInterval(devToolsCheck);
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     };
@@ -581,13 +666,70 @@ function LiveSession({ interview, persona, onComplete }) {
   /* ── Camera PiP + mic analyser ──────────────────── */
   useEffect(() => {
     let stream;
+    let personCheck;
+    let audioContext;
+    const reportCameraViolation = (type, description) => {
+      const now = Date.now();
+      if (now - lastCameraViolationAtRef.current < PERSON_MISSING_GRACE_MS) return;
+      lastCameraViolationAtRef.current = now;
+      logViolation(type, description);
+    };
+
     (async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}); }
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const src = ctx.createMediaStreamSource(stream);
-        const analyser = ctx.createAnalyser(); analyser.fftSize = 128;
+        stream.getVideoTracks().forEach((track) => {
+          track.onended = () => {
+            setCameraReady(false);
+            setPersonDetected(false);
+            reportCameraViolation('camera_off', 'Camera was turned off during the interview');
+          };
+          track.onmute = () => {
+            setCameraReady(false);
+            setPersonDetected(false);
+            reportCameraViolation('camera_muted', 'Camera feed was interrupted during the interview');
+          };
+        });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play().catch(() => {});
+        }
+        setCameraReady(true);
+
+        const checkPerson = async () => {
+          if (sessionClosedRef.current || autoSubmittedRef.current) return;
+          const videoTrack = stream?.getVideoTracks()[0];
+          if (!videoTrack || videoTrack.readyState !== 'live' || videoTrack.muted) {
+            setCameraReady(false);
+            setPersonDetected(false);
+            reportCameraViolation('camera_off', 'Camera must stay on during the interview');
+            return;
+          }
+
+          const result = await detectPersonPresence(videoRef.current, personCanvasRef.current);
+          setPersonDetected(result.detected);
+          if (result.detected) {
+            personMissingSinceRef.current = null;
+            return;
+          }
+
+          const now = Date.now();
+          if (!personMissingSinceRef.current) {
+            personMissingSinceRef.current = now;
+            return;
+          }
+
+          if (now - personMissingSinceRef.current >= PERSON_MISSING_GRACE_MS) {
+            personMissingSinceRef.current = now;
+            reportCameraViolation('person_not_detected', result.reason || 'Person was not detected in camera view');
+          }
+        };
+        personCheck = setInterval(checkPerson, PERSON_CHECK_INTERVAL_MS);
+        await checkPerson();
+
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const src = audioContext.createMediaStreamSource(stream);
+        const analyser = audioContext.createAnalyser(); analyser.fftSize = 128;
         src.connect(analyser);
         const data = new Uint8Array(analyser.frequencyBinCount);
         const tick = () => {
@@ -596,13 +738,19 @@ function LiveSession({ interview, persona, onComplete }) {
           animRef.current = requestAnimationFrame(tick);
         };
         tick();
-      } catch {}
+      } catch {
+        setCameraReady(false);
+        setPersonDetected(false);
+        reportCameraViolation('camera_unavailable', 'Camera and microphone access are required during the interview');
+      }
     })();
     return () => {
+      clearInterval(personCheck);
       if (stream) stream.getTracks().forEach(t => t.stop());
+      audioContext?.close?.().catch?.(() => {});
       if (animRef.current) cancelAnimationFrame(animRef.current);
     };
-  }, []);
+  }, [logViolation]);
 
   /* ── Timer ──────────────────────────────────────── */
   useEffect(() => {
@@ -924,9 +1072,13 @@ function LiveSession({ interview, persona, onComplete }) {
       {/* Proctor bar */}
       <div className="iv-proctor-bar">
         <video ref={videoRef} muted playsInline className="iv-pip" />
+        <canvas ref={personCanvasRef} className="iv-hidden-canvas" aria-hidden="true" />
         <span className="iv-timer" data-warn={timer < 300}>{fmtTime(timer)}</span>
         <span className="iv-q-counter">Q {currentIdx + 1} / {questions.length}</span>
         <span className="iv-rec-dot">● REC</span>
+        <span className={`iv-camera-status${cameraReady && personDetected ? ' iv-camera-status--ok' : ''}`}>
+          {cameraReady && personDetected ? 'PERSON OK' : cameraReady ? 'PERSON CHECK' : 'CAMERA OFF'}
+        </span>
         {violations > 0 && (
           <span className="iv-violation-count" style={{ color: violationColor }}>
             {violations}/{MAX_VIOLATIONS} violations
