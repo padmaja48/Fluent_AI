@@ -3,13 +3,13 @@ import { AuthContext } from '../context/AuthContext';
 import '../styles/Auth.css';
 
 export const Login = ({ onSwitchToRegister }) => {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const { login, loading, error } = useContext(AuthContext);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    try { await login(email, password); } catch { /* handled by context */ }
+    try { await login(identifier, password); } catch { /* handled by context */ }
   };
 
   const handleGoogleLogin = () => {
@@ -39,16 +39,16 @@ export const Login = ({ onSwitchToRegister }) => {
             Continue with Google
           </button>
         </div>
-        <div className="auth-divider"><span>or continue with email</span></div>
+        <div className="auth-divider"><span>or continue with email or username</span></div>
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label>Email</label>
+            <label>Email or username</label>
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              type="text"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="you@example.com or admin123"
               required
             />
           </div>
