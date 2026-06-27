@@ -56,8 +56,8 @@ api.interceptors.response.use(
 export const authAPI = {
   register: (name, email, password, level) =>
     api.post('/auth/register', { name, email, password, level }),
-  login: (email, password) =>
-    api.post('/auth/login', { email, password }),
+  login: (identifier, password) =>
+    api.post('/auth/login', { email: identifier, password }),
   googleLogin: (credential) => api.post('/auth/google', { credential }),
   verifyEmail: (email, otp) => api.post('/auth/verify-email', { email, otp }),
   forgotPassword: (email) => api.post('/auth/forgot-password', { email }),

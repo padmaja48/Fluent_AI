@@ -4,7 +4,7 @@ import '../styles/Auth.css';
 
 export const AdminLogin = () => {
   const { login, logout, loading } = useContext(AuthContext);
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
 
@@ -13,7 +13,7 @@ export const AdminLogin = () => {
     setError(null);
 
     try {
-      const response = await login(email, password);
+      const response = await login(username, password);
       if (response.user?.role !== 'admin') {
         logout();
         setError('This portal is restricted to admin accounts.');
@@ -35,12 +35,12 @@ export const AdminLogin = () => {
         <p className="auth-card-subtitle">Restricted to admin accounts only</p>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label>Email</label>
+            <label>Username</label>
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@example.com"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="admin123"
               required
             />
           </div>

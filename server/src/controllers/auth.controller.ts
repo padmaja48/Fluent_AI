@@ -44,7 +44,7 @@ export const registerSchema = z.object({
 
 export const loginSchema = z.object({
   body: z.object({
-    email: z.string().email().toLowerCase(),
+    email: z.string().trim().min(3).max(254).toLowerCase(),
     password: z.string().min(1),
   }),
 });
@@ -85,6 +85,7 @@ export const googleSchema = z.object({
 const serializeUser = (user: IUser) => ({
   id: user._id,
   name: user.name,
+  username: user.username,
   email: user.email,
   level: user.level,
   role: user.role,
@@ -160,7 +161,10 @@ export const register = asyncHandler(async (req, res) => {
 
 export const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
-  const user = await User.findOne({ email }).select('+password');
+  const identifier = email.trim().toLowerCase();
+  const user = await User.findOne(
+    identifier.includes('@') ? { email: identifier } : { username: identifier },
+  ).select('+password');
 
   if (!user || !(await user.comparePassword(password))) {
     throw new AppError('Invalid email or password', 401, 'INVALID_CREDENTIALS');

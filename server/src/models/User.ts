@@ -6,6 +6,7 @@ export type AuthProvider = 'email' | 'google';
 
 export interface IUser extends Document {
   name: string;
+  username?: string;
   email: string;
   password?: string;
   level: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
@@ -40,6 +41,7 @@ interface UserModel extends Model<IUser> {}
 const userSchema = new Schema<IUser>(
   {
     name: { type: String, required: true, trim: true },
+    username: { type: String, unique: true, sparse: true, lowercase: true, trim: true, index: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true, index: true },
     password: { type: String, select: false },
     level: { type: String, enum: ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'], default: 'B1' },

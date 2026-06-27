@@ -82,11 +82,11 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  const login = useCallback(async (email, password) => {
+  const login = useCallback(async (identifier, password) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await authAPI.login(email, password);
+      const response = await authAPI.login(identifier, password);
       const { accessToken, token: legacyToken, refreshToken, user: userData } = response.data;
       const newToken = accessToken || legacyToken;
       setToken(newToken);
