@@ -11,6 +11,16 @@ const fmtDuration = (seconds) => {
   const secs = total % 60;
   return mins ? `${mins}m ${secs}s` : `${secs}s`;
 };
+const cleanStudentFeedback = (text = '') =>
+  String(text || '')
+    .replace(/[^.]*validated locally[^.]*\./gi, '')
+    .replace(/[^.]*answer key[^.]*\./gi, '')
+    .replace(/[^.]*no ai evaluation[^.]*\./gi, '')
+    .replace(/[^.]*ai evaluation cost[^.]*\./gi, '')
+    .replace(/[^.]*mechanical estimate only[^.]*\./gi, '')
+    .replace(/[^.]*without ai cost[^.]*\./gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 const isTestSession = (session) => session?.skill === 'Mixed' && session?.moduleType === 'mixed-test';
 const getQuestionDoc = (item) =>
   item?.questionId && typeof item.questionId === 'object' ? item.questionId : null;
@@ -196,6 +206,7 @@ export const Results = ({ onPracticeSkill, onRetakeTest }) => {
       question,
       selectedAnswer: item.userAnswer || '',
       correctAnswer: question?.correctAnswer || '',
+      explanation: cleanStudentFeedback(question?.explanation),
       isCorrect: Boolean(item.isCorrect),
       isSkipped: typeof item.score === 'number' && !item.userAnswer,
       score: typeof item.score === 'number' ? item.score : 0,
@@ -474,7 +485,7 @@ export const Results = ({ onPracticeSkill, onRetakeTest }) => {
                     <div className="review-explanation">
                       <strong>{item.isSkipped ? 'Skipped' : item.isCorrect ? 'Correct' : 'Needs review'}</strong>
                       {!item.isCorrect && item.correctAnswer && <p>Correct answer: {item.correctAnswer}</p>}
-                      {item.question?.explanation && <p>{item.question.explanation}</p>}
+                      {item.explanation && <p>{item.explanation}</p>}
                     </div>
                   </div>
                 ))}

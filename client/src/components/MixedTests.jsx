@@ -626,7 +626,7 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
             <span className="journey-kicker">English Readiness Test</span>
             <h2>Grammar, vocabulary, and reading assessments.</h2>
             <p>
-              Each difficulty contains {journey?.testsPerLevel || 100} separate tests. Questions come from the database and are scored instantly without AI evaluation.
+              Each difficulty contains {journey?.testsPerLevel || 100} separate tests with instant scoring and detailed review after submission.
             </p>
           </div>
           <div className="mixed-hero-panel">
@@ -857,7 +857,7 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
       <div className="skill-lab mixed-skill-lab">
         <span>{questionSection}</span>
         <p>
-          This objective test scores each database answer key instantly and builds a structured report when submitted.
+          Answer each question carefully. Your report will show section scores, missed items, and review notes after submission.
         </p>
       </div>
 

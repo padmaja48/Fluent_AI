@@ -15,6 +15,16 @@ const LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 const DEFAULT_SET_SIZE = 10;
 const DEFAULT_TOTAL_SETS = 100;
 const DEFAULT_SETS_PER_MODULE = 20;
+const cleanStudentFeedback = (text = '') =>
+  String(text || '')
+    .replace(/[^.]*validated locally[^.]*\./gi, '')
+    .replace(/[^.]*answer key[^.]*\./gi, '')
+    .replace(/[^.]*no ai evaluation[^.]*\./gi, '')
+    .replace(/[^.]*ai evaluation cost[^.]*\./gi, '')
+    .replace(/[^.]*mechanical estimate only[^.]*\./gi, '')
+    .replace(/[^.]*without ai cost[^.]*\./gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 
 export const Practice = ({
   resumeSession = null,
@@ -298,7 +308,7 @@ export const Practice = ({
         isCorrect,
         selectedAnswer,
         correctAnswer: currentQuestion.correctAnswer,
-        explanation: currentQuestion.explanation,
+        explanation: cleanStudentFeedback(currentQuestion.explanation),
       });
     } catch (err) {
       console.error('Failed to submit answer:', err);
@@ -467,7 +477,7 @@ export const Practice = ({
         isCorrect: score >= 60,
         selectedAnswer: writingText,
         correctAnswer: currentQuestion.correctAnswer,
-        explanation: currentQuestion.explanation,
+        explanation: cleanStudentFeedback(currentQuestion.explanation),
       });
     } catch (err) {
       console.error('Failed to submit writing answer:', err);
@@ -815,7 +825,7 @@ export const Practice = ({
             {answerFeedback && (
               <div className={`answer-feedback ${answerFeedback.isCorrect ? 'correct' : 'incorrect'}`}>
                 <strong>{answerFeedback.isCorrect ? 'Correct!' : 'Not quite'}</strong>
-                <p>{answerFeedback.explanation}</p>
+                {answerFeedback.explanation && <p>{answerFeedback.explanation}</p>}
                 {!answerFeedback.isCorrect && <span>Correct answer: {answerFeedback.correctAnswer}</span>}
               </div>
             )}
@@ -1012,7 +1022,7 @@ export const Practice = ({
         {answerFeedback && (
           <div className={`answer-feedback ${answerFeedback.isCorrect ? 'correct' : 'incorrect'}`}>
             <strong>{answerFeedback.isCorrect ? 'Correct evaluation' : 'Review this one'}</strong>
-            <p>{answerFeedback.explanation}</p>
+            {answerFeedback.explanation && <p>{answerFeedback.explanation}</p>}
             {!answerFeedback.isCorrect && <span>Correct answer: {answerFeedback.correctAnswer}</span>}
           </div>
         )}

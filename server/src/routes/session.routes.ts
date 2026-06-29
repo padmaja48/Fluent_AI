@@ -849,13 +849,13 @@ router.post(
       vocabularyScore: Math.min(100, Math.round((new Set(userText.toLowerCase().match(/[a-z]+/g) || []).size / Math.max(1, wordCount)) * 120)),
       coherenceScore: sentenceCount > 1 ? Math.min(100, 55 + sentenceCount * 10) : 45,
       taskAchievementScore: lengthScore,
-      feedback: 'Writing practice now uses objective sentence-correction questions to avoid AI evaluation costs. This fallback uses a local mechanical estimate only.',
+      feedback: 'Your response was checked for basic length, capitalization, punctuation, and sentence structure.',
       strengths: [
         wordCount >= Math.min(targetWords, 40) ? 'The response has enough length for a basic local check.' : 'The response is concise.',
         hasCapitalStart && hasEndingPunctuation ? 'Basic capitalization and punctuation are present.' : 'The response was submitted successfully.',
       ],
       improvements: [
-        `Use the new sentence-correction questions for accurate grammar scoring without AI cost.`,
+        `Review sentence-correction practice to strengthen grammar accuracy.`,
         wordCount < targetWords ? `Add more detail when a free response is required. Target: ${targetWords} words.` : `Keep sentences clear and connected.`,
       ],
       criteria,

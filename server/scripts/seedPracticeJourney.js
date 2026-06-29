@@ -486,7 +486,7 @@ const buildWritingCorrectionItem = ({ level, context, competency, index, module 
     passageText: item.passageText,
     correctAnswer: item.correctAnswer,
     distractors: item.distractors,
-    explanation: `${item.explanation} This item is validated locally from the database answer key; no AI evaluation is required.`,
+    explanation: item.explanation,
     hints: [
       `Module: ${module.label}`,
       `Focus: ${item.focus}`,
