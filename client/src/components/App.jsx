@@ -294,7 +294,15 @@ export const App = () => {
             />
           )}
           {currentView === 'interview' && <Interview setCurrentView={handleSetView} />}
-          {currentView === 'results' && <Results />}
+          {currentView === 'results' && (
+            <Results
+              onPracticeSkill={(skill) => {
+                setPracticeStartSkill(skill);
+                handleSetView('practice');
+              }}
+              onRetakeTest={() => handleSetView('tests')}
+            />
+          )}
         </div>
       </div>
     </div>

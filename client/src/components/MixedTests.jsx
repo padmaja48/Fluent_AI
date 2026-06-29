@@ -40,6 +40,8 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
   const [writingResult, setWritingResult] = useState(null);
   const [checkingWriting, setCheckingWriting] = useState(false);
   const [answersByQuestion, setAnswersByQuestion] = useState({});
+  const [readyToSubmit, setReadyToSubmit] = useState(false);
+  const [submittingFinal, setSubmittingFinal] = useState(false);
   const [timeLeft, setTimeLeft] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showFullscreenPrompt, setShowFullscreenPrompt] = useState(false);
@@ -201,7 +203,10 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
 
   // ── Per-question countdown timer ─────────────────────────────────
   useEffect(() => {
-    if (!sessionStarted || !currentQuestion) return;
+    if (!sessionStarted || readyToSubmit || !currentQuestion) {
+      clearInterval(timerRef.current);
+      return;
+    }
 
     const skill = currentQuestion.skill || 'Listening';
     const limit = TIME_LIMITS[skill] || 60;
@@ -220,7 +225,7 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
     }, 1000);
 
     return () => clearInterval(timerRef.current);
-  }, [sessionStarted, currentIndex]);
+  }, [sessionStarted, currentIndex, readyToSubmit]);
 
   // ── Auto-submit all unanswered and finish ─────────────────────────
   const forceFinish = useCallback(async (reason = '') => {
@@ -230,6 +235,7 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
       const duration = startedAtRef.current ? Math.round((Date.now() - startedAtRef.current) / 1000) : 0;
       const response = await sessionAPI.submitSession(session._id, duration, {});
       setFinishedSession(response.data);
+      setReadyToSubmit(false);
       setSessionStarted(false);
       setSession(null);
       setQuestions([]);
@@ -257,7 +263,7 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
           resetQuestionState();
           setCurrentIndex((i) => i + 1);
         } else {
-          await forceFinish();
+          setReadyToSubmit(true);
         }
       });
   }, [session, currentQuestion, currentIndex, questions.length, forceFinish, resetQuestionState]);
@@ -299,6 +305,7 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
       setSession(response.data.session);
       setQuestions(response.data.questions || []);
       setAnswersByQuestion({});
+      setReadyToSubmit(false);
       setCurrentIndex(0);
       startedAtRef.current = Date.now();
       resetQuestionState();
@@ -447,10 +454,18 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
     }
 
     clearInterval(timerRef.current);
+    setReadyToSubmit(true);
+  };
+
+  const submitCompletedTest = async () => {
+    if (!session || submittingFinal) return;
     try {
+      setSubmittingFinal(true);
+      setError(null);
       const duration = startedAtRef.current ? Math.round((Date.now() - startedAtRef.current) / 1000) : 0;
       const response = await sessionAPI.submitSession(session._id, duration, {});
       setFinishedSession(response.data);
+      setReadyToSubmit(false);
       setSessionStarted(false);
       setSession(null);
       setQuestions([]);
@@ -460,6 +475,8 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
     } catch (err) {
       console.error('Failed to submit mixed test:', err);
       setError('Failed to submit mixed test.');
+    } finally {
+      setSubmittingFinal(false);
     }
   };
 
@@ -688,9 +705,61 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
     );
   }
 
+  const answeredCount = Object.keys(answersByQuestion).length;
+  const skillCompletion = Object.values(
+    questions.reduce((acc, question) => {
+      const skill = question.skill || 'Practice';
+      const row = acc[skill] || { skill, total: 0, answered: 0 };
+      row.total += 1;
+      if (answersByQuestion[question._id]) row.answered += 1;
+      acc[skill] = row;
+      return acc;
+    }, {}),
+  );
+
+  if (readyToSubmit && sessionStarted) {
+    return (
+      <div className="mixed-tests-page">
+        <div className="test-submit-panel">
+          <div>
+            <span className="journey-kicker">Ready to Submit</span>
+            <h2>{session?.testLabel || `${selectedLevel} Mixed Test`}</h2>
+            <p>
+              You completed {answeredCount} of {questions.length} questions. Submit the test to unlock your detailed report, section analysis, and question review.
+            </p>
+          </div>
+          <div className="test-submit-stats">
+            {skillCompletion.map((row) => (
+              <div key={row.skill}>
+                <span>{row.skill}</span>
+                <strong>{row.answered}/{row.total}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="test-submit-actions">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => {
+                setReadyToSubmit(false);
+                setCurrentIndex(Math.max(0, questions.length - 1));
+              }}
+              disabled={submittingFinal}
+            >
+              Review Last Question
+            </button>
+            <button type="button" className="btn-primary" onClick={submitCompletedTest} disabled={submittingFinal}>
+              {submittingFinal ? 'Submitting...' : 'Submit Test'}
+            </button>
+          </div>
+          {error && <p className="error">{error}</p>}
+        </div>
+      </div>
+    );
+  }
+
   if (!currentQuestion) return <div className="loading">Loading test question...</div>;
 
-  const answeredCount = Object.keys(answersByQuestion).length;
   const progressPercent = questions.length ? ((currentIndex + 1) / questions.length) * 100 : 0;
   const questionSkill = currentQuestion.skill || 'Practice';
   const hasObjectiveWritingOptions =

@@ -346,6 +346,65 @@
   color: var(--text2);
 }
 
+/* ── Submit checkpoint ──────────────────────────── */
+.test-submit-panel {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius2);
+}
+
+.test-submit-panel h2 {
+  font-size: 22px;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.test-submit-panel p {
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.6;
+}
+
+.test-submit-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.test-submit-stats div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.test-submit-stats span {
+  font-size: 12px;
+  color: var(--text2);
+  font-weight: 700;
+}
+
+.test-submit-stats strong {
+  font-size: 16px;
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.test-submit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
 /* ── Mixed test active session wrapper ──────────── */
 .mixed-test-session {
   display: flex;
@@ -403,6 +462,10 @@
   .test-slot-panel { padding: 12px; }
   .test-structure-header { flex-direction: column; align-items: flex-start; }
   .test-structure-grid { grid-template-columns: repeat(2, 1fr); }
+  .test-submit-stats { grid-template-columns: repeat(2, 1fr); }
+  .test-submit-actions { flex-direction: column-reverse; }
+  .test-submit-actions .btn-primary,
+  .test-submit-actions .btn-secondary { width: 100%; }
 }
 
 /* Small mobile */
@@ -411,4 +474,5 @@
   .test-level-card { min-height: 90px; padding: 12px; }
   .test-slot-map   { grid-template-columns: repeat(4, 1fr); }
   .test-structure-grid { grid-template-columns: 1fr; }
+  .test-submit-stats { grid-template-columns: 1fr; }
 }

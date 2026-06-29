@@ -488,6 +488,83 @@
   color: var(--text-muted);
 }
 
+.test-analysis-card.strong {
+  border-color: rgba(16, 185, 129, 0.45);
+}
+
+.test-analysis-card.strong strong {
+  color: #10b981;
+}
+
+.test-analysis-card.weak {
+  border-color: rgba(245, 158, 11, 0.55);
+}
+
+.test-analysis-card.weak strong {
+  color: #f59e0b;
+}
+
+.recommendation-panel {
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: 16px;
+  padding: 18px 20px;
+  display: grid;
+  gap: 14px;
+}
+
+.recommendation-kicker {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 5px;
+}
+
+.recommendation-panel h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 16px;
+}
+
+.recommendation-panel ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recommendation-panel li {
+  position: relative;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.recommendation-panel li::before {
+  content: '•';
+  position: absolute;
+  left: 2px;
+  color: var(--accent);
+  font-weight: 900;
+}
+
+.recommendation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.recommendation-actions .btn-primary,
+.recommendation-actions .btn-secondary {
+  min-height: 36px;
+  padding: 0 14px;
+}
+
 /* ── Question review ───────────────────────────────────── */
 .review-panel {
   background: var(--surface);

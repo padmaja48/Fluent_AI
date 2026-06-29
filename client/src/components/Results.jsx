@@ -8,6 +8,7 @@ const fmtDt = (v) => v ? new Date(v).toLocaleDateString('en-US', { month: 'short
 const isTestSession = (session) => session?.skill === 'Mixed' && session?.moduleType === 'mixed-test';
 const getQuestionDoc = (item) =>
   item?.questionId && typeof item.questionId === 'object' ? item.questionId : null;
+const PRACTICE_SKILLS = ['Listening', 'Speaking', 'Reading', 'Writing'];
 
 const getMetrics = (session) => {
   const questions   = session?.questions || [];
@@ -36,10 +37,49 @@ const getFeedback = (session, m) => {
   return { strengths, focus };
 };
 
+const getRecommendations = (session, metrics, skillRows, reviewItems) => {
+  const weakSkills = skillRows
+    .filter((row) => row.answered > 0 && (row.averageScore < 70 || row.correct / row.answered < 0.7))
+    .sort((a, b) => a.averageScore - b.averageScore);
+  const weakestSkill = weakSkills[0]?.skill;
+  const missedFocus = Array.from(new Set(
+    reviewItems
+      .filter((item) => !item.isCorrect)
+      .flatMap((item) => item.question?.hints || [])
+      .filter((hint) => /^Focus:/i.test(hint))
+      .map((hint) => hint.replace(/^Focus:\s*/i, '')),
+  ));
+  const recommendations = [];
+
+  if (weakestSkill) {
+    recommendations.push(`Prioritize ${weakestSkill}: it is the lowest section in this attempt.`);
+  }
+  if (missedFocus.length) {
+    recommendations.push(`Review these recurring topics: ${missedFocus.slice(0, 3).join(', ')}.`);
+  }
+  if (metrics.accuracy < 70) {
+    recommendations.push('Slow down before choosing an option; most errors came from answer accuracy, not completion.');
+  }
+  if (metrics.completion < 100) {
+    recommendations.push('Finish every question before submitting so the score reflects your real level.');
+  }
+  if (!recommendations.length) {
+    recommendations.push('Move to the next unlocked test, then compare section scores for consistency.');
+  }
+
+  return {
+    weakestSkill,
+    missedFocus,
+    recommendations,
+    canPracticeWeakSkill: PRACTICE_SKILLS.includes(weakestSkill),
+    canRetake: isTestSession(session),
+  };
+};
+
 /* Score → CSS conic-gradient degrees */
 const scoreToDeg = (score) => `${(Math.min(100, Math.max(0, score)) / 100 * 360).toFixed(1)}deg`;
 
-export const Results = () => {
+export const Results = ({ onPracticeSkill, onRetakeTest }) => {
   const [activeTab, setActiveTab] = useState('practice');
 
   const [sessions,         setSessions]         = useState([]);
@@ -142,6 +182,9 @@ export const Results = () => {
       acc[skill] = current;
       return acc;
     }, {}));
+  const recommendations = selectedSession && metrics
+    ? getRecommendations(selectedSession, metrics, skillRows, reviewItems)
+    : null;
 
   return (
     <div className="results-page">
@@ -269,10 +312,10 @@ export const Results = () => {
             {activeTab === 'tests' && (
               <div className="test-analysis-grid">
                 {skillRows.map((row) => (
-                  <div key={row.skill} className="test-analysis-card">
+                  <div key={row.skill} className={`test-analysis-card ${row.averageScore >= 80 ? 'strong' : row.averageScore < 70 ? 'weak' : ''}`}>
                     <span>{row.skill}</span>
                     <strong>{fmt(row.averageScore)}</strong>
-                    <small>{row.correct}/{row.answered} correct</small>
+                    <small>{row.correct}/{row.answered} correct · {row.averageScore >= 80 ? 'Strength' : row.averageScore < 70 ? 'Weakness' : 'Developing'}</small>
                   </div>
                 ))}
               </div>
@@ -314,6 +357,36 @@ export const Results = () => {
                 </ul>
               </div>
             </div>
+
+            {activeTab === 'tests' && recommendations && (
+              <div className="recommendation-panel">
+                <div>
+                  <span className="recommendation-kicker">AI Recommendations</span>
+                  <h4>What to Practice Next</h4>
+                </div>
+                <ul>
+                  {recommendations.recommendations.map((item) => <li key={item}>{item}</li>)}
+                </ul>
+                <div className="recommendation-actions">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled={!recommendations.canPracticeWeakSkill}
+                    onClick={() => recommendations.weakestSkill && onPracticeSkill?.(recommendations.weakestSkill)}
+                  >
+                    Practice Weakest Section
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    disabled={!recommendations.canRetake}
+                    onClick={() => onRetakeTest?.()}
+                  >
+                    Retake Similar Test
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="review-panel">
               <div className="review-panel-header">
