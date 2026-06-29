@@ -30,7 +30,7 @@ const createSchema = z.object({
 
 const mixedTestCreateSchema = z.object({
   body: z.object({
-    level: z.enum(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']),
+    level: z.enum(['Beginner', 'Intermediate', 'Advanced']),
     testNumber: z.coerce.number().int().min(1).max(100).optional(),
   }),
 });
@@ -72,16 +72,20 @@ const router = Router();
 const SKILLS = ['Listening', 'Speaking', 'Reading', 'Writing'] as const;
 const LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] as const;
 const SET_SIZE = 10;
-const MIXED_TEST_SIZE = 24;
-const MIXED_TEST_QUESTIONS_PER_SKILL = MIXED_TEST_SIZE / SKILLS.length;
+const TEST_SECTION_STRUCTURE = [
+  { id: 'sentence-correction', skill: 'Writing', label: 'Sentence Correction', order: 1, minQuestions: 3, maxQuestions: 3, questionCount: 3 },
+  { id: 'error-detection', skill: 'Writing', label: 'Error Detection', order: 2, minQuestions: 3, maxQuestions: 3, questionCount: 3 },
+  { id: 'fill-in-the-blanks', skill: 'Writing', label: 'Fill in the Blanks', order: 3, minQuestions: 3, maxQuestions: 3, questionCount: 3 },
+  { id: 'correct-sentence', skill: 'Writing', label: 'Choose the Correct Sentence', order: 4, minQuestions: 3, maxQuestions: 3, questionCount: 3 },
+  { id: 'vocabulary', skill: 'Writing', label: 'Vocabulary', order: 5, minQuestions: 3, maxQuestions: 3, questionCount: 3 },
+  { id: 'sentence-completion', skill: 'Writing', label: 'Sentence Completion', order: 6, minQuestions: 3, maxQuestions: 3, questionCount: 3 },
+  { id: 'reading-comprehension', skill: 'Reading', label: 'Reading Comprehension', order: 7, minQuestions: 3, maxQuestions: 3, questionCount: 3 },
+] as const;
+const TEST_SECTION_IDS = TEST_SECTION_STRUCTURE.map((section) => section.id);
+const MIXED_TEST_SIZE = TEST_SECTION_STRUCTURE.reduce((sum, section) => sum + section.questionCount, 0);
+const MIXED_TEST_MIN_QUESTIONS = TEST_SECTION_STRUCTURE.reduce((sum, section) => sum + section.minQuestions, 0);
+const MIXED_TEST_MAX_QUESTIONS = TEST_SECTION_STRUCTURE.reduce((sum, section) => sum + section.maxQuestions, 0);
 const MIXED_TESTS_PER_LEVEL = 100;
-const TEST_SECTION_STRUCTURE = SKILLS.map((skill, index) => ({
-  skill,
-  order: index + 1,
-  minQuestions: MIXED_TEST_QUESTIONS_PER_SKILL,
-  maxQuestions: MIXED_TEST_QUESTIONS_PER_SKILL,
-  questionCount: MIXED_TEST_QUESTIONS_PER_SKILL,
-}));
 const QUESTIONS_PER_SKILL_LEVEL = 1000;
 const TOTAL_SETS_PER_SKILL_LEVEL = QUESTIONS_PER_SKILL_LEVEL / SET_SIZE;
 const MODULES_PER_SKILL_LEVEL = 5;
@@ -117,13 +121,26 @@ const MODULE_CATALOG = {
   ],
 } as const;
 const TEST_LEVELS = [
-  { id: 'A1', label: 'Basic Beginner', description: 'Simple everyday listening, short speaking, direct reading, and sentence control.' },
-  { id: 'A2', label: 'Elementary Builder', description: 'Familiar topics, short connected answers, practical reading, and clear messages.' },
-  { id: 'B1', label: 'Independent Core', description: 'Connected ideas, opinions with reasons, workplace reading, and paragraph flow.' },
-  { id: 'B2', label: 'Upper Intermediate', description: 'Detailed explanations, tradeoffs, inference, and professional writing control.' },
-  { id: 'C1', label: 'Advanced Professional', description: 'Nuanced meaning, synthesis, register control, and diplomatic communication.' },
-  { id: 'C2', label: 'Mastery', description: 'Near-native nuance, ambiguity, rhetoric, and sophisticated critique.' },
+  {
+    id: 'Beginner',
+    label: 'Beginner',
+    sourceLevels: ['A1', 'A2'],
+    description: 'Basic grammar, simple vocabulary, sentence correction, and short reading comprehension.',
+  },
+  {
+    id: 'Intermediate',
+    label: 'Intermediate',
+    sourceLevels: ['B1', 'B2'],
+    description: 'Workplace grammar, vocabulary in context, sentence completion, and connected reading questions.',
+  },
+  {
+    id: 'Advanced',
+    label: 'Advanced',
+    sourceLevels: ['C1', 'C2'],
+    description: 'Nuanced grammar control, precise vocabulary, complex sentence choice, and advanced reading inference.',
+  },
 ] as const;
+type TestLevelId = (typeof TEST_LEVELS)[number]['id'];
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -186,20 +203,25 @@ const buildMixedTestBreakdown = async (sessionId: string) => {
   const populated = await Session.findById(sessionId).populate('questions.questionId');
   if (!populated) return [];
 
-  return SKILLS.map((skill) => {
-    const skillQuestions = populated.questions.filter((item) => {
-      const question = item.questionId as unknown as { skill?: string };
-      return question?.skill === skill;
+  return TEST_SECTION_STRUCTURE.map((section) => {
+    const sectionQuestions = populated.questions.filter((item) => {
+      const question = item.questionId as unknown as { moduleType?: string };
+      return question?.moduleType === section.id;
     });
-    const answered = skillQuestions.filter((item) => typeof item.score === 'number');
+    const scored = sectionQuestions.filter((item) => typeof item.score === 'number');
+    const skipped = scored.filter((item) => !item.userAnswer);
+    const answered = scored.filter((item) => item.userAnswer);
     const correct = answered.filter((item) => item.isCorrect);
-    const totalScore = answered.reduce((sum, item) => sum + (item.score ?? 0), 0);
+    const totalScore = scored.reduce((sum, item) => sum + (item.score ?? 0), 0);
 
     return {
-      skill,
+      skill: section.label,
+      total: sectionQuestions.length,
       answered: answered.length,
       correct: correct.length,
-      averageScore: answered.length ? totalScore / answered.length : 0,
+      wrong: answered.length - correct.length,
+      skipped: skipped.length,
+      averageScore: sectionQuestions.length ? totalScore / sectionQuestions.length : 0,
     };
   });
 };
@@ -212,7 +234,7 @@ const queueMixedTestReport = async (sessionId: string, userId: string) => {
   if (!session || !user?.email || session.reportEmailedAt) return;
 
   const breakdown = session.testBreakdown?.length ? session.testBreakdown : await buildMixedTestBreakdown(sessionId);
-  const answered = session.questions.filter((question) => typeof question.score === 'number').length;
+  const answered = session.questions.filter((question) => typeof question.score === 'number' && question.userAnswer).length;
   const email = mixedTestReportEmail({
     name: user.name || 'Learner',
     level: session.level,
@@ -240,21 +262,26 @@ router.get(
       getMixedTestCompletedCounts(userId),
       getMixedTestSessionsByLevel(userId),
       Question.aggregate([
-        { $match: { status: 'Active' } },
-        { $group: { _id: { level: '$level', skill: '$skill' }, total: { $sum: 1 } } },
+        { $match: { status: 'Active', moduleType: { $in: TEST_SECTION_IDS } } },
+        { $group: { _id: { level: '$level', moduleType: '$moduleType' }, total: { $sum: 1 } } },
       ]),
     ]);
 
-    const countLookup = new Map(questionCounts.map((row) => [`${row._id.level}:${row._id.skill}`, row.total as number]));
+    const countLookup = new Map(questionCounts.map((row) => [`${row._id.level}:${row._id.moduleType}`, row.total as number]));
     const levels = TEST_LEVELS.map((levelMeta, idx) => {
       const completed = completedCounts.get(levelMeta.id);
       const previousLevelsComplete = TEST_LEVELS.slice(0, idx).every(
         (previousLevel) => (completedCounts.get(previousLevel.id)?.completedTests ?? 0) > 0,
       );
-      const skillAvailability = Object.fromEntries(
-        SKILLS.map((skill) => [skill, countLookup.get(`${levelMeta.id}:${skill}`) ?? 0]),
+      const sectionAvailability = Object.fromEntries(
+        TEST_SECTION_STRUCTURE.map((section) => [
+          section.id,
+          levelMeta.sourceLevels.reduce((sum, sourceLevel) => sum + (countLookup.get(`${sourceLevel}:${section.id}`) ?? 0), 0),
+        ]),
       );
-      const maxUniqueTests = Math.min(...SKILLS.map((skill) => Math.floor((skillAvailability[skill] ?? 0) / MIXED_TEST_QUESTIONS_PER_SKILL)));
+      const maxUniqueTests = Math.min(
+        ...TEST_SECTION_STRUCTURE.map((section) => Math.floor((sectionAvailability[section.id] ?? 0) / section.questionCount)),
+      );
       const levelSessions = testSessionsByLevel.get(levelMeta.id) ?? new Map();
       const tests = Array.from({ length: MIXED_TESTS_PER_LEVEL }, (_, testIdx) => {
         const testNumber = testIdx + 1;
@@ -267,10 +294,9 @@ router.get(
           questionCount: MIXED_TEST_SIZE,
           minQuestions: MIXED_TEST_SIZE,
           maxQuestions: MIXED_TEST_SIZE,
-          questionsPerSkill: MIXED_TEST_QUESTIONS_PER_SKILL,
           questionRange: {
-            min: (testNumber - 1) * MIXED_TEST_QUESTIONS_PER_SKILL + 1,
-            max: testNumber * MIXED_TEST_QUESTIONS_PER_SKILL,
+            min: (testNumber - 1) * MIXED_TEST_SIZE + 1,
+            max: testNumber * MIXED_TEST_SIZE,
           },
           sessionId: session?.sessionId ?? null,
           status: session?.status ?? 'Locked',
@@ -289,11 +315,12 @@ router.get(
         averageScore: completed?.averageScore ?? 0,
         lastTestAt: completed?.lastTestAt ?? null,
         questionCount: MIXED_TEST_SIZE,
-        questionsPerSkill: MIXED_TEST_QUESTIONS_PER_SKILL,
+        minQuestions: MIXED_TEST_MIN_QUESTIONS,
+        maxQuestions: MIXED_TEST_MAX_QUESTIONS,
         totalTests: MIXED_TESTS_PER_LEVEL,
         nextTestNumber,
         maxUniqueTests,
-        skillAvailability,
+        sectionAvailability,
         tests,
       };
     });
@@ -301,11 +328,10 @@ router.get(
     const activeLevel = levels.find((level) => !level.locked && level.completedTests === 0) ?? levels.find((level) => !level.locked) ?? levels[0];
 
     res.json({
-      skills: SKILLS,
+      skills: ['Grammar', 'Vocabulary', 'Reading'],
       questionCount: MIXED_TEST_SIZE,
-      minQuestions: MIXED_TEST_SIZE,
-      maxQuestions: MIXED_TEST_SIZE,
-      questionsPerSkill: MIXED_TEST_QUESTIONS_PER_SKILL,
+      minQuestions: MIXED_TEST_MIN_QUESTIONS,
+      maxQuestions: MIXED_TEST_MAX_QUESTIONS,
       testStructure: TEST_SECTION_STRUCTURE,
       testsPerLevel: MIXED_TESTS_PER_LEVEL,
       levels,
@@ -319,12 +345,16 @@ router.post(
   validate(mixedTestCreateSchema),
   asyncHandler(async (req, res) => {
     const userId = req.userId as string;
-    const level = req.body.level as (typeof LEVELS)[number];
+    const level = req.body.level as TestLevelId;
     const testNumber = (req.body.testNumber as number | undefined) ?? 1;
-    const levelIndex = LEVELS.indexOf(level);
+    const levelIndex = TEST_LEVELS.findIndex((item) => item.id === level);
+    const levelMeta = TEST_LEVELS[levelIndex];
+    if (!levelMeta) {
+      throw new AppError('Invalid test level', 400, 'TEST_LEVEL_INVALID');
+    }
     const completedCounts = await getMixedTestCompletedCounts(userId);
-    const previousLevelsComplete = LEVELS.slice(0, levelIndex).every(
-      (previousLevel) => (completedCounts.get(previousLevel)?.completedTests ?? 0) > 0,
+    const previousLevelsComplete = TEST_LEVELS.slice(0, levelIndex).every(
+      (previousLevel) => (completedCounts.get(previousLevel.id)?.completedTests ?? 0) > 0,
     );
 
     if (!previousLevelsComplete) {
@@ -367,43 +397,43 @@ router.post(
       throw new AppError('Complete the previous test before starting this one', 403, 'TEST_LOCKED');
     }
 
-    const startOrder = (testNumber - 1) * MIXED_TEST_QUESTIONS_PER_SKILL + 1;
-    const endOrder = testNumber * MIXED_TEST_QUESTIONS_PER_SKILL;
-    const questionGroups = await Promise.all(
-      SKILLS.map((testSkill) =>
-        Question.find({
-          skill: testSkill,
-          level,
+    const startOrder = (testNumber - 1) * MIXED_TEST_SIZE + 1;
+    const endOrder = testNumber * MIXED_TEST_SIZE;
+    const sectionGroups = await Promise.all(
+      TEST_SECTION_STRUCTURE.map(async (section) => {
+        const questions = await Question.find({
+          skill: section.skill,
+          level: { $in: levelMeta.sourceLevels },
           status: 'Active',
-          journeyOrder: { $gte: startOrder, $lte: endOrder },
+          moduleType: section.id,
         })
-          .sort({ journeyOrder: 1, createdAt: 1 })
-          .limit(MIXED_TEST_QUESTIONS_PER_SKILL),
-      ),
+          .sort({ levelOrder: 1, journeyOrder: 1, createdAt: 1 })
+          .skip((testNumber - 1) * section.questionCount)
+          .limit(section.questionCount);
+
+        return { section, questions };
+      }),
     );
 
-    const shortageIndex = questionGroups.findIndex((group) => group.length < MIXED_TEST_QUESTIONS_PER_SKILL);
-    if (shortageIndex >= 0) {
+    const shortage = sectionGroups.find((group) => group.questions.length < group.section.questionCount);
+    if (shortage) {
       throw new AppError(
-        `Not enough seeded ${SKILLS[shortageIndex]} questions are available for ${level} Test ${testNumber}. Run the practice seed script before starting this test.`,
+        `Not enough seeded ${shortage.section.label} questions are available for ${level} Test ${testNumber}. Run the practice seed script before starting this test.`,
         409,
         'FRESH_TEST_POOL_EMPTY',
       );
     }
 
-    const questions = Array.from({ length: MIXED_TEST_QUESTIONS_PER_SKILL }).flatMap((_, idx) =>
-      questionGroups.map((group) => group[idx]),
-    );
-    const levelMeta = TEST_LEVELS.find((item) => item.id === level);
+    const questions = sectionGroups.flatMap((group) => group.questions);
 
     const session = await Session.create({
       userId,
       skill: 'Mixed',
       level,
-      testLabel: `${level} ${levelMeta?.label ?? 'Mixed'} Test ${testNumber}`,
+      testLabel: `${levelMeta.label} English Readiness Test ${testNumber}`,
       testSequence: testNumber,
       moduleType: 'mixed-test',
-      moduleLabel: 'Listening + Speaking + Reading + Writing',
+      moduleLabel: 'Grammar + Vocabulary + Reading',
       setNumber: testNumber,
       setSize: MIXED_TEST_SIZE,
       startOrder,
@@ -882,10 +912,10 @@ router.post(
     if (!session) {
       throw new AppError('Session not found', 404, 'SESSION_NOT_FOUND');
     }
-    const answered = session.questions.filter((question) => typeof question.score === 'number');
-    const totalScore = answered.reduce((sum, question) => sum + (question.score ?? 0), 0);
+    const expectedCount = session.setSize || session.questions.length;
+    const totalScore = session.questions.reduce((sum, question) => sum + (question.score ?? 0), 0);
     session.totalScore = totalScore;
-    session.averageScore = answered.length ? totalScore / answered.length : 0;
+    session.averageScore = expectedCount ? totalScore / expectedCount : 0;
     session.durationSeconds = req.body.duration;
     session.skillBreakdown = req.body.skillBreakdown;
     if (session.skill === 'Mixed' && session.moduleType === 'mixed-test') {

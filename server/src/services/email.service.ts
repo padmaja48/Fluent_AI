@@ -103,8 +103,11 @@ type MixedTestReportInput = {
   totalQuestions: number;
   breakdown: Array<{
     skill: string;
+    total?: number;
     answered: number;
     correct: number;
+    wrong?: number;
+    skipped?: number;
     averageScore: number;
   }>;
 };
@@ -133,8 +136,10 @@ export const mixedTestReportEmail = ({
       (item) => `
         <tr>
           <td style="padding:10px;border-bottom:1px solid #dbeafe;">${item.skill}</td>
-          <td style="padding:10px;border-bottom:1px solid #dbeafe;">${item.answered}</td>
+          <td style="padding:10px;border-bottom:1px solid #dbeafe;">${item.answered}/${item.total ?? item.answered}</td>
           <td style="padding:10px;border-bottom:1px solid #dbeafe;">${item.correct}</td>
+          <td style="padding:10px;border-bottom:1px solid #dbeafe;">${item.wrong ?? Math.max(0, item.answered - item.correct)}</td>
+          <td style="padding:10px;border-bottom:1px solid #dbeafe;">${item.skipped ?? 0}</td>
           <td style="padding:10px;border-bottom:1px solid #dbeafe;">${formatScore(item.averageScore)}</td>
         </tr>
       `,
@@ -147,7 +152,7 @@ export const mixedTestReportEmail = ({
       <div style="font-family:Inter,Arial,sans-serif;line-height:1.6;color:#0f172a;max-width:680px;margin:0 auto;">
         <h2 style="margin:0 0 8px;">${testLabel} Report</h2>
         <p>Hi ${name},</p>
-        <p>Your mixed Listening, Speaking, Reading, and Writing test report is ready.</p>
+        <p>Your English readiness test report is ready, with grammar, vocabulary, and reading section analysis.</p>
         <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:14px;padding:16px;margin:18px 0;">
           <p style="margin:0;"><strong>Level:</strong> ${level}</p>
           <p style="margin:4px 0 0;"><strong>Overall score:</strong> ${formatScore(averageScore)}/100</p>
@@ -159,6 +164,8 @@ export const mixedTestReportEmail = ({
               <th style="padding:10px;">Skill</th>
               <th style="padding:10px;">Answered</th>
               <th style="padding:10px;">Correct</th>
+              <th style="padding:10px;">Wrong</th>
+              <th style="padding:10px;">Skipped</th>
               <th style="padding:10px;">Score</th>
             </tr>
           </thead>

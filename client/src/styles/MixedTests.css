@@ -375,10 +375,11 @@
 }
 
 .test-submit-stats div {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 4px 10px;
   padding: 12px 14px;
   background: var(--surface2);
   border: 1px solid var(--border);
@@ -395,6 +396,13 @@
   font-size: 16px;
   color: var(--accent);
   font-weight: 800;
+}
+
+.test-submit-stats small {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: var(--warn);
+  font-weight: 700;
 }
 
 .test-submit-actions {
@@ -434,6 +442,20 @@
 
 .mixed-skill-lab span {
   min-width: 80px;
+}
+
+.mixed-question-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.mixed-question-actions .btn-secondary.active,
+.review-flag {
+  border-color: rgba(210, 153, 34, 0.6);
+  color: var(--warn);
+  background: rgba(210, 153, 34, 0.12);
 }
 
 /* ── Responsive ─────────────────────────────────── */

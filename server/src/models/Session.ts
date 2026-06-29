@@ -3,7 +3,7 @@ import mongoose, { Document, Model, Schema } from 'mongoose';
 export interface ISession extends Document {
   userId: mongoose.Types.ObjectId;
   skill: 'Listening' | 'Speaking' | 'Reading' | 'Writing' | 'Mixed';
-  level: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
+  level: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2' | 'Beginner' | 'Intermediate' | 'Advanced';
   testLabel?: string;
   testSequence?: number;
   moduleType?: string;
@@ -31,8 +31,11 @@ export interface ISession extends Document {
   };
   testBreakdown?: Array<{
     skill: string;
+    total?: number;
     answered: number;
     correct: number;
+    wrong?: number;
+    skipped?: number;
     averageScore: number;
   }>;
   reportEmailedAt?: Date;
@@ -43,7 +46,7 @@ const sessionSchema = new Schema<ISession>(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     skill: { type: String, enum: ['Listening', 'Speaking', 'Reading', 'Writing', 'Mixed'], required: true },
-    level: { type: String, enum: ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'], required: true },
+    level: { type: String, enum: ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'Beginner', 'Intermediate', 'Advanced'], required: true },
     testLabel: String,
     testSequence: { type: Number, index: true },
     moduleType: { type: String, index: true },
@@ -74,8 +77,11 @@ const sessionSchema = new Schema<ISession>(
     testBreakdown: [
       {
         skill: String,
+        total: Number,
         answered: Number,
         correct: Number,
+        wrong: Number,
+        skipped: Number,
         averageScore: Number,
       },
     ],

@@ -5,20 +5,48 @@ import '../styles/Results.css';
 
 const fmt   = (n) => Number(n || 0).toFixed(1);
 const fmtDt = (v) => v ? new Date(v).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+const fmtDuration = (seconds) => {
+  const total = Number(seconds || 0);
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return mins ? `${mins}m ${secs}s` : `${secs}s`;
+};
 const isTestSession = (session) => session?.skill === 'Mixed' && session?.moduleType === 'mixed-test';
 const getQuestionDoc = (item) =>
   item?.questionId && typeof item.questionId === 'object' ? item.questionId : null;
 const PRACTICE_SKILLS = ['Listening', 'Speaking', 'Reading', 'Writing'];
+const PRACTICE_SKILL_BY_SECTION = {
+  'Sentence Correction': 'Writing',
+  'Error Detection': 'Writing',
+  'Fill in the Blanks': 'Writing',
+  'Choose the Correct Sentence': 'Writing',
+  Vocabulary: 'Writing',
+  'Sentence Completion': 'Writing',
+  'Reading Comprehension': 'Reading',
+};
 
 const getMetrics = (session) => {
   const questions   = session?.questions || [];
-  const answered    = questions.filter(q => typeof q.score === 'number');
+  const scored      = questions.filter(q => typeof q.score === 'number');
+  const answered    = scored.filter(q => q.userAnswer);
+  const skipped     = scored.filter(q => !q.userAnswer);
   const correct     = answered.filter(q => q.isCorrect);
+  const wrong       = answered.filter(q => !q.isCorrect);
   const expectedCount = session?.setSize || questions.length || 10;
   const averageScore  = Number(session?.averageScore || 0);
   const accuracy      = answered.length ? (correct.length / answered.length) * 100 : 0;
-  const completion    = expectedCount  ? Math.min(100, (answered.length / expectedCount) * 100) : 0;
-  return { answeredCount: answered.length, correctCount: correct.length, expectedCount, averageScore, accuracy, completion };
+  const completion    = expectedCount  ? Math.min(100, (scored.length / expectedCount) * 100) : 0;
+  return {
+    answeredCount: answered.length,
+    skippedCount: skipped.length,
+    wrongCount: wrong.length,
+    correctCount: correct.length,
+    expectedCount,
+    averageScore,
+    accuracy,
+    completion,
+    timeTakenSeconds: Number(session?.durationSeconds || 0),
+  };
 };
 
 const getFeedback = (session, m) => {
@@ -42,6 +70,7 @@ const getRecommendations = (session, metrics, skillRows, reviewItems) => {
     .filter((row) => row.answered > 0 && (row.averageScore < 70 || row.correct / row.answered < 0.7))
     .sort((a, b) => a.averageScore - b.averageScore);
   const weakestSkill = weakSkills[0]?.skill;
+  const practiceSkill = PRACTICE_SKILL_BY_SECTION[weakestSkill] || (PRACTICE_SKILLS.includes(weakestSkill) ? weakestSkill : null);
   const missedFocus = Array.from(new Set(
     reviewItems
       .filter((item) => !item.isCorrect)
@@ -69,9 +98,10 @@ const getRecommendations = (session, metrics, skillRows, reviewItems) => {
 
   return {
     weakestSkill,
+    practiceSkill,
     missedFocus,
     recommendations,
-    canPracticeWeakSkill: PRACTICE_SKILLS.includes(weakestSkill),
+    canPracticeWeakSkill: Boolean(practiceSkill),
     canRetake: isTestSession(session),
   };
 };
@@ -167,18 +197,22 @@ export const Results = ({ onPracticeSkill, onRetakeTest }) => {
       selectedAnswer: item.userAnswer || '',
       correctAnswer: question?.correctAnswer || '',
       isCorrect: Boolean(item.isCorrect),
+      isSkipped: typeof item.score === 'number' && !item.userAnswer,
       score: typeof item.score === 'number' ? item.score : 0,
     };
   });
   const skillRows = selectedSession?.testBreakdown?.length
     ? selectedSession.testBreakdown
     : Object.values(reviewItems.reduce((acc, item) => {
-      const skill = item.question?.skill || selectedSession?.skill || 'Practice';
-      const current = acc[skill] || { skill, answered: 0, correct: 0, totalScore: 0, averageScore: 0 };
-      current.answered += typeof item.answer.score === 'number' ? 1 : 0;
+      const skill = item.question?.moduleLabel || item.question?.skill || selectedSession?.skill || 'Practice';
+      const current = acc[skill] || { skill, total: 0, answered: 0, correct: 0, wrong: 0, skipped: 0, totalScore: 0, averageScore: 0 };
+      current.total += 1;
+      current.answered += typeof item.answer.score === 'number' && !item.isSkipped ? 1 : 0;
       current.correct += item.isCorrect ? 1 : 0;
+      current.wrong += typeof item.answer.score === 'number' && !item.isSkipped && !item.isCorrect ? 1 : 0;
+      current.skipped += item.isSkipped ? 1 : 0;
       current.totalScore += item.score;
-      current.averageScore = current.answered ? current.totalScore / current.answered : 0;
+      current.averageScore = current.total ? current.totalScore / current.total : 0;
       acc[skill] = current;
       return acc;
     }, {}));
@@ -300,10 +334,16 @@ export const Results = ({ onPracticeSkill, onRetakeTest }) => {
                     ✓ {metrics.correctCount}/{metrics.expectedCount} correct
                   </span>
                   <span className="results-badge">
+                    {metrics.wrongCount} wrong
+                  </span>
+                  <span className="results-badge">
+                    {metrics.skippedCount} skipped
+                  </span>
+                  <span className="results-badge">
                     {fmtDt(selectedSession.updatedAt || selectedSession.createdAt)}
                   </span>
                   <span className="results-badge">
-                    {Math.round(metrics.completion)}% complete
+                    Time {fmtDuration(metrics.timeTakenSeconds)}
                   </span>
                 </div>
               </div>
@@ -315,7 +355,8 @@ export const Results = ({ onPracticeSkill, onRetakeTest }) => {
                   <div key={row.skill} className={`test-analysis-card ${row.averageScore >= 80 ? 'strong' : row.averageScore < 70 ? 'weak' : ''}`}>
                     <span>{row.skill}</span>
                     <strong>{fmt(row.averageScore)}</strong>
-                    <small>{row.correct}/{row.answered} correct · {row.averageScore >= 80 ? 'Strength' : row.averageScore < 70 ? 'Weakness' : 'Developing'}</small>
+                    <small>{row.correct}/{row.total || row.answered} correct · {row.wrong || 0} wrong · {row.skipped || 0} skipped</small>
+                    <small>{row.averageScore >= 80 ? 'Strength' : row.averageScore < 70 ? 'Weakness' : 'Developing'}</small>
                   </div>
                 ))}
               </div>
@@ -361,7 +402,7 @@ export const Results = ({ onPracticeSkill, onRetakeTest }) => {
             {activeTab === 'tests' && recommendations && (
               <div className="recommendation-panel">
                 <div>
-                  <span className="recommendation-kicker">AI Recommendations</span>
+                  <span className="recommendation-kicker">Personalized Recommendations</span>
                   <h4>What to Practice Next</h4>
                 </div>
                 <ul>
@@ -372,7 +413,7 @@ export const Results = ({ onPracticeSkill, onRetakeTest }) => {
                     type="button"
                     className="btn-secondary"
                     disabled={!recommendations.canPracticeWeakSkill}
-                    onClick={() => recommendations.weakestSkill && onPracticeSkill?.(recommendations.weakestSkill)}
+                    onClick={() => recommendations.practiceSkill && onPracticeSkill?.(recommendations.practiceSkill)}
                   >
                     Practice Weakest Section
                   </button>
@@ -395,10 +436,10 @@ export const Results = ({ onPracticeSkill, onRetakeTest }) => {
               </div>
               <div className="review-list">
                 {reviewItems.map((item) => (
-                  <div key={`${item.index}-${item.question?._id || item.index}`} className={`review-card${item.isCorrect ? ' correct' : 'incorrect'}`}>
+                  <div key={`${item.index}-${item.question?._id || item.index}`} className={`review-card${item.isCorrect ? ' correct' : 'incorrect'}${item.isSkipped ? ' skipped' : ''}`}>
                     <div className="review-card-head">
                       <span>Question {item.index}</span>
-                      <strong>{item.question?.skill || selectedSession.skill}</strong>
+                      <strong>{item.question?.moduleLabel || item.question?.skill || selectedSession.skill}</strong>
                       <small>{fmt(item.score)}/100</small>
                     </div>
                     {item.question?.passageText && (
@@ -431,7 +472,7 @@ export const Results = ({ onPracticeSkill, onRetakeTest }) => {
                       </div>
                     )}
                     <div className="review-explanation">
-                      <strong>{item.isCorrect ? 'Correct' : 'Needs review'}</strong>
+                      <strong>{item.isSkipped ? 'Skipped' : item.isCorrect ? 'Correct' : 'Needs review'}</strong>
                       {!item.isCorrect && item.correctAnswer && <p>Correct answer: {item.correctAnswer}</p>}
                       {item.question?.explanation && <p>{item.question.explanation}</p>}
                     </div>

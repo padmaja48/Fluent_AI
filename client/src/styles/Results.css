@@ -488,6 +488,10 @@
   color: var(--text-muted);
 }
 
+.review-card.skipped {
+  border-color: rgba(245, 158, 11, 0.38);
+}
+
 .test-analysis-card.strong {
   border-color: rgba(16, 185, 129, 0.45);
 }

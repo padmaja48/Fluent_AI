@@ -9,17 +9,27 @@ import '../styles/Writing.css';
 import '../styles/Reading.css';
 import '../styles/TestGuard.css';
 
-const DEFAULT_TEST_STRUCTURE = ['Listening', 'Speaking', 'Reading', 'Writing'].map((skill, index) => ({
-  skill,
+const DEFAULT_TEST_STRUCTURE = [
+  'Sentence Correction',
+  'Error Detection',
+  'Fill in the Blanks',
+  'Choose the Correct Sentence',
+  'Vocabulary',
+  'Sentence Completion',
+  'Reading Comprehension',
+].map((label, index) => ({
+  id: label.toLowerCase().replace(/\s+/g, '-'),
+  skill: label,
+  label,
   order: index + 1,
-  minQuestions: 6,
-  maxQuestions: 6,
-  questionCount: 6,
+  minQuestions: 3,
+  maxQuestions: 3,
+  questionCount: 3,
 }));
 
 export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
   const [journey, setJourney] = useState(null);
-  const [selectedLevel, setSelectedLevel] = useState('A1');
+  const [selectedLevel, setSelectedLevel] = useState('Beginner');
   const [selectedTestNumber, setSelectedTestNumber] = useState(1);
   const [session, setSession] = useState(null);
   const [questions, setQuestions] = useState([]);
@@ -40,6 +50,7 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
   const [writingResult, setWritingResult] = useState(null);
   const [checkingWriting, setCheckingWriting] = useState(false);
   const [answersByQuestion, setAnswersByQuestion] = useState({});
+  const [flaggedQuestions, setFlaggedQuestions] = useState({});
   const [readyToSubmit, setReadyToSubmit] = useState(false);
   const [submittingFinal, setSubmittingFinal] = useState(false);
   const [timeLeft, setTimeLeft] = useState(null);
@@ -57,7 +68,7 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
   const currentQuestion = questions[currentIndex];
   const selectedLevelMeta = journey?.levels?.find((level) => level.id === selectedLevel);
   const selectedTest = selectedLevelMeta?.tests?.find((test) => test.testNumber === selectedTestNumber);
-  const activeLevel = journey?.activeLevel || 'A1';
+  const activeLevel = journey?.activeLevel || 'Beginner';
   const testStructure = journey?.testStructure?.length ? journey.testStructure : DEFAULT_TEST_STRUCTURE;
 
   // ── Time limits per question skill (seconds) ───────────────────────
@@ -112,7 +123,7 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
         const currentLevel = response.data.levels?.find((level) => level.id === current);
         const nextLevel = currentLevel && !currentLevel.locked ? currentLevel : response.data.levels?.find((level) => level.id === response.data.activeLevel);
         setSelectedTestNumber(nextLevel?.nextTestNumber || 1);
-        return nextLevel?.id || response.data.activeLevel || 'A1';
+        return nextLevel?.id || response.data.activeLevel || 'Beginner';
       });
     } catch (err) {
       console.error('Failed to load test journey:', err);
@@ -125,6 +136,12 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
   useEffect(() => {
     loadJourney();
   }, [loadJourney]);
+
+  useEffect(() => {
+    if (!currentQuestion) return;
+    const saved = answersByQuestion[currentQuestion._id];
+    setSelectedAnswer(saved?.answer || null);
+  }, [currentQuestion?._id, answersByQuestion]);
 
   useEffect(() => {
     return () => {
@@ -257,7 +274,7 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
       .finally(async () => {
         setAnswersByQuestion((cur) => ({
           ...cur,
-          [currentQuestion._id]: { answer: '', score: 0 },
+          [currentQuestion._id]: { answer: '', score: 0, skipped: true },
         }));
         if (currentIndex < questions.length - 1) {
           resetQuestionState();
@@ -266,7 +283,7 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
           setReadyToSubmit(true);
         }
       });
-  }, [session, currentQuestion, currentIndex, questions.length, forceFinish, resetQuestionState]);
+  }, [session, currentQuestion, currentIndex, questions.length, resetQuestionState]);
 
   const handleAutoSubmitOnFullscreenExit = useCallback(async (reason = 'Test auto-submitted: test integrity violation detected.') => {
     await forceFinish(reason);
@@ -305,6 +322,7 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
       setSession(response.data.session);
       setQuestions(response.data.questions || []);
       setAnswersByQuestion({});
+      setFlaggedQuestions({});
       setReadyToSubmit(false);
       setCurrentIndex(0);
       startedAtRef.current = Date.now();
@@ -457,6 +475,35 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
     setReadyToSubmit(true);
   };
 
+  const movePrevious = () => {
+    if (currentIndex <= 0) return;
+    resetQuestionState();
+    setCurrentIndex((idx) => Math.max(0, idx - 1));
+  };
+
+  const skipQuestion = async () => {
+    if (!session || !currentQuestion) return;
+    try {
+      await sessionAPI.submitAnswer(session._id, currentQuestion._id, '', false, 0);
+      setAnswersByQuestion((current) => ({
+        ...current,
+        [currentQuestion._id]: { answer: '', score: 0, skipped: true },
+      }));
+      await moveNextOrFinish();
+    } catch (err) {
+      console.error('Failed to skip question:', err);
+      setError('Failed to skip question.');
+    }
+  };
+
+  const toggleFlagForReview = () => {
+    if (!currentQuestion) return;
+    setFlaggedQuestions((current) => ({
+      ...current,
+      [currentQuestion._id]: !current[currentQuestion._id],
+    }));
+  };
+
   const submitCompletedTest = async () => {
     if (!session || submittingFinal) return;
     try {
@@ -488,7 +535,7 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
       await sessionAPI.submitAnswer(session._id, currentQuestion._id, selectedAnswer, isCorrect, isCorrect ? 100 : 0);
       setAnswersByQuestion((current) => ({
         ...current,
-        [currentQuestion._id]: { answer: selectedAnswer, score: isCorrect ? 100 : 0 },
+        [currentQuestion._id]: { answer: selectedAnswer, score: isCorrect ? 100 : 0, skipped: false },
       }));
       await moveNextOrFinish();
     } catch (err) {
@@ -576,16 +623,16 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
         )}
         <div className="mixed-hero">
           <div>
-            <span className="journey-kicker">Level Test Environment</span>
-            <h2>Mixed Listening, Speaking, Reading, and Writing tests.</h2>
+            <span className="journey-kicker">English Readiness Test</span>
+            <h2>Grammar, vocabulary, and reading assessments.</h2>
             <p>
-              Each level contains {journey?.testsPerLevel || 100} separate tests. Every test uses its own question slice, so test slots do not repeat question IDs inside the same level.
+              Each difficulty contains {journey?.testsPerLevel || 100} separate tests. Questions come from the database and are scored instantly without AI evaluation.
             </p>
           </div>
           <div className="mixed-hero-panel">
             <strong>{journey?.testsPerLevel || 100}</strong>
             <span>tests per level</span>
-            <small>{journey?.questionsPerSkill || 6} from each skill</small>
+            <small>{journey?.questionCount || 21} questions per test</small>
           </div>
         </div>
 
@@ -626,7 +673,7 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
               <div className="test-complete-note">
                 <strong>Analysis ready</strong>
                 <span>
-                  {finishedSession.testLabel || 'Mixed test'} finished with {Number(finishedSession.averageScore || 0).toFixed(1)}/100. Review every answer, correction, and skill area.
+                  {finishedSession.testLabel || 'English readiness test'} finished with {Number(finishedSession.averageScore || 0).toFixed(1)}/100. Review every answer, correction, and skill area.
                 </span>
                 <button type="button" className="btn-secondary" onClick={() => onGoToResults?.(finishedSession._id)}>
                   View analysis
@@ -663,13 +710,13 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
               <span className="journey-kicker">Test Data Structure</span>
               <h3>{journey?.minQuestions || journey?.questionCount || 24} min | {journey?.maxQuestions || journey?.questionCount || 24} max questions</h3>
             </div>
-            <strong>Question slice {selectedTest?.questionRange?.min || 1}-{selectedTest?.questionRange?.max || journey?.questionsPerSkill || 6}</strong>
+            <strong>Question slice {selectedTest?.questionRange?.min || 1}-{selectedTest?.questionRange?.max || journey?.questionCount || 21}</strong>
           </div>
           <div className="test-structure-grid">
             {testStructure.map((section) => (
-              <div key={section.skill} className="test-structure-card">
+              <div key={section.id || section.skill} className="test-structure-card">
                 <span>{section.order}</span>
-                <strong>{section.skill}</strong>
+                <strong>{section.label || section.skill}</strong>
                 <small>{section.minQuestions} min | {section.maxQuestions} max</small>
               </div>
             ))}
@@ -705,13 +752,16 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
     );
   }
 
-  const answeredCount = Object.keys(answersByQuestion).length;
+  const savedAnswers = Object.values(answersByQuestion);
+  const answeredCount = savedAnswers.filter((item) => item?.answer).length;
+  const skippedCount = savedAnswers.filter((item) => item && !item.answer).length;
   const skillCompletion = Object.values(
     questions.reduce((acc, question) => {
-      const skill = question.skill || 'Practice';
-      const row = acc[skill] || { skill, total: 0, answered: 0 };
+      const skill = question.moduleLabel || question.skill || 'Practice';
+      const row = acc[skill] || { skill, total: 0, answered: 0, skipped: 0 };
       row.total += 1;
-      if (answersByQuestion[question._id]) row.answered += 1;
+      if (answersByQuestion[question._id]?.answer) row.answered += 1;
+      if (answersByQuestion[question._id] && !answersByQuestion[question._id]?.answer) row.skipped += 1;
       acc[skill] = row;
       return acc;
     }, {}),
@@ -723,9 +773,9 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
         <div className="test-submit-panel">
           <div>
             <span className="journey-kicker">Ready to Submit</span>
-            <h2>{session?.testLabel || `${selectedLevel} Mixed Test`}</h2>
+            <h2>{session?.testLabel || `${selectedLevel} English Readiness Test`}</h2>
             <p>
-              You completed {answeredCount} of {questions.length} questions. Submit the test to unlock your detailed report, section analysis, and question review.
+              You answered {answeredCount} of {questions.length} questions and skipped {skippedCount}. Submit the test to unlock your detailed report, section analysis, and question review.
             </p>
           </div>
           <div className="test-submit-stats">
@@ -733,6 +783,7 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
               <div key={row.skill}>
                 <span>{row.skill}</span>
                 <strong>{row.answered}/{row.total}</strong>
+                {row.skipped > 0 && <small>{row.skipped} skipped</small>}
               </div>
             ))}
           </div>
@@ -742,7 +793,9 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
               className="btn-secondary"
               onClick={() => {
                 setReadyToSubmit(false);
-                setCurrentIndex(Math.max(0, questions.length - 1));
+                const lastIndex = Math.max(0, questions.length - 1);
+                setCurrentIndex(lastIndex);
+                setSelectedAnswer(answersByQuestion[questions[lastIndex]?._id]?.answer || null);
               }}
               disabled={submittingFinal}
             >
@@ -762,6 +815,8 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
 
   const progressPercent = questions.length ? ((currentIndex + 1) / questions.length) * 100 : 0;
   const questionSkill = currentQuestion.skill || 'Practice';
+  const questionSection = currentQuestion.moduleLabel || questionSkill;
+  const isFlagged = Boolean(flaggedQuestions[currentQuestion._id]);
   const hasObjectiveWritingOptions =
     questionSkill === 'Writing' && currentQuestion.options && currentQuestion.options.length > 0;
 
@@ -778,9 +833,9 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
       )}
       <div className="practice-header mixed-test-header">
         <div>
-          <h2>{session?.testLabel || `${selectedLevel} Mixed Test`}</h2>
+          <h2>{session?.testLabel || `${selectedLevel} English Readiness Test`}</h2>
           <p>
-            {questionSkill} · Question {currentIndex + 1} of {questions.length} · {answeredCount} saved
+            {questionSection} · Question {currentIndex + 1} of {questions.length} · {answeredCount} answered · {skippedCount} skipped
           </p>
         </div>
         {timeLeft !== null && (
@@ -800,17 +855,18 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
       </div>
 
       <div className="skill-lab mixed-skill-lab">
-        <span>{questionSkill}</span>
+        <span>{questionSection}</span>
         <p>
-          This mixed test scores each answer and emails a structured report when the final question is submitted.
+          This objective test scores each database answer key instantly and builds a structured report when submitted.
         </p>
       </div>
 
       <div className="question-card">
         <div className="question-meta">
           <span className="level-badge">{selectedLevel}</span>
-          <span className="question-type">{questionSkill}</span>
+          <span className="question-type">{questionSection}</span>
           <span className="question-type">{currentQuestion.moduleLabel || currentQuestion.type}</span>
+          {isFlagged && <span className="question-type review-flag">Flagged</span>}
         </div>
         <p className="question-text">{currentQuestion.stem}</p>
 
@@ -951,34 +1007,19 @@ export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
           </div>
         )}
 
-        <div className="question-actions">
-          {questionSkill === 'Speaking' ? (
-            <button onClick={submitSpeakingAnswer} disabled={!speakingResult} className="btn-primary">
-              Save Speaking Answer
-            </button>
-          ) : questionSkill === 'Writing' ? (
-            hasObjectiveWritingOptions ? (
-              <button onClick={submitObjectiveAnswer} disabled={!selectedAnswer} className="btn-primary">
-                Save Answer
-              </button>
-            ) : writingResult ? (
-              <button onClick={submitWritingAnswer} className="btn-primary">
-                Save & Continue
-              </button>
-            ) : (
-              <button
-                onClick={checkWritingAnswer}
-                disabled={checkingWriting || writingText.trim().split(/\s+/).filter(Boolean).length < 5}
-                className="btn-primary"
-              >
-                {checkingWriting ? 'Evaluating…' : 'Submit for Evaluation'}
-              </button>
-            )
-          ) : (
-            <button onClick={submitObjectiveAnswer} disabled={!selectedAnswer} className="btn-primary">
-              Save Answer
-            </button>
-          )}
+        <div className="question-actions mixed-question-actions">
+          <button type="button" onClick={movePrevious} disabled={currentIndex === 0} className="btn-secondary">
+            Previous
+          </button>
+          <button type="button" onClick={toggleFlagForReview} className={`btn-secondary ${isFlagged ? 'active' : ''}`}>
+            {isFlagged ? 'Unflag' : 'Flag for Review'}
+          </button>
+          <button type="button" onClick={skipQuestion} className="btn-secondary">
+            Skip
+          </button>
+          <button type="button" onClick={submitObjectiveAnswer} disabled={!selectedAnswer} className="btn-primary">
+            {currentIndex < questions.length - 1 ? 'Save & Next' : 'Save & Finish'}
+          </button>
         </div>
         {error && <p className="error">{error}</p>}
       </div>
