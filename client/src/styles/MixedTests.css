@@ -266,6 +266,86 @@
   line-height: 1.5;
 }
 
+.test-complete-note .btn-secondary {
+  width: fit-content;
+  min-height: 34px;
+  padding: 0 14px;
+}
+
+/* ── Test structure ─────────────────────────────── */
+.test-structure-panel {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius2);
+}
+
+.test-structure-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.test-structure-header h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.test-structure-header strong {
+  font-size: 12px;
+  color: var(--text2);
+  font-weight: 600;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+.test-structure-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.test-structure-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  align-items: center;
+  padding: 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.test-structure-card span {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  grid-row: span 2;
+}
+
+.test-structure-card strong {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.test-structure-card small {
+  font-size: 11px;
+  color: var(--text2);
+}
+
 /* ── Mixed test active session wrapper ──────────── */
 .mixed-test-session {
   display: flex;
@@ -321,6 +401,8 @@
   .test-slot-header { flex-direction: column; align-items: flex-start; }
   .test-slot-map   { grid-template-columns: repeat(5, 1fr); }
   .test-slot-panel { padding: 12px; }
+  .test-structure-header { flex-direction: column; align-items: flex-start; }
+  .test-structure-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* Small mobile */
@@ -328,4 +410,5 @@
   .test-level-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .test-level-card { min-height: 90px; padding: 12px; }
   .test-slot-map   { grid-template-columns: repeat(4, 1fr); }
+  .test-structure-grid { grid-template-columns: 1fr; }
 }

@@ -284,7 +284,15 @@ export const App = () => {
               onGoToDashboard={() => handleSetView('dashboard')}
             />
           )}
-          {currentView === 'tests' && <MixedTests onTestActiveChange={registerTestActive} />}
+          {currentView === 'tests' && (
+            <MixedTests
+              onTestActiveChange={registerTestActive}
+              onGoToResults={(sessionId) => {
+                if (sessionId) localStorage.setItem('selectedResultsSessionId', sessionId);
+                handleSetView('results');
+              }}
+            />
+          )}
           {currentView === 'interview' && <Interview setCurrentView={handleSetView} />}
           {currentView === 'results' && <Results />}
         </div>

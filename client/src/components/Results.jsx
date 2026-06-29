@@ -5,6 +5,9 @@ import '../styles/Results.css';
 
 const fmt   = (n) => Number(n || 0).toFixed(1);
 const fmtDt = (v) => v ? new Date(v).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+const isTestSession = (session) => session?.skill === 'Mixed' && session?.moduleType === 'mixed-test';
+const getQuestionDoc = (item) =>
+  item?.questionId && typeof item.questionId === 'object' ? item.questionId : null;
 
 const getMetrics = (session) => {
   const questions   = session?.questions || [];
@@ -40,7 +43,9 @@ export const Results = () => {
   const [activeTab, setActiveTab] = useState('practice');
 
   const [sessions,         setSessions]         = useState([]);
-  const [selectedSession,  setSelectedSession]  = useState(null);
+  const [selectedSessionId,setSelectedSessionId]= useState(null);
+  const [detailedSession,  setDetailedSession]  = useState(null);
+  const [detailLoading,    setDetailLoading]    = useState(false);
   const [loading,          setLoading]          = useState(true);
 
   const [interviews,       setInterviews]       = useState([]);
@@ -50,17 +55,38 @@ export const Results = () => {
   const [interviewsLoaded, setInterviewsLoaded] = useState(false);
 
   useEffect(() => {
+    const requestedSessionId = localStorage.getItem('selectedResultsSessionId');
     sessionAPI.getUserSessions()
       .then(res => {
         const done = res.data
           .filter(s => s.status === 'Completed')
           .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
         setSessions(done);
-        setSelectedSession(done[0] || null);
+        const requested = done.find((session) => session._id === requestedSessionId);
+        const firstPractice = done.find((session) => !isTestSession(session));
+        const firstTest = done.find(isTestSession);
+        const next = requested || firstPractice || firstTest || null;
+        setSelectedSessionId(next?._id || null);
+        if (requested && isTestSession(requested)) setActiveTab('tests');
+        if (requested && !isTestSession(requested)) setActiveTab('practice');
+        if (!requested && !firstPractice && firstTest) setActiveTab('tests');
+        localStorage.removeItem('selectedResultsSessionId');
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!selectedSessionId) {
+      setDetailedSession(null);
+      return;
+    }
+    setDetailLoading(true);
+    sessionAPI.getSession(selectedSessionId)
+      .then((res) => setDetailedSession(res.data))
+      .catch(() => setDetailedSession(null))
+      .finally(() => setDetailLoading(false));
+  }, [selectedSessionId]);
 
   useEffect(() => {
     if (activeTab === 'interviews' && !interviewsLoaded) {
@@ -85,8 +111,37 @@ export const Results = () => {
 
   if (loading) return <div className="loading">Loading results…</div>;
 
+  const selectedSummary = sessions.find((session) => session._id === selectedSessionId) || null;
+  const selectedSession = detailedSession?._id === selectedSessionId ? detailedSession : selectedSummary;
+  const visibleSessions = activeTab === 'tests'
+    ? sessions.filter(isTestSession)
+    : sessions.filter((session) => !isTestSession(session));
   const metrics  = selectedSession ? getMetrics(selectedSession)  : null;
   const feedback = metrics ? getFeedback(selectedSession, metrics) : null;
+  const reviewItems = (selectedSession?.questions || []).map((item, idx) => {
+    const question = getQuestionDoc(item);
+    return {
+      index: idx + 1,
+      answer: item,
+      question,
+      selectedAnswer: item.userAnswer || '',
+      correctAnswer: question?.correctAnswer || '',
+      isCorrect: Boolean(item.isCorrect),
+      score: typeof item.score === 'number' ? item.score : 0,
+    };
+  });
+  const skillRows = selectedSession?.testBreakdown?.length
+    ? selectedSession.testBreakdown
+    : Object.values(reviewItems.reduce((acc, item) => {
+      const skill = item.question?.skill || selectedSession?.skill || 'Practice';
+      const current = acc[skill] || { skill, answered: 0, correct: 0, totalScore: 0, averageScore: 0 };
+      current.answered += typeof item.answer.score === 'number' ? 1 : 0;
+      current.correct += item.isCorrect ? 1 : 0;
+      current.totalScore += item.score;
+      current.averageScore = current.answered ? current.totalScore / current.answered : 0;
+      acc[skill] = current;
+      return acc;
+    }, {}));
 
   return (
     <div className="results-page">
@@ -95,9 +150,23 @@ export const Results = () => {
       <div className="results-tabs">
         <button
           className={`results-tab${activeTab === 'practice'   ? ' active' : ''}`}
-          onClick={() => setActiveTab('practice')}
+          onClick={() => {
+            setActiveTab('practice');
+            const next = sessions.find((session) => !isTestSession(session));
+            setSelectedSessionId(next?._id || null);
+          }}
         >
           Practice Sessions
+        </button>
+        <button
+          className={`results-tab${activeTab === 'tests' ? ' active' : ''}`}
+          onClick={() => {
+            setActiveTab('tests');
+            const next = sessions.find(isTestSession);
+            setSelectedSessionId(next?._id || null);
+          }}
+        >
+          Level Tests
         </button>
         <button
           className={`results-tab${activeTab === 'interviews' ? ' active' : ''}`}
@@ -119,38 +188,37 @@ export const Results = () => {
       )}
 
       {/* ── Practice tab — empty ─────────────────────── */}
-      {activeTab === 'practice' && !selectedSession && (
+      {(activeTab === 'practice' || activeTab === 'tests') && !selectedSession && (
         <div className="results-empty">
-          <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>📊</div>
-          <h2>No sessions yet</h2>
-          <p>Finish a practice set to see your dynamic results here.</p>
+          <h2>No {activeTab === 'tests' ? 'level tests' : 'practice sessions'} yet</h2>
+          <p>Finish one attempt to see the full analysis here.</p>
         </div>
       )}
 
       {/* ── Practice tab — content ───────────────────── */}
-      {activeTab === 'practice' && selectedSession && (
+      {(activeTab === 'practice' || activeTab === 'tests') && selectedSession && (
         <div className="practice-layout">
 
           {/* Left: session list */}
           <div className="sessions-panel">
             <div className="sessions-panel-header">
-              <h3>Completed Sessions</h3>
-              <span className="sessions-panel-count">{sessions.length}</span>
+              <h3>{activeTab === 'tests' ? 'Completed Tests' : 'Completed Sessions'}</h3>
+              <span className="sessions-panel-count">{visibleSessions.length}</span>
             </div>
             <div className="sessions-list">
-              {sessions.map(s => {
+              {visibleSessions.map(s => {
                 const m = getMetrics(s);
                 return (
                   <div
                     key={s._id}
                     className={`session-item${selectedSession._id === s._id ? ' active' : ''}`}
-                    onClick={() => setSelectedSession(s)}
+                    onClick={() => setSelectedSessionId(s._id)}
                   >
                     <span className="session-item-dot" />
                     <div className="session-item-body">
                       <span className="session-item-title">{s.skill} {s.level}</span>
                       <span className="session-item-sub">
-                        {s.moduleLabel || 'Practice'} · Set {s.moduleSetNumber || s.setNumber || '—'}
+                        {s.testLabel || s.moduleLabel || 'Practice'} · Set {s.moduleSetNumber || s.setNumber || '—'}
                       </span>
                       <span className="session-item-sub">{fmtDt(s.updatedAt || s.createdAt)}</span>
                     </div>
@@ -177,15 +245,19 @@ export const Results = () => {
               </div>
               <div className="results-info">
                 <h3>
-                  {selectedSession.skill} {selectedSession.level} · {selectedSession.moduleLabel || 'Practice'}
+                  {selectedSession.testLabel || `${selectedSession.skill} ${selectedSession.level} · ${selectedSession.moduleLabel || 'Practice'}`}
                 </h3>
-                <p>Module {selectedSession.moduleOrder || '—'} · Set {selectedSession.moduleSetNumber || selectedSession.setNumber || '—'}</p>
+                <p>
+                  {isTestSession(selectedSession)
+                    ? `Question range ${selectedSession.startOrder || '—'}-${selectedSession.endOrder || '—'}`
+                    : `Module ${selectedSession.moduleOrder || '—'} · Set ${selectedSession.moduleSetNumber || selectedSession.setNumber || '—'}`}
+                </p>
                 <div className="results-info-badges">
                   <span className="results-badge results-badge--accent">
                     ✓ {metrics.correctCount}/{metrics.expectedCount} correct
                   </span>
                   <span className="results-badge">
-                    📅 {fmtDt(selectedSession.updatedAt || selectedSession.createdAt)}
+                    {fmtDt(selectedSession.updatedAt || selectedSession.createdAt)}
                   </span>
                   <span className="results-badge">
                     {Math.round(metrics.completion)}% complete
@@ -193,6 +265,18 @@ export const Results = () => {
                 </div>
               </div>
             </div>
+
+            {activeTab === 'tests' && (
+              <div className="test-analysis-grid">
+                {skillRows.map((row) => (
+                  <div key={row.skill} className="test-analysis-card">
+                    <span>{row.skill}</span>
+                    <strong>{fmt(row.averageScore)}</strong>
+                    <small>{row.correct}/{row.answered} correct</small>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Metric bars */}
             <div className="skill-bars">
@@ -228,6 +312,58 @@ export const Results = () => {
                 <ul>
                   {feedback.focus.map(item => <li key={item}>{item}</li>)}
                 </ul>
+              </div>
+            </div>
+
+            <div className="review-panel">
+              <div className="review-panel-header">
+                <h4>{activeTab === 'tests' ? 'Question Review' : 'Session Review'}</h4>
+                <span>{detailLoading ? 'Loading details...' : `${reviewItems.length} questions`}</span>
+              </div>
+              <div className="review-list">
+                {reviewItems.map((item) => (
+                  <div key={`${item.index}-${item.question?._id || item.index}`} className={`review-card${item.isCorrect ? ' correct' : 'incorrect'}`}>
+                    <div className="review-card-head">
+                      <span>Question {item.index}</span>
+                      <strong>{item.question?.skill || selectedSession.skill}</strong>
+                      <small>{fmt(item.score)}/100</small>
+                    </div>
+                    {item.question?.passageText && (
+                      <div className="review-passage">
+                        {String(item.question.passageText).split('\n').map((line, lineIdx) => <p key={lineIdx}>{line}</p>)}
+                      </div>
+                    )}
+                    <p className="review-question">{item.question?.stem || 'Question details unavailable.'}</p>
+                    {item.question?.options?.length > 0 && (
+                      <div className="review-options">
+                        {item.question.options.map((option, optionIdx) => {
+                          const selected = item.selectedAnswer === option.text;
+                          const correct = option.isCorrect;
+                          return (
+                            <div
+                              key={`${item.index}-${optionIdx}`}
+                              className={`review-option${selected ? ' selected' : ''}${correct ? ' correct' : ''}`}
+                            >
+                              <span>{String.fromCharCode(65 + optionIdx)}</span>
+                              <p>{option.text}</p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {!item.question?.options?.length && (
+                      <div className="review-free-answer">
+                        <strong>Your answer</strong>
+                        <p>{item.selectedAnswer || 'No answer submitted.'}</p>
+                      </div>
+                    )}
+                    <div className="review-explanation">
+                      <strong>{item.isCorrect ? 'Correct' : 'Needs review'}</strong>
+                      {!item.isCorrect && item.correctAnswer && <p>Correct answer: {item.correctAnswer}</p>}
+                      {item.question?.explanation && <p>{item.question.explanation}</p>}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 

@@ -43,6 +43,24 @@
   color: var(--text2);
 }
 
+.writing-source {
+  padding: 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  line-height: 1.65;
+}
+
+.writing-source p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.writing-source p + p {
+  margin-top: 6px;
+}
+
 .writing-textarea {
   width: 100%;
   min-height: 200px;

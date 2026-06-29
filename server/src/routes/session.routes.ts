@@ -9,7 +9,7 @@ import { Session } from '../models/Session';
 import { User } from '../models/User';
 import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
-import { evaluateAnswer, evaluateWriting, transcribeAudio, transcribeAudioWithSarvam } from '../services/ai.service';
+import { evaluateAnswer, transcribeAudio, transcribeAudioWithSarvam } from '../services/ai.service';
 import { mixedTestReportEmail, queueEmail } from '../services/email.service';
 import {
   getImageDescriptionItem,
@@ -75,6 +75,13 @@ const SET_SIZE = 10;
 const MIXED_TEST_SIZE = 24;
 const MIXED_TEST_QUESTIONS_PER_SKILL = MIXED_TEST_SIZE / SKILLS.length;
 const MIXED_TESTS_PER_LEVEL = 100;
+const TEST_SECTION_STRUCTURE = SKILLS.map((skill, index) => ({
+  skill,
+  order: index + 1,
+  minQuestions: MIXED_TEST_QUESTIONS_PER_SKILL,
+  maxQuestions: MIXED_TEST_QUESTIONS_PER_SKILL,
+  questionCount: MIXED_TEST_QUESTIONS_PER_SKILL,
+}));
 const QUESTIONS_PER_SKILL_LEVEL = 1000;
 const TOTAL_SETS_PER_SKILL_LEVEL = QUESTIONS_PER_SKILL_LEVEL / SET_SIZE;
 const MODULES_PER_SKILL_LEVEL = 5;
@@ -159,11 +166,12 @@ const getMixedTestSessionsByLevel = async (userId: string) => {
     .select('level setNumber status averageScore updatedAt')
     .lean();
 
-  const lookup = new Map<string, Map<number, { status: string; averageScore: number; updatedAt?: Date }>>();
+  const lookup = new Map<string, Map<number, { sessionId: string; status: string; averageScore: number; updatedAt?: Date }>>();
   for (const row of rows) {
     if (!row.level || typeof row.setNumber !== 'number') continue;
-    const levelMap = lookup.get(row.level) ?? new Map<number, { status: string; averageScore: number; updatedAt?: Date }>();
+    const levelMap = lookup.get(row.level) ?? new Map<number, { sessionId: string; status: string; averageScore: number; updatedAt?: Date }>();
     levelMap.set(row.setNumber, {
+      sessionId: String(row._id),
       status: row.status,
       averageScore: row.averageScore ?? 0,
       updatedAt: (row as { updatedAt?: Date }).updatedAt,
@@ -257,7 +265,14 @@ router.get(
         return {
           testNumber,
           questionCount: MIXED_TEST_SIZE,
+          minQuestions: MIXED_TEST_SIZE,
+          maxQuestions: MIXED_TEST_SIZE,
           questionsPerSkill: MIXED_TEST_QUESTIONS_PER_SKILL,
+          questionRange: {
+            min: (testNumber - 1) * MIXED_TEST_QUESTIONS_PER_SKILL + 1,
+            max: testNumber * MIXED_TEST_QUESTIONS_PER_SKILL,
+          },
+          sessionId: session?.sessionId ?? null,
           status: session?.status ?? 'Locked',
           averageScore: session?.averageScore ?? 0,
           updatedAt: session?.updatedAt ?? null,
@@ -288,7 +303,10 @@ router.get(
     res.json({
       skills: SKILLS,
       questionCount: MIXED_TEST_SIZE,
+      minQuestions: MIXED_TEST_SIZE,
+      maxQuestions: MIXED_TEST_SIZE,
       questionsPerSkill: MIXED_TEST_QUESTIONS_PER_SKILL,
+      testStructure: TEST_SECTION_STRUCTURE,
       testsPerLevel: MIXED_TESTS_PER_LEVEL,
       levels,
       activeLevel: activeLevel.id,
@@ -786,7 +804,32 @@ router.post(
       throw new AppError('Please write at least a few words before submitting.', 400, 'RESPONSE_TOO_SHORT');
     }
 
-    const evaluation = await evaluateWriting(prompt, level, criteria, userText);
+    const wordCount = countWords(userText);
+    const targetWordsByLevel: Record<string, number> = { A1: 20, A2: 40, B1: 80, B2: 120, C1: 160, C2: 200 };
+    const targetWords = targetWordsByLevel[level] ?? 80;
+    const sentenceCount = userText.split(/[.!?]+/).map((part) => part.trim()).filter(Boolean).length;
+    const hasCapitalStart = /^[A-Z]/.test(userText.trim());
+    const hasEndingPunctuation = /[.!?]$/.test(userText.trim());
+    const lengthScore = Math.min(100, Math.round((wordCount / targetWords) * 100));
+    const mechanicsScore = Math.round(((hasCapitalStart ? 1 : 0) + (hasEndingPunctuation ? 1 : 0) + Math.min(sentenceCount, 3)) / 5 * 100);
+    const score = Math.round(lengthScore * 0.45 + mechanicsScore * 0.35 + 20);
+    const evaluation = {
+      score: Math.min(100, score),
+      grammarScore: mechanicsScore,
+      vocabularyScore: Math.min(100, Math.round((new Set(userText.toLowerCase().match(/[a-z]+/g) || []).size / Math.max(1, wordCount)) * 120)),
+      coherenceScore: sentenceCount > 1 ? Math.min(100, 55 + sentenceCount * 10) : 45,
+      taskAchievementScore: lengthScore,
+      feedback: 'Writing practice now uses objective sentence-correction questions to avoid AI evaluation costs. This fallback uses a local mechanical estimate only.',
+      strengths: [
+        wordCount >= Math.min(targetWords, 40) ? 'The response has enough length for a basic local check.' : 'The response is concise.',
+        hasCapitalStart && hasEndingPunctuation ? 'Basic capitalization and punctuation are present.' : 'The response was submitted successfully.',
+      ],
+      improvements: [
+        `Use the new sentence-correction questions for accurate grammar scoring without AI cost.`,
+        wordCount < targetWords ? `Add more detail when a free response is required. Target: ${targetWords} words.` : `Keep sentences clear and connected.`,
+      ],
+      criteria,
+    };
     res.json({ evaluation });
   }),
 );

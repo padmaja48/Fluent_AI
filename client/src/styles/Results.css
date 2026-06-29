@@ -451,6 +451,236 @@
   top: 1px;
 }
 
+/* ── Level test analysis ───────────────────────────────── */
+.test-analysis-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.test-analysis-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.test-analysis-card span {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.test-analysis-card strong {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.test-analysis-card small {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ── Question review ───────────────────────────────────── */
+.review-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.review-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+}
+
+.review-panel-header h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.review-panel-header span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.review-card {
+  border: 1px solid var(--border);
+  border-left: 3px solid #f59e0b;
+  border-radius: 12px;
+  padding: 14px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.review-card.correct {
+  border-left-color: #10b981;
+}
+
+.review-card-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.review-card-head span {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.review-card-head strong {
+  font-size: 12px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.review-card-head small {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.review-passage {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 10px 12px;
+  color: var(--text-muted);
+}
+
+.review-passage p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.review-passage p + p {
+  margin-top: 6px;
+}
+
+.review-question {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.review-options {
+  display: grid;
+  gap: 8px;
+}
+
+.review-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 10px 12px;
+}
+
+.review-option span {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.review-option p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.review-option.correct {
+  border-color: rgba(16, 185, 129, 0.45);
+  background: rgba(16, 185, 129, 0.07);
+}
+
+.review-option.selected {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+.review-option.selected:not(.correct) {
+  border-color: rgba(239, 68, 68, 0.55);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.review-free-answer,
+.review-explanation {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 10px 12px;
+}
+
+.review-free-answer strong,
+.review-explanation strong {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.review-free-answer p,
+.review-explanation p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.review-explanation p + p {
+  margin-top: 5px;
+}
+
 /* ══════════════════════════════════════════════════════════
    INTERVIEW TAB — Q&A transcript cards (shared by both tabs)
 ══════════════════════════════════════════════════════════ */
@@ -647,6 +877,7 @@
 @media (max-width: 720px) {
   .results-hero { flex-direction: row; align-items: center; }
   .feedback-cards { grid-template-columns: 1fr; }
+  .test-analysis-grid { grid-template-columns: repeat(2, 1fr); }
   .results-page { gap: 14px; }
   .skill-bars { padding: 16px; }
 }
@@ -662,4 +893,5 @@
   .results-tab { padding: 7px 16px; font-size: 13px; }
   .session-item { min-width: 170px; }
   .report-two-col { grid-template-columns: 1fr; }
+  .test-analysis-grid { grid-template-columns: 1fr; }
 }

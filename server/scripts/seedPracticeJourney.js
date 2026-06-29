@@ -237,11 +237,11 @@ const buildQuestion = (skill, level, index) => {
 
   if (skill.id === 'Writing') {
     const writingItem = buildWritingItem({ level, context, competency, index, module });
-    question.type = 'Task';
+    question.type = 'MCQ';
     question.stem = writingItem.stem;
     question.passageText = writingItem.passageText;
     question.correctAnswer = writingItem.correctAnswer;
-    question.options = [];
+    question.options = rotateOptions(writingItem.correctAnswer, writingItem.distractors, index);
     question.explanation = writingItem.explanation;
     question.hints = writingItem.hints;
     question.audioPrompt = writingItem.evaluationCriteria;
@@ -382,9 +382,180 @@ const buildSpeakingItem = ({ level, context, competency, index, module }) => {
   };
 };
 
+const buildWritingCorrectionItem = ({ level, context, competency, index, module }) => {
+  const pick = (items, multiplier, offset = 0) =>
+    items[((level.order * QUESTIONS_PER_SKILL_LEVEL + index) * multiplier + offset) % items.length];
+  const actors = ['candidate', 'manager', 'student', 'analyst', 'team lead', 'customer', 'trainer', 'engineer'];
+  const subjects = ['project update', 'meeting note', 'client email', 'support reply', 'application form', 'training message'];
+  const timePhrase = pick(['yesterday', 'this morning', 'last week', 'before the deadline', 'after the review'], 13, index);
+  const actor = pick(actors, 5, level.order);
+  const subject = pick(subjects, 7, index);
+
+  const blueprintByModule = {
+    'sentence-control': [
+      {
+        focus: 'subject-verb agreement',
+        original: `The ${actor} have shared the ${subject}.`,
+        correct: `The ${actor} has shared the ${subject}.`,
+        wrong: [
+          `The ${actor} having shared the ${subject}.`,
+          `The ${actor} have share the ${subject}.`,
+          `The ${actor} has sharing the ${subject}.`,
+        ],
+      },
+      {
+        focus: 'tense consistency',
+        original: `She checked the ${subject} and send the final reply.`,
+        correct: `She checked the ${subject} and sent the final reply.`,
+        wrong: [
+          `She check the ${subject} and sent the final reply.`,
+          `She checked the ${subject} and sending the final reply.`,
+          `She has checked the ${subject} and send the final reply.`,
+        ],
+      },
+    ],
+    'paragraph-building': [
+      {
+        focus: 'complete sentence structure',
+        original: `Because the ${subject} was unclear, the ${actor} asked for more details and then.`,
+        correct: `Because the ${subject} was unclear, the ${actor} asked for more details and then revised the response.`,
+        wrong: [
+          `Because the ${subject} was unclear and the ${actor} asked for more details.`,
+          `The ${subject} unclear, the ${actor} asked for more details and then.`,
+          `Because unclear the ${subject}, the ${actor} asked for details revised.`,
+        ],
+      },
+      {
+        focus: 'logical sentence order',
+        original: `The ${actor} submitted the report. First, the data was collected. Finally, the manager approved it.`,
+        correct: `First, the data was collected. The ${actor} submitted the report. Finally, the manager approved it.`,
+        wrong: [
+          `Finally, the manager approved it. First, the data was collected. The ${actor} submitted the report.`,
+          `The ${actor} submitted the report. Finally, the data was collected. First, the manager approved it.`,
+          `First, the manager approved it. The ${actor} submitted the report. Finally, the data was collected.`,
+        ],
+      },
+    ],
+    cohesion: [
+      {
+        focus: 'linking words',
+        original: `The ${subject} was detailed. It missed the deadline.`,
+        correct: `The ${subject} was detailed, but it missed the deadline.`,
+        wrong: [
+          `The ${subject} was detailed because it missed the deadline.`,
+          `The ${subject} was detailed although and it missed the deadline.`,
+          `The ${subject} was detailed, it missed, because the deadline.`,
+        ],
+      },
+      {
+        focus: 'reference clarity',
+        original: `The ${actor} sent the file to the manager, but it was not sure about the changes.`,
+        correct: `The ${actor} sent the file to the manager, but the manager was not sure about the changes.`,
+        wrong: [
+          `The ${actor} sent the file to the manager, but they was not sure about the changes.`,
+          `The ${actor} sent the file to the manager, but were not sure about the changes.`,
+          `The ${actor} sent it to the manager, but it changes were not sure.`,
+        ],
+      },
+    ],
+    'tone-and-register': [
+      {
+        focus: 'professional tone',
+        original: `Send me the ${subject} now because I need it.`,
+        correct: `Could you please send me the ${subject} when you have a moment?`,
+        wrong: [
+          `Give me the ${subject} immediately.`,
+          `I want the ${subject}, so send.`,
+          `You must sending me the ${subject} now please.`,
+        ],
+      },
+      {
+        focus: 'formal request',
+        original: `I can't come. Move the meeting.`,
+        correct: `I am unable to attend at that time. Could we please reschedule the meeting?`,
+        wrong: [
+          `I cannot come so move it for me.`,
+          `Unable attending the meeting, reschedule it.`,
+          `I am not come. Can moving the meeting?`,
+        ],
+      },
+    ],
+    'argument-development': [
+      {
+        focus: 'clear reason',
+        original: `Online learning is useful because it is good and people like it.`,
+        correct: `Online learning is useful because it allows people to study at a time and place that suits them.`,
+        wrong: [
+          `Online learning is useful because useful things are good.`,
+          `Online learning useful because people, time, place and good.`,
+          `Online learning is useful because it is liked and useful and very good.`,
+        ],
+      },
+      {
+        focus: 'balanced claim',
+        original: `Remote work is always better than office work in every situation.`,
+        correct: `Remote work can improve flexibility, but some roles still benefit from regular in-person collaboration.`,
+        wrong: [
+          `Remote work better, office work bad, every time.`,
+          `Remote work is better because it is better than office work.`,
+          `Remote work always improves everything and has no problems.`,
+        ],
+      },
+    ],
+  };
+
+  const advancedBlueprints = {
+    C1: [
+      {
+        focus: 'concise professional revision',
+        original: `The proposal, which was reviewed by the committee and was considered by them at length, was found to be needing changes.`,
+        correct: `After a detailed review, the committee concluded that the proposal needed changes.`,
+        wrong: [
+          `The committee reviewed at length and the proposal was needing changes.`,
+          `Having reviewed by the committee, changes were needed by the proposal.`,
+          `The proposal was reviewed, considered, and it needs changing by them.`,
+        ],
+      },
+    ],
+    C2: [
+      {
+        focus: 'precision and register',
+        original: `The policy is bad because it does not really work for people in many ways.`,
+        correct: `The policy is problematic because it offers limited practical support to the people most affected by it.`,
+        wrong: [
+          `The policy is problematic because bad things happen to people in ways.`,
+          `The policy does not working practically to affected people by it.`,
+          `The policy is bad, really not good, and people are affected many ways.`,
+        ],
+      },
+    ],
+  };
+
+  const pool = [...(blueprintByModule[module.id] || blueprintByModule['sentence-control']), ...(advancedBlueprints[level.id] || [])];
+  const item = pick(pool, 17, index);
+
+  return {
+    stem: `Choose the best corrected version of the sentence.`,
+    passageText: `Original sentence:\n${item.original}`,
+    correctAnswer: item.correct,
+    distractors: item.wrong,
+    explanation: `The best answer fixes ${item.focus} while keeping the meaning clear and appropriate for ${level.id}.`,
+    hints: [
+      `Module: ${module.label}`,
+      `Focus: ${item.focus}`,
+      `Level: ${level.id}`,
+      `Context: ${context}`,
+      `Competency: ${competency}`,
+    ],
+    evaluationCriteria: `Sentence correction: ${item.focus}`,
+  };
+};
+
 const buildWritingItem = ({ level, context, competency, index, module }) => {
   const pick = (items, multiplier, offset = 0) =>
     items[((level.order * QUESTIONS_PER_SKILL_LEVEL + index) * multiplier + offset) % items.length];
+
+  return buildWritingCorrectionItem({ level, context, competency, index, module });
 
   // Real writing prompts by level and module type
   const promptsByModule = {

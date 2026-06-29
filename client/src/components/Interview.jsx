@@ -13,6 +13,27 @@ const MAX_VIOLATIONS = 3;
 const PERSON_CHECK_INTERVAL_MS = 1500;
 const PERSON_MISSING_GRACE_MS = 5000;
 
+const isLikelyMobileDevice = () =>
+  typeof window !== 'undefined' &&
+  (window.matchMedia?.('(pointer: coarse)').matches || /Android|iPhone|iPad|iPod/i.test(window.navigator.userAgent));
+
+const supportsFullscreen = () =>
+  typeof document !== 'undefined' &&
+  Boolean(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+
+const requestAppFullscreen = () => {
+  const el = document.documentElement;
+  if (el.requestFullscreen) return el.requestFullscreen();
+  if (el.webkitRequestFullscreen) return el.webkitRequestFullscreen();
+  return Promise.resolve(false);
+};
+
+const exitAppFullscreen = () => {
+  if (document.exitFullscreen) return document.exitFullscreen();
+  if (document.webkitExitFullscreen) return document.webkitExitFullscreen();
+  return Promise.resolve(false);
+};
+
 const isClipboardShortcut = (event) => {
   const key = event.key.toUpperCase();
   return (
@@ -93,6 +114,28 @@ function InterviewLoader({ title = 'Preparing interview', message = 'Please wait
     <div className="iv-loading-card" role="status" aria-live="polite">
       <div className="iv-loader-orbit" aria-hidden="true"><span /><span /><span /></div>
       <div><h3>{title}</h3><p>{message}</p></div>
+    </div>
+  );
+}
+
+function MobileBlockedInterview({ onBack }) {
+  useEffect(() => {
+    window.alert('AI interviews require a laptop or desktop. Please continue on a larger device with a camera and microphone.');
+  }, []);
+
+  return (
+    <div className="iv-container">
+      <div className="iv-mobile-block">
+        <span className="iv-mobile-block-icon">!</span>
+        <h2>Use a Laptop or Desktop</h2>
+        <p>
+          AI mock interviews need desktop-style camera, microphone, fullscreen, and proctoring support.
+          Please continue from a laptop or desktop browser.
+        </p>
+        <button type="button" className="iv-btn iv-btn--primary" onClick={() => onBack?.('dashboard')}>
+          Back to Dashboard
+        </button>
+      </div>
     </div>
   );
 }
@@ -368,13 +411,21 @@ function SystemCheckStep({ onStart, onBack, loading }) {
   const [micLevel, setMicLevel] = useState(0);
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState('');
+  const mobileCheck = isLikelyMobileDevice();
 
   useEffect(() => {
     let stream;
     let personCheck;
+    let audioContext;
     (async () => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error('Media devices are not supported.');
+        }
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' },
+          audio: { echoCancellation: true, noiseSuppression: true },
+        });
         stream.getVideoTracks().forEach((track) => {
           track.onended = () => {
             setCamOk(false);
@@ -394,17 +445,24 @@ function SystemCheckStep({ onStart, onBack, loading }) {
         };
         personCheck = setInterval(checkPerson, PERSON_CHECK_INTERVAL_MS);
         await checkPerson();
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const src = ctx.createMediaStreamSource(stream);
-        const analyser = ctx.createAnalyser(); analyser.fftSize = 256;
-        src.connect(analyser); analyserRef.current = analyser;
-        const data = new Uint8Array(analyser.frequencyBinCount);
-        const tick = () => {
-          analyser.getByteFrequencyData(data);
-          setMicLevel(data.reduce((a, b) => a + b, 0) / data.length / 128);
-          animRef.current = requestAnimationFrame(tick);
-        };
-        tick();
+        try {
+          const AudioCtor = window.AudioContext || window.webkitAudioContext;
+          if (AudioCtor) {
+            audioContext = new AudioCtor();
+            const src = audioContext.createMediaStreamSource(stream);
+            const analyser = audioContext.createAnalyser(); analyser.fftSize = 256;
+            src.connect(analyser); analyserRef.current = analyser;
+            const data = new Uint8Array(analyser.frequencyBinCount);
+            const tick = () => {
+              analyser.getByteFrequencyData(data);
+              setMicLevel(data.reduce((a, b) => a + b, 0) / data.length / 128);
+              animRef.current = requestAnimationFrame(tick);
+            };
+            tick();
+          }
+        } catch {
+          setMicLevel(0.4);
+        }
       } catch {
         setCamOk(false);
         setPersonOk(false);
@@ -414,6 +472,7 @@ function SystemCheckStep({ onStart, onBack, loading }) {
     return () => {
       clearInterval(personCheck);
       if (stream) stream.getTracks().forEach(t => t.stop());
+      audioContext?.close?.().catch?.(() => {});
       if (animRef.current) cancelAnimationFrame(animRef.current);
     };
   }, []);
@@ -435,7 +494,8 @@ function SystemCheckStep({ onStart, onBack, loading }) {
           <div className={`iv-check-item${personOk ? ' iv-check-item--ok' : ''}`}>
             <span className="iv-check-icon">{personOk ? '✓' : '○'}</span> Person detected
           </div>
-          {!personOk && camOk && <p className="iv-check-note">{personMessage}</p>}
+          {!personOk && camOk && mobileCheck && <p className="iv-check-note">Camera is available. You can continue on mobile if your face is visible.</p>}
+          {!personOk && camOk && !mobileCheck && <p className="iv-check-note">{personMessage}</p>}
           <div className={`iv-check-item${micOk ? ' iv-check-item--ok' : ''}`}>
             <span className="iv-check-icon">{micOk ? '✓' : '○'}</span> Microphone
           </div>
@@ -462,7 +522,7 @@ function SystemCheckStep({ onStart, onBack, loading }) {
 
       <div className="iv-step-actions">
         <button className="iv-btn iv-btn--ghost" onClick={onBack}>← Back</button>
-        <button className="iv-btn iv-btn--primary" disabled={!camOk || !personOk || !micOk || !agreed || loading} onClick={onStart}>
+        <button className="iv-btn iv-btn--primary" disabled={!camOk || (!personOk && !mobileCheck) || !micOk || !agreed || loading} onClick={onStart}>
           {loading
             ? <span className="iv-btn-loading"><span className="iv-btn-spinner" />Creating interview</span>
             : 'Start Interview'}
@@ -555,7 +615,7 @@ function LiveSession({ interview, persona, onComplete }) {
     stopListening();
     stopSpeech();
     try { await interviewAPI.completeInterview(interview._id); } catch {}
-    if (document.fullscreenElement) { try { await document.exitFullscreen(); } catch {} }
+    if (document.fullscreenElement || document.webkitFullscreenElement) { try { await exitAppFullscreen(); } catch {} }
     if (terminatedBySystem) { setTerminated(true); setEnding(false); return; }
     onComplete(interview._id);
   }, [interview._id, onComplete, stopListening, stopSpeech]);
@@ -579,17 +639,17 @@ function LiveSession({ interview, persona, onComplete }) {
 
   /* ── STRICT PROCTORING ──────────────────────────── */
   useEffect(() => {
-    // 1. Enter fullscreen immediately
-    document.documentElement.requestFullscreen().catch(() => {});
+    const fullscreenRequired = supportsFullscreen() && !isLikelyMobileDevice();
+    if (fullscreenRequired) {
+      requestAppFullscreen().catch(() => {});
+    }
 
-    // 2. Fullscreen exit
     const onFSChange = () => {
-      if (!document.fullscreenElement && !autoSubmittedRef.current) {
+      if (fullscreenRequired && !document.fullscreenElement && !document.webkitFullscreenElement && !autoSubmittedRef.current) {
         logViolation('fullscreen_exit', 'Exited fullscreen mode');
-        // Re-enter fullscreen
         setTimeout(() => {
           if (!sessionClosedRef.current)
-            document.documentElement.requestFullscreen().catch(() => {});
+            requestAppFullscreen().catch(() => {});
         }, 500);
       }
     };
@@ -640,7 +700,8 @@ function LiveSession({ interview, persona, onComplete }) {
       }
     }, 8000);
 
-    document.addEventListener('fullscreenchange', onFSChange);
+    if (fullscreenRequired) document.addEventListener('fullscreenchange', onFSChange);
+    if (fullscreenRequired) document.addEventListener('webkitfullscreenchange', onFSChange);
     document.addEventListener('visibilitychange', onVisibility);
     document.addEventListener('copy', onCopy, true);
     document.addEventListener('cut', onCut, true);
@@ -650,7 +711,8 @@ function LiveSession({ interview, persona, onComplete }) {
     window.addEventListener('keydown', onKeyDown, true);
 
     return () => {
-      document.removeEventListener('fullscreenchange', onFSChange);
+      if (fullscreenRequired) document.removeEventListener('fullscreenchange', onFSChange);
+      if (fullscreenRequired) document.removeEventListener('webkitfullscreenchange', onFSChange);
       document.removeEventListener('visibilitychange', onVisibility);
       document.removeEventListener('copy', onCopy, true);
       document.removeEventListener('cut', onCut, true);
@@ -659,7 +721,7 @@ function LiveSession({ interview, persona, onComplete }) {
       window.removeEventListener('blur', onBlur);
       window.removeEventListener('keydown', onKeyDown, true);
       clearInterval(devToolsCheck);
-      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      if (document.fullscreenElement || document.webkitFullscreenElement) exitAppFullscreen().catch(() => {});
     };
   }, [logViolation]);
 
@@ -668,6 +730,7 @@ function LiveSession({ interview, persona, onComplete }) {
     let stream;
     let personCheck;
     let audioContext;
+    const mobileSession = isLikelyMobileDevice();
     const reportCameraViolation = (type, description) => {
       const now = Date.now();
       if (now - lastCameraViolationAtRef.current < PERSON_MISSING_GRACE_MS) return;
@@ -677,7 +740,10 @@ function LiveSession({ interview, persona, onComplete }) {
 
     (async () => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' },
+          audio: { echoCancellation: true, noiseSuppression: true },
+        });
         stream.getVideoTracks().forEach((track) => {
           track.onended = () => {
             setCameraReady(false);
@@ -707,8 +773,9 @@ function LiveSession({ interview, persona, onComplete }) {
           }
 
           const result = await detectPersonPresence(videoRef.current, personCanvasRef.current);
-          setPersonDetected(result.detected);
-          if (result.detected) {
+          const detected = result.detected || mobileSession;
+          setPersonDetected(detected);
+          if (detected) {
             personMissingSinceRef.current = null;
             return;
           }
@@ -727,17 +794,24 @@ function LiveSession({ interview, persona, onComplete }) {
         personCheck = setInterval(checkPerson, PERSON_CHECK_INTERVAL_MS);
         await checkPerson();
 
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const src = audioContext.createMediaStreamSource(stream);
-        const analyser = audioContext.createAnalyser(); analyser.fftSize = 128;
-        src.connect(analyser);
-        const data = new Uint8Array(analyser.frequencyBinCount);
-        const tick = () => {
-          analyser.getByteFrequencyData(data);
-          setAudioLevel(data.reduce((a, b) => a + b, 0) / data.length / 128);
-          animRef.current = requestAnimationFrame(tick);
-        };
-        tick();
+        try {
+          const AudioCtor = window.AudioContext || window.webkitAudioContext;
+          if (AudioCtor) {
+            audioContext = new AudioCtor();
+            const src = audioContext.createMediaStreamSource(stream);
+            const analyser = audioContext.createAnalyser(); analyser.fftSize = 128;
+            src.connect(analyser);
+            const data = new Uint8Array(analyser.frequencyBinCount);
+            const tick = () => {
+              analyser.getByteFrequencyData(data);
+              setAudioLevel(data.reduce((a, b) => a + b, 0) / data.length / 128);
+              animRef.current = requestAnimationFrame(tick);
+            };
+            tick();
+          }
+        } catch {
+          setAudioLevel(0.4);
+        }
       } catch {
         setCameraReady(false);
         setPersonDetected(false);
@@ -1174,6 +1248,10 @@ export const Interview = ({ setCurrentView }) => {
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
   const persona = data.persona;
+
+  if (isLikelyMobileDevice()) {
+    return <MobileBlockedInterview onBack={setCurrentView} />;
+  }
 
   const next = partial => { setData(prev => ({ ...prev, ...partial })); setStep(s => s + 1); };
   const back = () => setStep(s => s - 1);

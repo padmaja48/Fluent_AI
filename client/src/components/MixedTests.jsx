@@ -9,7 +9,15 @@ import '../styles/Writing.css';
 import '../styles/Reading.css';
 import '../styles/TestGuard.css';
 
-export const MixedTests = ({ onTestActiveChange }) => {
+const DEFAULT_TEST_STRUCTURE = ['Listening', 'Speaking', 'Reading', 'Writing'].map((skill, index) => ({
+  skill,
+  order: index + 1,
+  minQuestions: 6,
+  maxQuestions: 6,
+  questionCount: 6,
+}));
+
+export const MixedTests = ({ onTestActiveChange, onGoToResults }) => {
   const [journey, setJourney] = useState(null);
   const [selectedLevel, setSelectedLevel] = useState('A1');
   const [selectedTestNumber, setSelectedTestNumber] = useState(1);
@@ -48,9 +56,10 @@ export const MixedTests = ({ onTestActiveChange }) => {
   const selectedLevelMeta = journey?.levels?.find((level) => level.id === selectedLevel);
   const selectedTest = selectedLevelMeta?.tests?.find((test) => test.testNumber === selectedTestNumber);
   const activeLevel = journey?.activeLevel || 'A1';
+  const testStructure = journey?.testStructure?.length ? journey.testStructure : DEFAULT_TEST_STRUCTURE;
 
   // ── Time limits per question skill (seconds) ───────────────────────
-  const TIME_LIMITS = { Listening: 60, Speaking: 90, Reading: 120, Writing: 300 };
+  const TIME_LIMITS = { Listening: 60, Speaking: 90, Reading: 120, Writing: 60 };
 
   // ── Fullscreen helpers ─────────────────────────────────────────────
   const enterFullscreen = () => {
@@ -226,11 +235,12 @@ export const MixedTests = ({ onTestActiveChange }) => {
       setQuestions([]);
       if (isCurrentlyFullscreen()) exitFullscreen();
       await loadJourney();
+      onGoToResults?.(response.data._id);
       if (reason) setError(reason);
     } catch (err) {
       console.error('Force finish failed:', err);
     }
-  }, [session, loadJourney]);
+  }, [session, loadJourney, onGoToResults]);
 
   const handleTimeExpired = useCallback(() => {
     // Auto-skip: submit blank answer and move on
@@ -446,6 +456,7 @@ export const MixedTests = ({ onTestActiveChange }) => {
       setQuestions([]);
       if (isCurrentlyFullscreen()) exitFullscreen();
       await loadJourney();
+      onGoToResults?.(response.data._id);
     } catch (err) {
       console.error('Failed to submit mixed test:', err);
       setError('Failed to submit mixed test.');
@@ -593,13 +604,16 @@ export const MixedTests = ({ onTestActiveChange }) => {
             </h3>
             <p>{selectedLevelMeta?.description}</p>
             {selectedLevelMeta?.locked && <p className="journey-lock-note">Complete earlier level tests to unlock this level.</p>}
-            {selectedTest?.status === 'Completed' && <p className="journey-lock-note">This test is complete. Select the next unlocked test.</p>}
+            {selectedTest?.status === 'Completed' && <p className="journey-lock-note">This test is complete. You can review the full answer analysis.</p>}
             {finishedSession && (
               <div className="test-complete-note">
-                <strong>Report sent</strong>
+                <strong>Analysis ready</strong>
                 <span>
-                  {finishedSession.testLabel || 'Mixed test'} finished with {Number(finishedSession.averageScore || 0).toFixed(1)}/100. A structured report was queued to your email.
+                  {finishedSession.testLabel || 'Mixed test'} finished with {Number(finishedSession.averageScore || 0).toFixed(1)}/100. Review every answer, correction, and skill area.
                 </span>
+                <button type="button" className="btn-secondary" onClick={() => onGoToResults?.(finishedSession._id)}>
+                  View analysis
+                </button>
               </div>
             )}
             {error && <p className="error">{error}</p>}
@@ -607,11 +621,42 @@ export const MixedTests = ({ onTestActiveChange }) => {
           <button
             type="button"
             className="btn-primary"
-            disabled={!selectedLevelMeta || selectedLevelMeta.locked || selectedTest?.locked || selectedTest?.status === 'Completed' || starting}
-            onClick={startMixedTest}
+            disabled={!selectedLevelMeta || selectedLevelMeta.locked || selectedTest?.locked || starting || (selectedTest?.status === 'Completed' && !selectedTest?.sessionId)}
+            onClick={() => {
+              if (selectedTest?.status === 'Completed') {
+                onGoToResults?.(selectedTest.sessionId);
+                return;
+              }
+              startMixedTest();
+            }}
           >
-            {starting ? 'Building fresh test...' : selectedTest?.status === 'In Progress' ? 'Continue Test' : 'Start Selected Test'}
+            {starting
+              ? 'Building fresh test...'
+              : selectedTest?.status === 'Completed'
+                ? 'View Analysis'
+                : selectedTest?.status === 'In Progress'
+                  ? 'Continue Test'
+                  : 'Start Selected Test'}
           </button>
+        </div>
+
+        <div className="test-structure-panel">
+          <div className="test-structure-header">
+            <div>
+              <span className="journey-kicker">Test Data Structure</span>
+              <h3>{journey?.minQuestions || journey?.questionCount || 24} min | {journey?.maxQuestions || journey?.questionCount || 24} max questions</h3>
+            </div>
+            <strong>Question slice {selectedTest?.questionRange?.min || 1}-{selectedTest?.questionRange?.max || journey?.questionsPerSkill || 6}</strong>
+          </div>
+          <div className="test-structure-grid">
+            {testStructure.map((section) => (
+              <div key={section.skill} className="test-structure-card">
+                <span>{section.order}</span>
+                <strong>{section.skill}</strong>
+                <small>{section.minQuestions} min | {section.maxQuestions} max</small>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="test-slot-panel">
@@ -648,6 +693,8 @@ export const MixedTests = ({ onTestActiveChange }) => {
   const answeredCount = Object.keys(answersByQuestion).length;
   const progressPercent = questions.length ? ((currentIndex + 1) / questions.length) * 100 : 0;
   const questionSkill = currentQuestion.skill || 'Practice';
+  const hasObjectiveWritingOptions =
+    questionSkill === 'Writing' && currentQuestion.options && currentQuestion.options.length > 0;
 
   const timerMins = timeLeft !== null ? Math.floor(timeLeft / 60) : null;
   const timerSecs = timeLeft !== null ? timeLeft % 60 : null;
@@ -783,58 +830,40 @@ export const MixedTests = ({ onTestActiveChange }) => {
         {questionSkill === 'Writing' && (
           <div className="writing-workspace">
             <div className="writing-criteria">
-              <strong>Evaluation criteria:</strong>
-              <span>{currentQuestion.audioPrompt || 'grammar, vocabulary, coherence, task achievement'}</span>
+              <strong>Focus:</strong>
+              <span>{currentQuestion.audioPrompt || 'sentence correction'}</span>
             </div>
             <div className="writing-hints">
               {(currentQuestion.hints || []).map((hint, idx) => (
                 <span key={idx} className="writing-hint">{hint}</span>
               ))}
             </div>
-            <textarea
-              className="writing-textarea"
-              placeholder="Write your response here…"
-              value={writingText}
-              onChange={(e) => setWritingText(e.target.value)}
-              disabled={Boolean(writingResult)}
-              rows={10}
-            />
-            <div className="writing-counter">
-              {writingText.trim().split(/\s+/).filter(Boolean).length} words
-            </div>
-            {writingResult && (
-              <div className="writing-result">
-                <div className="writing-score-row">
-                  <div className="writing-score-main">
-                    <strong>{writingResult.score}</strong>
-                    <span>/100</span>
-                  </div>
-                  <div className="writing-score-breakdown">
-                    <div><span>Grammar</span><strong>{writingResult.grammarScore}</strong></div>
-                    <div><span>Vocabulary</span><strong>{writingResult.vocabularyScore}</strong></div>
-                    <div><span>Coherence</span><strong>{writingResult.coherenceScore}</strong></div>
-                    <div><span>Task</span><strong>{writingResult.taskAchievementScore}</strong></div>
-                  </div>
-                </div>
-                <p className="writing-feedback">{writingResult.feedback}</p>
-                {writingResult.strengths?.length > 0 && (
-                  <div className="writing-detail strengths">
-                    <strong>Strengths</strong>
-                    <ul>{writingResult.strengths.map((s, i) => <li key={i}>{s}</li>)}</ul>
-                  </div>
-                )}
-                {writingResult.improvements?.length > 0 && (
-                  <div className="writing-detail improvements">
-                    <strong>Areas to improve</strong>
-                    <ul>{writingResult.improvements.map((s, i) => <li key={i}>{s}</li>)}</ul>
-                  </div>
-                )}
+            {currentQuestion.passageText && (
+              <div className="writing-source">
+                {(currentQuestion.passageText || '').split('\n').map((line, idx) => (
+                  <p key={idx}>{line}</p>
+                ))}
               </div>
+            )}
+            {!hasObjectiveWritingOptions && (
+              <>
+                <textarea
+                  className="writing-textarea"
+                  placeholder="Write your response here..."
+                  value={writingText}
+                  onChange={(e) => setWritingText(e.target.value)}
+                  disabled={Boolean(writingResult)}
+                  rows={10}
+                />
+                <div className="writing-counter">
+                  {writingText.trim().split(/\s+/).filter(Boolean).length} words
+                </div>
+              </>
             )}
           </div>
         )}
 
-        {questionSkill !== 'Speaking' && questionSkill !== 'Writing' && (
+        {questionSkill !== 'Speaking' && (questionSkill !== 'Writing' || hasObjectiveWritingOptions) && (
           <div className={questionSkill === 'Reading' ? 'reading-options-list' : 'options-list'}>
             {(currentQuestion.options || []).map((option, idx) => (
               <button
@@ -859,7 +888,11 @@ export const MixedTests = ({ onTestActiveChange }) => {
               Save Speaking Answer
             </button>
           ) : questionSkill === 'Writing' ? (
-            writingResult ? (
+            hasObjectiveWritingOptions ? (
+              <button onClick={submitObjectiveAnswer} disabled={!selectedAnswer} className="btn-primary">
+                Save Answer
+              </button>
+            ) : writingResult ? (
               <button onClick={submitWritingAnswer} className="btn-primary">
                 Save & Continue
               </button>

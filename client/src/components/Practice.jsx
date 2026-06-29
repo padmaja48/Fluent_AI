@@ -714,6 +714,8 @@ export const Practice = ({
 
   const currentQuestion = questions[currentIndex];
   if (!currentQuestion) return <div className="loading">Loading questions...</div>;
+  const hasObjectiveWritingOptions =
+    skill === 'Writing' && currentQuestion.options && currentQuestion.options.length > 0;
   const skillMode = {
     Listening: {
       label: 'Audio Lab',
@@ -728,8 +730,8 @@ export const Practice = ({
       description: 'Read the passage first, then answer using direct evidence from the text.',
     },
     Writing: {
-      label: 'Writing Studio',
-      description: 'Read the prompt carefully, write your response in the text area, then submit for AI evaluation.',
+      label: 'Sentence Correction',
+      description: 'Read the sentence, choose the best corrected version, and review the grammar explanation.',
     },
   }[skill];
 
@@ -956,59 +958,40 @@ export const Practice = ({
         {skill === 'Writing' && (
           <div className="writing-workspace">
             <div className="writing-criteria">
-              <strong>Evaluation criteria:</strong>
-              <span>{currentQuestion.audioPrompt || 'grammar, vocabulary, coherence, task achievement'}</span>
+              <strong>Focus:</strong>
+              <span>{currentQuestion.audioPrompt || 'sentence correction'}</span>
             </div>
             <div className="writing-hints">
               {(currentQuestion.hints || []).map((hint, idx) => (
                 <span key={idx} className="writing-hint">{hint}</span>
               ))}
             </div>
-            <textarea
-              className="writing-textarea"
-              placeholder="Write your response here…"
-              value={writingText}
-              onChange={(e) => setWritingText(e.target.value)}
-              disabled={Boolean(writingResult)}
-              rows={10}
-            />
-            <div className="writing-counter">
-              {writingText.trim().split(/\s+/).filter(Boolean).length} words
-            </div>
-
-            {writingResult && (
-              <div className="writing-result">
-                <div className="writing-score-row">
-                  <div className="writing-score-main">
-                    <strong>{writingResult.score}</strong>
-                    <span>/100</span>
-                  </div>
-                  <div className="writing-score-breakdown">
-                    <div><span>Grammar</span><strong>{writingResult.grammarScore}</strong></div>
-                    <div><span>Vocabulary</span><strong>{writingResult.vocabularyScore}</strong></div>
-                    <div><span>Coherence</span><strong>{writingResult.coherenceScore}</strong></div>
-                    <div><span>Task</span><strong>{writingResult.taskAchievementScore}</strong></div>
-                  </div>
-                </div>
-                <p className="writing-feedback">{writingResult.feedback}</p>
-                {writingResult.strengths?.length > 0 && (
-                  <div className="writing-detail strengths">
-                    <strong>Strengths</strong>
-                    <ul>{writingResult.strengths.map((s, i) => <li key={i}>{s}</li>)}</ul>
-                  </div>
-                )}
-                {writingResult.improvements?.length > 0 && (
-                  <div className="writing-detail improvements">
-                    <strong>Areas to improve</strong>
-                    <ul>{writingResult.improvements.map((s, i) => <li key={i}>{s}</li>)}</ul>
-                  </div>
-                )}
+            {currentQuestion.passageText && (
+              <div className="writing-source">
+                {(currentQuestion.passageText || '').split('\n').map((line, idx) => (
+                  <p key={idx}>{line}</p>
+                ))}
               </div>
+            )}
+            {!hasObjectiveWritingOptions && (
+              <>
+                <textarea
+                  className="writing-textarea"
+                  placeholder="Write your response here..."
+                  value={writingText}
+                  onChange={(e) => setWritingText(e.target.value)}
+                  disabled={Boolean(writingResult)}
+                  rows={10}
+                />
+                <div className="writing-counter">
+                  {writingText.trim().split(/\s+/).filter(Boolean).length} words
+                </div>
+              </>
             )}
           </div>
         )}
 
-        {skill !== 'Speaking' && skill !== 'Writing' && currentQuestion.options && currentQuestion.options.length > 0 && (
+        {skill !== 'Speaking' && (skill !== 'Writing' || hasObjectiveWritingOptions) && currentQuestion.options && currentQuestion.options.length > 0 && (
           <div className="options-list">
             {currentQuestion.options.map((option, idx) => (
               <button
@@ -1026,7 +1009,7 @@ export const Practice = ({
           </div>
         )}
 
-        {answerFeedback && skill !== 'Writing' && (
+        {answerFeedback && (
           <div className={`answer-feedback ${answerFeedback.isCorrect ? 'correct' : 'incorrect'}`}>
             <strong>{answerFeedback.isCorrect ? 'Correct evaluation' : 'Review this one'}</strong>
             <p>{answerFeedback.explanation}</p>
@@ -1049,7 +1032,7 @@ export const Practice = ({
             >
               Submit Speaking Answer
             </button>
-          ) : skill === 'Writing' ? (
+          ) : skill === 'Writing' && !hasObjectiveWritingOptions ? (
             writingResult ? (
               answerFeedback ? (
                 <button onClick={advanceQuestion} className="btn-primary">
