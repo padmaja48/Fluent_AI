@@ -23,6 +23,7 @@ export const createInterviewSchema = z.object({
     resumeId: z.string().optional(),
     resumeText: z.string().optional(),
     resumeUrl: z.string().url().optional(),
+    jobDescription: z.string().max(20000).optional(),
     roleLevel: z.enum(['Fresher', 'Mid', 'Senior', 'Lead']),
     roleDomain: z.string().min(2),
     interviewStyle: z.string().min(2).default('Mixed'),
@@ -175,6 +176,7 @@ export const startInterview = asyncHandler(async (req, res) => {
       interviewStyle: (interview as any).interviewType ?? interview.interviewStyle,
       duration: interview.duration,
       resumeText: interview.resumeText,
+      jobDescription: (interview as any).jobDescription,
       personaId: (interview as any).personaId,
       personaPersonality: getPersonaPersonality((interview as any).personaId),
       interviewType: (interview as any).interviewType,
@@ -190,6 +192,7 @@ export const startInterview = asyncHandler(async (req, res) => {
       generatedQuestions: generated.questions,
       targetCompany: (interview as any).targetCompany,
       duration: interview.duration,
+      prioritizeGenerated: Boolean((interview as any).jobDescription?.trim()),
     });
   }
 
@@ -366,8 +369,13 @@ export const transcribeRecording = asyncHandler(async (req, res) => {
     throw new AppError('Interview id is required', 400, 'INTERVIEW_ID_REQUIRED');
   }
 
-  await getInterviewForUser(interviewId, req.userId);
-  const transcription = await transcribeAudio(req.file);
+  const interview = await getInterviewForUser(interviewId, req.userId);
+  const transcription = await transcribeAudio(req.file, {
+    roleDomain: interview.roleDomain,
+    currentQuestion: interview.questions[interview.currentQuestionIndex]?.question,
+    jobDescription: (interview as any).jobDescription,
+    resumeSkills: (interview as any).resumeSkills ?? [],
+  });
   res.json(transcription);
 });
 

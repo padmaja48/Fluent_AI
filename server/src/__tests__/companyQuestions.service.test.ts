@@ -61,4 +61,24 @@ describe('company question composition', () => {
     expect(questions[1].question).toContain('Medtronic');
     expect(questions.some((item) => item.resumeReference?.includes('health'))).toBe(true);
   });
+
+  it('prioritizes generated JD-focused questions when requested', () => {
+    const questions = buildInterviewQuestionSet({
+      duration: 30,
+      targetCompany: 'tcs',
+      prioritizeGenerated: true,
+      generatedQuestions: [
+        {
+          question: 'How would you build a React and Node.js feature from this JD?',
+          expectedSignals: ['React', 'Node.js'],
+          questionType: 'technical',
+          resumeReference: 'JD technologies: React, Node.js',
+        },
+      ],
+    });
+
+    expect(questions[0].question).toBe('Introduce yourself.');
+    expect(questions[1].resumeReference).toContain('JD technologies');
+    expect(questions.some((item) => item.question.includes('TCS'))).toBe(true);
+  });
 });

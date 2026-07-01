@@ -14,6 +14,7 @@ type InterviewContext = {
   interviewStyle: string;
   duration: number;
   resumeText?: string;
+  jobDescription?: string;
   personaId?: string;
   personaPersonality?: string;
   interviewType?: string;
@@ -23,6 +24,13 @@ type InterviewContext = {
   resumeExperienceLevel?: string;
   resumeSuggestedQuestions?: string[];
   resumeSummary?: string;
+};
+
+type TranscriptionContext = {
+  roleDomain?: string;
+  currentQuestion?: string;
+  jobDescription?: string;
+  resumeSkills?: string[];
 };
 
 export type GeneratedQuestion = {
@@ -74,6 +82,92 @@ export type ResumeAnalysis = {
   suggestedQuestions: string[];
 };
 
+const TECHNOLOGY_PATTERNS: Array<[string, RegExp]> = [
+  ['JavaScript', /\b(?:javascript|js)\b/i],
+  ['TypeScript', /\b(?:typescript|ts)\b/i],
+  ['React', /\breact(?:\.js|js)?\b/i],
+  ['Angular', /\bangular\b/i],
+  ['Vue.js', /\bvue(?:\.js|js)?\b/i],
+  ['Node.js', /\bnode(?:\.js|js)?\b/i],
+  ['Express.js', /\bexpress(?:\.js|js)?\b/i],
+  ['Next.js', /\bnext(?:\.js|js)?\b/i],
+  ['Python', /\bpython\b/i],
+  ['Django', /\bdjango\b/i],
+  ['Flask', /\bflask\b/i],
+  ['FastAPI', /\bfastapi\b/i],
+  ['Java', /\bjava\b/i],
+  ['Spring Boot', /\bspring\s*boot\b/i],
+  ['C#', /\bc#\b/i],
+  ['.NET', /\b\.net\b/i],
+  ['C++', /\bc\+\+\b/i],
+  ['Go', /\bgolang\b|\bgo\b/i],
+  ['PHP', /\bphp\b/i],
+  ['Laravel', /\blaravel\b/i],
+  ['Ruby on Rails', /\bruby\s+on\s+rails\b|\brails\b/i],
+  ['SQL', /\bsql\b/i],
+  ['MySQL', /\bmysql\b/i],
+  ['PostgreSQL', /\bpostgres(?:ql)?\b/i],
+  ['MongoDB', /\bmongodb\b/i],
+  ['Redis', /\bredis\b/i],
+  ['Elasticsearch', /\belasticsearch\b/i],
+  ['GraphQL', /\bgraphql\b/i],
+  ['REST APIs', /\brest(?:ful)?\s+api?s?\b/i],
+  ['AWS', /\baws\b|\bamazon web services\b/i],
+  ['Azure', /\bazure\b/i],
+  ['Google Cloud', /\bgcp\b|\bgoogle cloud\b/i],
+  ['Docker', /\bdocker\b/i],
+  ['Kubernetes', /\bkubernetes\b|\bk8s\b/i],
+  ['Jenkins', /\bjenkins\b/i],
+  ['Git', /\bgit\b/i],
+  ['CI/CD', /\bci\/cd\b|\bcontinuous integration\b|\bcontinuous deployment\b/i],
+  ['Terraform', /\bterraform\b/i],
+  ['Kafka', /\bkafka\b/i],
+  ['RabbitMQ', /\brabbitmq\b/i],
+  ['Microservices', /\bmicroservices?\b/i],
+  ['System Design', /\bsystem design\b/i],
+  ['Machine Learning', /\bmachine learning\b|\bml\b/i],
+  ['TensorFlow', /\btensorflow\b/i],
+  ['PyTorch', /\bpytorch\b/i],
+  ['Pandas', /\bpandas\b/i],
+  ['NumPy', /\bnumpy\b/i],
+  ['Power BI', /\bpower\s*bi\b/i],
+  ['Tableau', /\btableau\b/i],
+  ['Selenium', /\bselenium\b/i],
+  ['Cypress', /\bcypress\b/i],
+  ['Jest', /\bjest\b/i],
+  ['Playwright', /\bplaywright\b/i],
+  ['Agile', /\bagile\b/i],
+  ['Scrum', /\bscrum\b/i],
+];
+
+export const extractJobDescriptionTechnologies = (jobDescription?: string) => {
+  const text = jobDescription?.trim();
+  if (!text) return [];
+
+  return TECHNOLOGY_PATTERNS
+    .filter(([, pattern]) => pattern.test(text))
+    .map(([name]) => name);
+};
+
+const buildTranscriptionPrompt = (context?: TranscriptionContext) => {
+  const terms = Array.from(
+    new Set([
+      ...(context?.resumeSkills ?? []),
+      ...extractJobDescriptionTechnologies(context?.jobDescription),
+    ].map((term) => term.trim()).filter(Boolean)),
+  ).slice(0, 40);
+
+  const parts = [
+    'The audio is a candidate answering a mock technical interview question in English.',
+    context?.roleDomain ? `Role/domain: ${context.roleDomain}.` : '',
+    context?.currentQuestion ? `Current question: ${context.currentQuestion}` : '',
+    terms.length ? `Important technical words to recognize exactly: ${terms.join(', ')}.` : '',
+    'Transcribe technical terms, product names, acronyms, and programming language names accurately.',
+  ].filter(Boolean);
+
+  return parts.join('\n').slice(0, 1800);
+};
+
 const extractJson = <T>(text: string): T => {
   const cleaned = text.replace(/^```json/i, '').replace(/^```/, '').replace(/```$/, '').trim();
   return JSON.parse(cleaned) as T;
@@ -116,7 +210,7 @@ const generateJson = async <T>(prompt: string, fallback: T): Promise<T> => {
   return fallback;
 };
 
-export const transcribeAudio = async (file: Express.Multer.File) => {
+export const transcribeAudio = async (file: Express.Multer.File, context?: TranscriptionContext) => {
   const client = env.AI_PROVIDER === 'groq' ? groq : openai;
   const model = env.AI_PROVIDER === 'groq' ? env.GROQ_WHISPER_MODEL : env.WHISPER_MODEL;
 
@@ -128,14 +222,19 @@ export const transcribeAudio = async (file: Express.Multer.File) => {
   }
 
   const uploadedFile = await toFile(file.buffer, file.originalname, { type: file.mimetype });
+  const prompt = buildTranscriptionPrompt(context);
   const response = await client.audio.transcriptions.create({
     file: uploadedFile,
     model,
-  });
+    language: 'en',
+    prompt,
+    temperature: 0,
+  } as any);
 
   return {
     text: response.text,
     model,
+    promptApplied: Boolean(prompt),
   };
 };
 
@@ -229,6 +328,19 @@ ${(context.resumeSuggestedQuestions ?? []).map((q, i) => `${i + 1}. ${q}`).join(
     resumeBlock = `\nRole domain: ${context.roleDomain}\nRole level: ${context.roleLevel}\n`;
   }
 
+  const jdTechnologies = extractJobDescriptionTechnologies(context.jobDescription);
+  const jdTechnologyTargetCount = jdTechnologies.length
+    ? Math.min(questionCount - 1, Math.max(2, Math.ceil(questionCount * 0.7)))
+    : 0;
+
+  const jobDescriptionBlock = context.jobDescription?.trim()
+    ? `
+JOB DESCRIPTION — align the interview with these responsibilities and requirements:
+${context.jobDescription.trim()}
+${jdTechnologies.length ? `\nDETECTED JD TECHNOLOGIES: ${jdTechnologies.join(', ')}` : ''}
+`
+    : '';
+
   const styleInstruction =
     context.interviewType === 'Behavioural'
       ? 'ALL questions must use the STAR method (Situation / Task / Action / Result). Start each with "Tell me about a time when..." or "Describe a situation where..."'
@@ -250,15 +362,18 @@ You are generating ${questionCount} interview questions for a LIVE interview ses
 
 ${personaBlock}
 ${resumeBlock}
+${jobDescriptionBlock}
 
 INTERVIEW TYPE: ${context.interviewType ?? 'Mixed'} | ROLE: ${context.roleDomain} ${context.roleLevel} | COMPLEXITY: ${context.complexity ?? 'Intermediate'} | TARGET COMPANY: ${context.targetCompany ?? 'None'}
 STYLE RULE: ${styleInstruction}
 COMPLEXITY RULE: ${complexityNote}
 COMPANY RULE: If a target company is provided, align follow-up questions with that company's likely interview style, service/product context, and role expectations while still grounding questions in the resume.
+JD RULE: If a job description is provided, prioritize overlap between the candidate's resume and the JD's required skills, responsibilities, seniority, domain, and success criteria.
+JD TECHNOLOGY RULE: If DETECTED JD TECHNOLOGIES is present, at least ${jdTechnologyTargetCount || 'most'} non-introduction questions MUST directly test those technologies. Name the technology in the question or resumeReference. If the resume does not mention a JD technology, ask a fundamentals, project-transfer, or scenario question for that JD technology instead of ignoring it.
 
 ABSOLUTE RULES — violating any rule makes the output unusable:
 1. Generate EXACTLY ${questionCount} questions — no more, no fewer
-2. Every question MUST target something SPECIFIC from this resume (a named skill, project, technology, or role). No generic or copy-paste questions.
+2. Every question MUST target something SPECIFIC from this resume or the provided job description. Prefer questions that connect both. No generic or copy-paste questions.
 3. NO two questions may be semantically similar or ask about the same topic
 4. Questions MUST be varied — different skills, different question types, different depths
 5. Do NOT copy the suggested question angles verbatim — rephrase and combine them creatively

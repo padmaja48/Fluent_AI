@@ -509,6 +509,12 @@
 
 .iv-input:focus { border-color: var(--accent); }
 
+.iv-textarea {
+  min-height: 150px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
 .iv-toggle-group {
   display: flex;
   flex-wrap: wrap;

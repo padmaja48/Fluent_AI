@@ -62,7 +62,7 @@ const envSchema = z.object({
   GROQ_API_KEY: optionalString,
   GROQ_BASE_URL: defaultedString('https://api.groq.com/openai/v1'),
   GROQ_MODEL: defaultedString('llama-3.3-70b-versatile'),
-  GROQ_WHISPER_MODEL: defaultedString('whisper-large-v3-turbo'),
+  GROQ_WHISPER_MODEL: defaultedString('whisper-large-v3'),
   ELEVENLABS_API_KEY: optionalString,
   ELEVENLABS_VOICE_ID: defaultedString('your-default-voice-id'),
   ELEVENLABS_MODEL_ID: defaultedString('eleven_multilingual_v2'),

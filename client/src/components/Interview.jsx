@@ -341,6 +341,7 @@ function ConfigStep({ persona, onNext, onBack }) {
   const [config, setConfig] = useState({
     roleLevel: 'Mid',
     roleDomain: 'Software Engineering',
+    jobDescription: '',
     interviewType: 'Mixed',
     complexity: 'Intermediate',
     duration: 30,
@@ -367,6 +368,14 @@ function ConfigStep({ persona, onNext, onBack }) {
         <input className="iv-input" value={config.roleDomain}
           onChange={e => toggle('roleDomain', e.target.value)}
           placeholder="e.g. Backend Engineering, Product Management" />
+        <label className="iv-label">Job Description</label>
+        <textarea
+          className="iv-input iv-textarea"
+          value={config.jobDescription}
+          onChange={e => toggle('jobDescription', e.target.value)}
+          placeholder="Paste the job description here so questions can match the role requirements"
+          rows={7}
+        />
         <label className="iv-label">Target Company</label>
         <select
           className="iv-input"
@@ -938,7 +947,15 @@ function LiveSession({ interview, persona, onComplete }) {
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+          sampleRate: 48000,
+        },
+      });
       const { recorder, mimeType } = createAudioRecorder(stream);
       answerChunksRef.current = [];
       answerStreamRef.current = stream;
@@ -1269,6 +1286,7 @@ export const Interview = ({ setCurrentView }) => {
         personaId:       data.persona?.id,
         interviewType:   data.config?.interviewType,
         complexity:      data.config?.complexity,
+        jobDescription:  data.config?.jobDescription?.trim() || undefined,
         targetCompany:   data.config?.targetCompany || undefined,
       };
       const res = await interviewAPI.createInterview(payload);

@@ -22,7 +22,10 @@ export const createAudioRecorder = (stream) => {
   }
 
   const mimeType = getSupportedAudioMimeType();
-  const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  const recorder = new MediaRecorder(stream, {
+    ...(mimeType ? { mimeType } : {}),
+    audioBitsPerSecond: 128000,
+  });
 
   return { recorder, mimeType };
 };

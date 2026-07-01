@@ -24,6 +24,7 @@ export interface IInterview extends Document {
   resumeId?: mongoose.Types.ObjectId;
   resumeUrl?: string;
   resumeText?: string;
+  jobDescription?: string;
   roleLevel: 'Fresher' | 'Mid' | 'Senior' | 'Lead';
   roleDomain: string;
   interviewStyle: string;
@@ -77,6 +78,7 @@ const interviewSchema = new Schema<IInterview>(
     resumeId: { type: Schema.Types.ObjectId, ref: 'Resume' },
     resumeUrl: String,
     resumeText: String,
+    jobDescription: { type: String, trim: true },
     roleLevel: { type: String, enum: ['Fresher', 'Mid', 'Senior', 'Lead'], required: true },
     roleDomain: { type: String, required: true },
     interviewStyle: { type: String, default: 'Mixed' },

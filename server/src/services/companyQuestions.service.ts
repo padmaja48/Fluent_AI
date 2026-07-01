@@ -825,15 +825,20 @@ export const buildInterviewQuestionSet = ({
   generatedQuestions,
   targetCompany,
   duration,
+  prioritizeGenerated = false,
 }: {
   generatedQuestions: GeneratedQuestion[];
   targetCompany?: string;
   duration: number;
+  prioritizeGenerated?: boolean;
 }) => {
   const company = normalizeCompany(targetCompany);
   const companyQuestions = company ? getCompanyBank(company) : [];
   const targetCount = getInterviewQuestionCount(duration);
   const generatedWithoutIntro = generatedQuestions.filter((question) => !isIntroQuestion(question));
+  const orderedQuestions = prioritizeGenerated
+    ? [INTRO_QUESTION, ...generatedWithoutIntro, ...companyQuestions]
+    : [INTRO_QUESTION, ...companyQuestions, ...generatedWithoutIntro];
 
-  return uniqueByQuestion([INTRO_QUESTION, ...companyQuestions, ...generatedWithoutIntro]).slice(0, targetCount);
+  return uniqueByQuestion(orderedQuestions).slice(0, targetCount);
 };
