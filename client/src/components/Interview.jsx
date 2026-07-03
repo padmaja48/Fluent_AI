@@ -294,8 +294,6 @@ function PersonaStep({ onNext, onBack }) {
             </div>
             <div className="iv-persona-info">
               <h3 className="iv-persona-name">{p.name}</h3>
-              <p className="iv-persona-title">{p.title} · {p.company}</p>
-              <p className="iv-persona-personality">{p.personality}</p>
             </div>
 
             {/* Voice preview button */}
