@@ -3,8 +3,7 @@ import { interviewAPI, resumeAPI } from '../services/api';
 import { PERSONAS } from '../lib/personas';
 import { COMPANY_OPTIONS } from '../lib/companyOptions';
 import { createAudioRecorder, getRecordedAudioFileName } from '../lib/audioRecording';
-import { getStoredTtsVoiceSettings, playProcessedTtsBlob, stopTtsAudio } from '../lib/ttsAudio';
-import { TtsVoiceSettingsPanel, useTtsVoiceSettings } from './TtsVoiceSelector';
+import { playProcessedTtsBlob, stopTtsAudio } from '../lib/ttsAudio';
 import { AvatarPortrait } from './interview/AvatarPortrait';
 import VoiceIndicator from './interview/VoiceIndicator';
 import '../styles/Interview.css';
@@ -14,6 +13,12 @@ const MAX_VIOLATIONS = 3;
 const PERSON_CHECK_INTERVAL_MS = 1500;
 const PERSON_MISSING_GRACE_MS = 5000;
 const ANSWER_SILENCE_PROMPT_MS = 12000;
+const INTERVIEW_TTS_PLAYBACK_SETTINGS = {
+  volume: 1.35,
+  speechRate: 1,
+  pitch: 0,
+  voiceStyle: 'default',
+};
 
 const isLikelyMobileDevice = () =>
   typeof window !== 'undefined' &&
@@ -144,7 +149,7 @@ function MobileBlockedInterview({ onBack }) {
 
 const playAudioBlob = (blob, options = {}) =>
   playProcessedTtsBlob(blob, {
-    settings: options.settings ?? getStoredTtsVoiceSettings(),
+    settings: options.settings ?? INTERVIEW_TTS_PLAYBACK_SETTINGS,
     diagnosticsLabel: options.diagnosticsLabel ?? 'interview',
     ...options,
   });
@@ -325,7 +330,7 @@ function PersonaStep({ onNext, onBack }) {
 /* ─────────────────────────────────────────────────────────────────
    Step 3: Interview Configuration
 ───────────────────────────────────────────────────────────────── */
-function ConfigStep({ persona, onNext, onBack, voiceSettings, onVoiceSettingsChange }) {
+function ConfigStep({ persona, onNext, onBack }) {
   const [config, setConfig] = useState({
     roleLevel: 'Mid',
     roleDomain: 'Software Engineering',
@@ -376,12 +381,6 @@ function ConfigStep({ persona, onNext, onBack, voiceSettings, onVoiceSettingsCha
             </option>
           ))}
         </select>
-        <label className="iv-label">Interviewer Voice</label>
-        <TtsVoiceSettingsPanel
-          value={voiceSettings}
-          onChange={onVoiceSettingsChange}
-          onDiagnostics={(diagnostics) => console.info('[Interview test voice]', diagnostics)}
-        />
         <label className="iv-label">Experience Level</label>
         {opts('roleLevel', ['Fresher', 'Mid', 'Senior', 'Lead'])}
         <label className="iv-label">Interview Type</label>
@@ -539,7 +538,7 @@ function SystemCheckStep({ onStart, onBack, loading }) {
 /* ─────────────────────────────────────────────────────────────────
    Live Session — strict proctoring + audio
 ───────────────────────────────────────────────────────────────── */
-function LiveSession({ interview, persona, voiceSettings, onComplete }) {
+function LiveSession({ interview, persona, onComplete }) {
   const [questions, setQuestions] = useState(interview.questions || []);
   const [currentIdx, setCurrentIdx] = useState(interview.currentQuestionIndex || 0);
   const [totalQuestions, setTotalQuestions] = useState(interview.totalPlannedQuestions || interview.questions?.length || 0);
@@ -873,7 +872,7 @@ function LiveSession({ interview, persona, voiceSettings, onComplete }) {
 
     try {
       const audio = await playAudioBlob(blob, {
-        settings: voiceSettings,
+        settings: INTERVIEW_TTS_PLAYBACK_SETTINGS,
         diagnosticsLabel: 'interview-question',
         onDiagnostics: setVoiceDiagnostics,
         onPlay: (audioElement) => {
@@ -906,7 +905,7 @@ function LiveSession({ interview, persona, voiceSettings, onComplete }) {
       ttsSourceRef.current = null;
       return false;
     }
-  }, [voiceSettings]);
+  }, []);
 
   /* ── Speak question ─────────────────────────────── */
   const speakQuestion = useCallback(async (questionText, addToTranscript = true) => {
@@ -919,12 +918,8 @@ function LiveSession({ interview, persona, voiceSettings, onComplete }) {
       });
     }
     try {
-      const selectedStyle = voiceSettings?.voiceStyle && voiceSettings.voiceStyle !== 'default'
-        ? voiceSettings.voiceStyle
-        : persona?.voiceStyle || 'default';
-      const res = await interviewAPI.speak(interview._id, questionText, selectedStyle, {
-        pace: voiceSettings?.speechRate || 1,
-      });
+      const voiceStyle = persona?.voiceStyle || 'default';
+      const res = await interviewAPI.speak(interview._id, questionText, voiceStyle);
       if (sessionClosedRef.current) return;
       const played = await playSpeechBlob(res.data);
       if (!played && !sessionClosedRef.current) {
@@ -936,7 +931,7 @@ function LiveSession({ interview, persona, voiceSettings, onComplete }) {
         setTranscript(prev => [...prev, { role: 'system', text: message }]);
       }
     }
-  }, [interview._id, persona, playSpeechBlob, voiceSettings]);
+  }, [interview._id, persona, playSpeechBlob]);
 
   /* ── Speak first question on mount ─────────────── */
   useEffect(() => {
@@ -1322,7 +1317,6 @@ export const Interview = ({ setCurrentView }) => {
   const [interview, setInterview] = useState(null);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
-  const [voiceSettings, setVoiceSettings] = useTtsVoiceSettings();
   const persona = data.persona;
 
   if (isLikelyMobileDevice()) {
@@ -1364,7 +1358,6 @@ export const Interview = ({ setCurrentView }) => {
       <LiveSession
         interview={interview}
         persona={persona}
-        voiceSettings={voiceSettings}
         onComplete={() => setCurrentView?.('results')}
       />
     );
@@ -1389,8 +1382,6 @@ export const Interview = ({ setCurrentView }) => {
           persona={persona}
           onNext={next}
           onBack={back}
-          voiceSettings={voiceSettings}
-          onVoiceSettingsChange={setVoiceSettings}
         />
       )}
       {step === 3 && <SystemCheckStep onStart={handleStart} onBack={back} loading={loading} />}

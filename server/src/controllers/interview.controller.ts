@@ -424,9 +424,8 @@ export const synthesizeQuestion = asyncHandler(async (req, res) => {
 
   const interview = await getInterviewForUser(interviewId, req.userId);
   const personaId = (interview as any).personaId as string | undefined;
-  const requestedVoiceStyle = req.body.voiceStyle !== 'default' ? req.body.voiceStyle : undefined;
-  const voiceStyle = requestedVoiceStyle ?? (personaId ? getPersonaVoiceStyle(personaId) : req.body.voiceStyle);
-  const audio = await synthesizeSpeech(req.body.text, voiceStyle, requestedVoiceStyle ? undefined : personaId, undefined, {
+  const voiceStyle = personaId ? getPersonaVoiceStyle(personaId) : req.body.voiceStyle;
+  const audio = await synthesizeSpeech(req.body.text, voiceStyle, personaId, undefined, {
     context: 'interview',
     pace: req.body.pace ?? 1.0,
     voiceId: req.body.voiceId,
