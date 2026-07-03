@@ -1,4 +1,5 @@
 import React from 'react';
+import { jsPDF } from 'jspdf';
 
 /* ── Helpers ─────────────────────────────────────────────────── */
 const scoreToDeg = (s) => `${(Math.min(100, Math.max(0, s || 0)) / 100 * 360).toFixed(1)}deg`;
@@ -14,6 +15,15 @@ const PERSONA_NAMES = {
 };
 
 const getPersona = (id) => PERSONA_NAMES[id] || { name: id || 'Interviewer', title: 'AI Interviewer' };
+
+const cleanText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
+
+const safeFilePart = (value) =>
+  cleanText(value || 'interview-report')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 70) || 'interview-report';
 
 /* Score color based on value */
 const scoreColor = (v) => {
@@ -37,6 +47,98 @@ const ScoreBar = ({ label, value, fillClass }) => (
     </span>
   </div>
 );
+
+const downloadInterviewPdf = ({ selectedInterview, report, persona, qa }) => {
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const page = {
+    width: doc.internal.pageSize.getWidth(),
+    height: doc.internal.pageSize.getHeight(),
+    margin: 48,
+  };
+  const contentWidth = page.width - page.margin * 2;
+  let y = page.margin;
+
+  const addPageIfNeeded = (needed = 32) => {
+    if (y + needed <= page.height - page.margin) return;
+    doc.addPage();
+    y = page.margin;
+  };
+
+  const addText = (text, { size = 10, style = 'normal', color = '#111827', gap = 10, indent = 0 } = {}) => {
+    const lines = doc.splitTextToSize(cleanText(text) || '-', contentWidth - indent);
+    const lineHeight = size * 1.35;
+    addPageIfNeeded(lines.length * lineHeight + gap);
+    doc.setFont('helvetica', style);
+    doc.setFontSize(size);
+    doc.setTextColor(color);
+    doc.text(lines, page.margin + indent, y);
+    y += lines.length * lineHeight + gap;
+  };
+
+  const addHeading = (text) => {
+    y += y === page.margin ? 0 : 8;
+    addText(text, { size: 14, style: 'bold', color: '#111827', gap: 12 });
+  };
+
+  const addList = (items) => {
+    const values = (items || []).filter(Boolean);
+    if (!values.length) {
+      addText('- None recorded.', { indent: 10 });
+      return;
+    }
+    values.forEach((item) => addText(`- ${item}`, { indent: 10, gap: 6 }));
+    y += 4;
+  };
+
+  doc.setFillColor('#4f46e5');
+  doc.rect(0, 0, page.width, 90, 'F');
+  doc.setTextColor('#ffffff');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(20);
+  doc.text('AI Mock Interview Report', page.margin, 38);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`${persona.name} - ${selectedInterview.roleDomain || 'Interview'} - ${fmtDt(selectedInterview.completedAt || selectedInterview.createdAt)}`, page.margin, 62);
+  y = 118;
+
+  addHeading('Overview');
+  addText(`Overall Score: ${report.overallScore != null ? Number(report.overallScore).toFixed(1) : '-'} / 100`);
+  addText(`Interview: ${selectedInterview.interviewType || selectedInterview.interviewStyle || '-'} | Duration: ${selectedInterview.duration || '-'} min | Level: ${selectedInterview.roleLevel || '-'}`);
+  addText(`Scores: Communication ${report.communicationScore ?? '-'}, Technical ${report.technicalScore ?? '-'}, Behavioural ${report.behavioralScore ?? '-'}`);
+
+  if (report.transcriptSummary) {
+    addHeading('AI Summary');
+    addText(report.transcriptSummary);
+  }
+
+  addHeading('Strengths');
+  addList(report.strengths);
+
+  addHeading('Areas to Improve');
+  addList(report.improvements);
+
+  if ((report.recommendations || []).length > 0) {
+    addHeading('Recommendations');
+    addList(report.recommendations);
+  }
+
+  addHeading('Question Timeline and Feedback');
+  qa.forEach((item, idx) => {
+    addPageIfNeeded(90);
+    doc.setDrawColor('#e5e7eb');
+    doc.line(page.margin, y, page.width - page.margin, y);
+    y += 18;
+    addText(`Q${idx + 1}${item.score != null ? ` - Score: ${item.score}/100` : ''}`, { size: 11, style: 'bold', gap: 8 });
+    addText(`Question: ${item.question}`, { gap: 8 });
+    addText(`Answer: ${item.answer || item.userAnswer || 'No answer recorded'}`, { gap: 8 });
+    if (item.feedback) addText(`Feedback: ${item.feedback}`, { gap: 8 });
+    if (item.whatWorked) addText(`What worked: ${item.whatWorked}`, { gap: 8 });
+    if (item.whatToImprove) addText(`Improve: ${item.whatToImprove}`, { gap: 12 });
+  });
+
+  const fileName = `${safeFilePart(selectedInterview.roleDomain)}-${safeFilePart(persona.name)}-report.pdf`;
+  doc.save(fileName);
+};
 
 /* ── Main Panel ──────────────────────────────────────────────── */
 export const InterviewReportPanel = ({ interviews, selectedInterview, report, onSelect, loading }) => {
@@ -135,6 +237,13 @@ export const InterviewReportPanel = ({ interviews, selectedInterview, report, on
                       <span className="results-badge">{selectedInterview.complexity}</span>
                     )}
                   </div>
+                  <button
+                    type="button"
+                    className="report-download-btn"
+                    onClick={() => downloadInterviewPdf({ selectedInterview, report, persona: p, qa })}
+                  >
+                    Download PDF
+                  </button>
                 </div>
               </div>
 

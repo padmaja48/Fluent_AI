@@ -791,6 +791,24 @@
   font-size: 12px;
 }
 
+.report-download-btn {
+  align-self: flex-start;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  padding: 9px 14px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.report-download-btn:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
 /* Q&A question card */
 .report-qa-card {
   background: var(--bg);
