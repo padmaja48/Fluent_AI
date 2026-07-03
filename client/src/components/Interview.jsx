@@ -3,7 +3,8 @@ import { interviewAPI, resumeAPI } from '../services/api';
 import { PERSONAS } from '../lib/personas';
 import { COMPANY_OPTIONS } from '../lib/companyOptions';
 import { createAudioRecorder, getRecordedAudioFileName } from '../lib/audioRecording';
-import { stopTtsAudio } from '../lib/ttsAudio';
+import { getStoredTtsVoiceSettings, playProcessedTtsBlob, stopTtsAudio } from '../lib/ttsAudio';
+import { TtsVoiceSettingsPanel, useTtsVoiceSettings } from './TtsVoiceSelector';
 import { AvatarPortrait } from './interview/AvatarPortrait';
 import VoiceIndicator from './interview/VoiceIndicator';
 import '../styles/Interview.css';
@@ -12,6 +13,7 @@ const STEPS = ['Resume', 'Persona', 'Config', 'System Check'];
 const MAX_VIOLATIONS = 3;
 const PERSON_CHECK_INTERVAL_MS = 1500;
 const PERSON_MISSING_GRACE_MS = 5000;
+const ANSWER_SILENCE_PROMPT_MS = 12000;
 
 const isLikelyMobileDevice = () =>
   typeof window !== 'undefined' &&
@@ -140,26 +142,12 @@ function MobileBlockedInterview({ onBack }) {
   );
 }
 
-function playAudioBlob(blob, { onPlay, onEnded, onError } = {}) {
-  const url = URL.createObjectURL(blob);
-  const audio = new Audio(url);
-  let cleaned = false;
-  audio._ttsCleanup = () => {
-    if (cleaned) return;
-    cleaned = true;
-    URL.revokeObjectURL(url);
-  };
-  audio.onplay = () => onPlay?.(audio);
-  audio.onended = () => {
-    audio._ttsCleanup();
-    onEnded?.();
-  };
-  audio.onerror = () => {
-    audio._ttsCleanup();
-    onError?.();
-  };
-  return audio.play().then(() => audio);
-}
+const playAudioBlob = (blob, options = {}) =>
+  playProcessedTtsBlob(blob, {
+    settings: options.settings ?? getStoredTtsVoiceSettings(),
+    diagnosticsLabel: options.diagnosticsLabel ?? 'interview',
+    ...options,
+  });
 
 const ttsErrorMessage = async (_error, fallback) => fallback;
 
@@ -337,7 +325,7 @@ function PersonaStep({ onNext, onBack }) {
 /* ─────────────────────────────────────────────────────────────────
    Step 3: Interview Configuration
 ───────────────────────────────────────────────────────────────── */
-function ConfigStep({ persona, onNext, onBack }) {
+function ConfigStep({ persona, onNext, onBack, voiceSettings, onVoiceSettingsChange }) {
   const [config, setConfig] = useState({
     roleLevel: 'Mid',
     roleDomain: 'Software Engineering',
@@ -388,6 +376,12 @@ function ConfigStep({ persona, onNext, onBack }) {
             </option>
           ))}
         </select>
+        <label className="iv-label">Interviewer Voice</label>
+        <TtsVoiceSettingsPanel
+          value={voiceSettings}
+          onChange={onVoiceSettingsChange}
+          onDiagnostics={(diagnostics) => console.info('[Interview test voice]', diagnostics)}
+        />
         <label className="iv-label">Experience Level</label>
         {opts('roleLevel', ['Fresher', 'Mid', 'Senior', 'Lead'])}
         <label className="iv-label">Interview Type</label>
@@ -545,9 +539,10 @@ function SystemCheckStep({ onStart, onBack, loading }) {
 /* ─────────────────────────────────────────────────────────────────
    Live Session — strict proctoring + audio
 ───────────────────────────────────────────────────────────────── */
-function LiveSession({ interview, persona, onComplete }) {
-  const [questions]      = useState(interview.questions || []);
+function LiveSession({ interview, persona, voiceSettings, onComplete }) {
+  const [questions, setQuestions] = useState(interview.questions || []);
   const [currentIdx, setCurrentIdx] = useState(interview.currentQuestionIndex || 0);
+  const [totalQuestions, setTotalQuestions] = useState(interview.totalPlannedQuestions || interview.questions?.length || 0);
   const [transcript, setTranscript] = useState([]);
   const [isSpeaking, setIsSpeaking]   = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -562,6 +557,7 @@ function LiveSession({ interview, persona, onComplete }) {
   const [isProcessingAnswer, setIsProcessingAnswer] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [personDetected, setPersonDetected] = useState(false);
+  const [voiceDiagnostics, setVoiceDiagnostics] = useState(null);
 
   const videoRef        = useRef(null);
   const personCanvasRef = useRef(null);
@@ -581,9 +577,16 @@ function LiveSession({ interview, persona, onComplete }) {
   const transcriptRef       = useRef([]);
   const personMissingSinceRef = useRef(null);
   const lastCameraViolationAtRef = useRef(0);
+  const lastAnswerActivityAtRef = useRef(Date.now());
+  const silencePromptedRef = useRef(false);
 
   // Keep transcriptRef in sync
   useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
+
+  useEffect(() => {
+    lastAnswerActivityAtRef.current = Date.now();
+    silencePromptedRef.current = false;
+  }, [currentIdx]);
 
   /* ── Stop listening ─────────────────────────────── */
   const stopListening = useCallback(() => {
@@ -870,6 +873,9 @@ function LiveSession({ interview, persona, onComplete }) {
 
     try {
       const audio = await playAudioBlob(blob, {
+        settings: voiceSettings,
+        diagnosticsLabel: 'interview-question',
+        onDiagnostics: setVoiceDiagnostics,
         onPlay: (audioElement) => {
           ttsSourceRef.current = audioElement;
           setIsSpeaking(true);
@@ -900,7 +906,7 @@ function LiveSession({ interview, persona, onComplete }) {
       ttsSourceRef.current = null;
       return false;
     }
-  }, []);
+  }, [voiceSettings]);
 
   /* ── Speak question ─────────────────────────────── */
   const speakQuestion = useCallback(async (questionText, addToTranscript = true) => {
@@ -913,8 +919,12 @@ function LiveSession({ interview, persona, onComplete }) {
       });
     }
     try {
-      const voiceStyle = persona?.voiceStyle || 'default';
-      const res = await interviewAPI.speak(interview._id, questionText, voiceStyle);
+      const selectedStyle = voiceSettings?.voiceStyle && voiceSettings.voiceStyle !== 'default'
+        ? voiceSettings.voiceStyle
+        : persona?.voiceStyle || 'default';
+      const res = await interviewAPI.speak(interview._id, questionText, selectedStyle, {
+        pace: voiceSettings?.speechRate || 1,
+      });
       if (sessionClosedRef.current) return;
       const played = await playSpeechBlob(res.data);
       if (!played && !sessionClosedRef.current) {
@@ -926,7 +936,7 @@ function LiveSession({ interview, persona, onComplete }) {
         setTranscript(prev => [...prev, { role: 'system', text: message }]);
       }
     }
-  }, [interview._id, persona, playSpeechBlob]);
+  }, [interview._id, persona, playSpeechBlob, voiceSettings]);
 
   /* ── Speak first question on mount ─────────────── */
   useEffect(() => {
@@ -937,8 +947,27 @@ function LiveSession({ interview, persona, onComplete }) {
   const addCandidateTranscript = useCallback((text) => {
     const clean = String(text || '').trim();
     if (!clean) return;
+    lastAnswerActivityAtRef.current = Date.now();
+    silencePromptedRef.current = false;
     setTranscript(prev => [...prev, { role: 'candidate', text: clean }]);
   }, []);
+
+  useEffect(() => {
+    if (!isListening || ending || isProcessingAnswer) return undefined;
+
+    const silenceTimer = setInterval(() => {
+      if (silencePromptedRef.current) return;
+      if (Date.now() - lastAnswerActivityAtRef.current < ANSWER_SILENCE_PROMPT_MS) return;
+
+      silencePromptedRef.current = true;
+      setTranscript(prev => [...prev, {
+        role: 'system',
+        text: 'Take your time. Would you like to add anything else?',
+      }]);
+    }, 1000);
+
+    return () => clearInterval(silenceTimer);
+  }, [ending, isListening, isProcessingAnswer]);
 
   const startRecordedAnswer = async () => {
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
@@ -973,6 +1002,8 @@ function LiveSession({ interview, persona, onComplete }) {
       };
 
       recorder.start(250);
+      lastAnswerActivityAtRef.current = Date.now();
+      silencePromptedRef.current = false;
       setIsListening(true);
       setInterimText('Recording your answer...');
       return true;
@@ -1004,6 +1035,7 @@ function LiveSession({ interview, persona, onComplete }) {
         if (e.results[i].isFinal) final += e.results[i][0].transcript;
         else interim += e.results[i][0].transcript;
       }
+      if (interim || final) lastAnswerActivityAtRef.current = Date.now();
       setInterimText(interim);
       if (final) { setInterimText(''); addCandidateTranscript(final); }
     };
@@ -1021,6 +1053,8 @@ function LiveSession({ interview, persona, onComplete }) {
     }
     recognitionRef.current = rec;
     answerCaptureModeRef.current = 'speech';
+    lastAnswerActivityAtRef.current = Date.now();
+    silencePromptedRef.current = false;
     setIsListening(true);
   };
 
@@ -1113,16 +1147,34 @@ function LiveSession({ interview, persona, onComplete }) {
   const submitAnswer = async (answerText, skipped = false) => {
     if (sessionClosedRef.current || ending) return;
     if (!answerText && !skipped) return;
+    setIsProcessingAnswer(true);
     try {
       const q = questions[currentIdx]?.question || '';
-      await interviewAPI.submitAnswer(interview._id, q, answerText || '(skipped)');
-    } catch {}
-    const next = currentIdx + 1;
-    if (next < questions.length) {
-      setCurrentIdx(next);
-      speakQuestion(questions[next].question);
-    } else {
-      finishSession();
+      const response = await interviewAPI.submitAnswer(interview._id, q, answerText || '(skipped)');
+      const state = response.data?.state;
+      const nextQuestions = state?.questions || response.data?.interview?.questions;
+      const nextIndex = Number.isInteger(state?.currentQuestionIndex) ? state.currentQuestionIndex : currentIdx + 1;
+      const nextQuestion = state?.currentQuestion || nextQuestions?.[nextIndex];
+
+      if (Array.isArray(nextQuestions)) setQuestions(nextQuestions);
+      if (state?.totalQuestions) setTotalQuestions(state.totalQuestions);
+      setCurrentIdx(nextIndex);
+
+      if (nextQuestion?.question) {
+        speakQuestion(nextQuestion.question);
+      } else {
+        finishSession();
+      }
+    } catch {
+      const next = currentIdx + 1;
+      if (next < questions.length) {
+        setCurrentIdx(next);
+        speakQuestion(questions[next].question);
+      } else {
+        finishSession();
+      }
+    } finally {
+      setIsProcessingAnswer(false);
     }
   };
 
@@ -1165,7 +1217,7 @@ function LiveSession({ interview, persona, onComplete }) {
         <video ref={videoRef} muted playsInline className="iv-pip" />
         <canvas ref={personCanvasRef} className="iv-hidden-canvas" aria-hidden="true" />
         <span className="iv-timer" data-warn={timer < 300}>{fmtTime(timer)}</span>
-        <span className="iv-q-counter">Q {currentIdx + 1} / {questions.length}</span>
+        <span className="iv-q-counter">Q {Math.min(currentIdx + 1, totalQuestions || questions.length)} / {totalQuestions || questions.length}</span>
         <span className="iv-rec-dot">● REC</span>
         <span className={`iv-camera-status${cameraReady && personDetected ? ' iv-camera-status--ok' : ''}`}>
           {cameraReady && personDetected ? 'PERSON OK' : cameraReady ? 'PERSON CHECK' : 'CAMERA OFF'}
@@ -1249,6 +1301,12 @@ function LiveSession({ interview, persona, onComplete }) {
                 : 'End Interview'}
             </button>
           </div>
+          {voiceDiagnostics && (
+            <div className={`iv-audio-diagnostics${voiceDiagnostics.quietAudioDetected ? ' iv-audio-diagnostics--warn' : ''}`}>
+              Voice: {voiceDiagnostics.processed?.lufsApprox ?? 'n/a'} LUFS, peak {voiceDiagnostics.processed?.peakDb ?? 'n/a'} dB,
+              gain {voiceDiagnostics.normalizeGain}x × {voiceDiagnostics.playbackGain}x
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1264,6 +1322,7 @@ export const Interview = ({ setCurrentView }) => {
   const [interview, setInterview] = useState(null);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
+  const [voiceSettings, setVoiceSettings] = useTtsVoiceSettings();
   const persona = data.persona;
 
   if (isLikelyMobileDevice()) {
@@ -1301,7 +1360,14 @@ export const Interview = ({ setCurrentView }) => {
   };
 
   if (step === 4 && interview) {
-    return <LiveSession interview={interview} persona={persona} onComplete={() => setCurrentView?.('results')} />;
+    return (
+      <LiveSession
+        interview={interview}
+        persona={persona}
+        voiceSettings={voiceSettings}
+        onComplete={() => setCurrentView?.('results')}
+      />
+    );
   }
 
   return (
@@ -1318,7 +1384,15 @@ export const Interview = ({ setCurrentView }) => {
       {error && <p className="iv-error iv-error--center">{error}</p>}
       {step === 0 && <ResumeStep onNext={next} />}
       {step === 1 && <PersonaStep onNext={next} onBack={back} />}
-      {step === 2 && <ConfigStep persona={persona} onNext={next} onBack={back} />}
+      {step === 2 && (
+        <ConfigStep
+          persona={persona}
+          onNext={next}
+          onBack={back}
+          voiceSettings={voiceSettings}
+          onVoiceSettingsChange={setVoiceSettings}
+        />
+      )}
       {step === 3 && <SystemCheckStep onStart={handleStart} onBack={back} loading={loading} />}
     </div>
   );

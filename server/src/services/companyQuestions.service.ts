@@ -1,4 +1,4 @@
-import type { GeneratedQuestion } from './ai.service';
+import type { CompanyInterviewGuidance, GeneratedQuestion } from './ai.service';
 
 const COMPANY_NAMES = [
   'JPMorgan Chase',
@@ -259,6 +259,9 @@ const INTRO_QUESTION: GeneratedQuestion = {
   ],
   questionType: 'behavioural',
   resumeReference: 'candidate overview',
+  difficulty: 'easy',
+  topic: 'Candidate overview',
+  followUpIntent: 'bridge-topic',
 };
 
 const normalizeCompany = (company?: string) => {
@@ -808,6 +811,108 @@ const getCompanyBank = (companyKey: string): GeneratedQuestion[] => {
   }
 };
 
+export const getCompanyInterviewGuidance = (targetCompany?: string): CompanyInterviewGuidance | undefined => {
+  const companyKey = normalizeCompany(targetCompany);
+  if (!companyKey) return undefined;
+
+  const company = COMPANY_LABELS[companyKey] ?? companyKey;
+  const category = CATEGORY_BY_KEY.get(companyKey);
+  const base: CompanyInterviewGuidance = {
+    company,
+    style: 'Use public interview-pattern inspiration only. Do not claim questions are official or historically guaranteed.',
+    preferredTopics: ['resume projects', 'job-description skills', 'fundamentals', 'practical problem solving'],
+    behavioralStyle: 'Use structured follow-ups around situation, role, action, result, and reflection.',
+    codingStyle: 'Start with fundamentals, then ask for edge cases, complexity, alternatives, and optimization.',
+    systemDesignExpectations: 'Scale system-design depth to candidate seniority and the job description.',
+    technicalDepth: 'Probe depth after strong answers and reduce difficulty when the candidate struggles.',
+    caution: 'Historical public reports are inspiration, not a question bank. Generate fresh questions grounded in the JD and resume.',
+  };
+
+  const explicit: Record<string, Partial<CompanyInterviewGuidance>> = {
+    amazon: {
+      preferredTopics: ['ownership', 'customer impact', 'scalable services', 'coding fundamentals', 'operational excellence'],
+      behavioralStyle: 'Lean into STAR stories around ownership, bias for action, trade-offs, failures, and customer impact.',
+      codingStyle: 'Ask practical coding and data-structure questions with edge cases and complexity.',
+      systemDesignExpectations: 'For senior candidates, probe reliability, scale, operations, and trade-offs.',
+      technicalDepth: 'Expect concrete examples and decision reasoning; challenge vague claims with follow-ups.',
+    },
+    google: {
+      preferredTopics: ['algorithms', 'problem solving', 'data structures', 'scalability', 'technical reasoning'],
+      behavioralStyle: 'Keep behavioral prompts concise and focus follow-ups on collaboration, ambiguity, and learning.',
+      codingStyle: 'Probe reasoning, correctness, complexity, edge cases, and alternate approaches.',
+      systemDesignExpectations: 'Probe constraints, APIs, storage, scaling, reliability, and clarity of assumptions.',
+      technicalDepth: 'Ask deeper why/how follow-ups after correct answers.',
+    },
+    microsoft: {
+      preferredTopics: ['practical coding', 'OOP', 'debugging', 'system design', 'collaboration'],
+      behavioralStyle: 'Use collaboration, growth mindset, conflict, and product/customer scenarios.',
+      codingStyle: 'Favor practical implementation, object-oriented design, debugging, and clean reasoning.',
+      systemDesignExpectations: 'Focus on maintainable services, API design, reliability, and product constraints.',
+      technicalDepth: 'Balance fundamentals with real-world engineering judgment.',
+    },
+    accenture: {
+      preferredTopics: ['SQL', 'OOP', 'projects', 'communication', 'client scenarios'],
+      behavioralStyle: 'Emphasize client communication, adaptability, team delivery, and structured thinking.',
+      codingStyle: 'Start with fundamentals and practical coding or query reasoning.',
+      systemDesignExpectations: 'Use implementation planning, requirements clarification, and delivery risk.',
+      technicalDepth: 'Keep depth role-appropriate and verify fundamentals before advanced follow-ups.',
+    },
+    infosys: {
+      preferredTopics: ['OOP', 'DBMS', 'programming basics', 'projects', 'HR readiness'],
+      behavioralStyle: 'Ask concise HR and project-ownership questions with communication follow-ups.',
+      codingStyle: 'Start from basics, syntax-independent logic, DBMS, OOP, and simple algorithms.',
+      systemDesignExpectations: 'Limit system design unless the JD or seniority requires it.',
+      technicalDepth: 'Prioritize fundamentals and reduce difficulty quickly if basics are weak.',
+    },
+    tcs: {
+      preferredTopics: ['OOP', 'DBMS', 'data structures', 'projects', 'client delivery', 'communication'],
+      behavioralStyle: 'Include HR, flexibility, communication, and project contribution follow-ups.',
+      codingStyle: 'Ask basic logic, arrays/strings, OOP, DBMS, and edge cases.',
+      systemDesignExpectations: 'Focus on maintainability and enterprise delivery rather than advanced architecture for junior roles.',
+      technicalDepth: 'Assess fundamentals clearly before moving into scenarios.',
+    },
+  };
+
+  const categoryGuidance: Record<string, Partial<CompanyInterviewGuidance>> = {
+    finance: {
+      preferredTopics: ['transactions', 'data integrity', 'security', 'auditability', 'risk-aware delivery'],
+      behavioralStyle: 'Ask about accuracy, deadlines, risk, stakeholder communication, and ownership.',
+      systemDesignExpectations: 'Probe idempotency, consistency, audit trails, recovery, and access control.',
+    },
+    consulting: {
+      preferredTopics: ['requirements clarification', 'client communication', 'planning', 'delivery risk', 'business impact'],
+      behavioralStyle: 'Use client scenarios, ambiguity, influence, and cross-team collaboration.',
+      systemDesignExpectations: 'Ask for phased implementation, risk mitigation, trade-offs, and stakeholder alignment.',
+    },
+    embedded: {
+      preferredTopics: ['systems fundamentals', 'performance', 'memory', 'concurrency', 'debugging'],
+      codingStyle: 'Probe low-level reasoning, resource constraints, correctness, and profiling.',
+      systemDesignExpectations: 'Focus on reliability, constraints, interfaces, and testability.',
+    },
+    healthcare: {
+      preferredTopics: ['privacy', 'data quality', 'auditability', 'critical workflows', 'testing'],
+      behavioralStyle: 'Ask about quality discipline, risk, compliance awareness, and careful communication.',
+      systemDesignExpectations: 'Probe sensitive data handling, validation, audit logs, and safe recovery.',
+    },
+    enterpriseSaas: {
+      preferredTopics: ['APIs', 'multi-tenancy', 'RBAC', 'backward compatibility', 'customer impact'],
+      systemDesignExpectations: 'Probe tenancy, permissions, release safety, contracts, and customer support.',
+    },
+    consumer: {
+      preferredTopics: ['scale', 'latency', 'experimentation', 'privacy', 'user experience'],
+      behavioralStyle: 'Ask about user impact, data-informed decisions, speed, and quality trade-offs.',
+      systemDesignExpectations: 'Probe peak traffic, graceful degradation, consistency, and metrics.',
+    },
+  };
+
+  return {
+    ...base,
+    ...(category ? categoryGuidance[category] : {}),
+    ...(explicit[companyKey] ?? {}),
+    company,
+  };
+};
+
 const isIntroQuestion = (question: GeneratedQuestion) =>
   question.question.trim().toLowerCase().replace(/[?.!]+$/, '') === 'introduce yourself';
 
@@ -820,6 +925,32 @@ const uniqueByQuestion = (questions: GeneratedQuestion[]) => {
     return true;
   });
 };
+
+const withQuestionMetadata = (questions: GeneratedQuestion[]) =>
+  questions.map((question, index) => ({
+    ...question,
+    difficulty:
+      question.difficulty ??
+      (index === 0
+        ? 'easy'
+        : index < 2
+        ? 'easy-medium'
+        : index < 4
+        ? 'medium'
+        : question.questionType === 'situational'
+        ? 'scenario'
+        : question.questionType === 'behavioural'
+        ? 'behavioral'
+        : 'medium-hard'),
+    topic: question.topic ?? question.resumeReference ?? 'general',
+    followUpIntent:
+      question.followUpIntent ??
+      (question.questionType === 'situational'
+        ? 'challenge'
+        : question.questionType === 'behavioural'
+        ? 'clarify'
+        : 'deepen'),
+  }));
 
 export const buildInterviewQuestionSet = ({
   generatedQuestions,
@@ -840,5 +971,5 @@ export const buildInterviewQuestionSet = ({
     ? [INTRO_QUESTION, ...generatedWithoutIntro, ...companyQuestions]
     : [INTRO_QUESTION, ...companyQuestions, ...generatedWithoutIntro];
 
-  return uniqueByQuestion(orderedQuestions).slice(0, targetCount);
+  return withQuestionMetadata(uniqueByQuestion(orderedQuestions).slice(0, targetCount));
 };

@@ -141,8 +141,8 @@ export const interviewAPI = {
   completeInterview: (interviewId, feedback, totalScore) =>
     api.post('/interviews/complete', { interviewId, feedback, totalScore }),
   getState: (interviewId) => api.get(`/interviews/${interviewId}/state`),
-  speak: (interviewId, text, voiceStyle = 'default') =>
-    api.post(`/interviews/${interviewId}/speak`, { text, voiceStyle }, { responseType: 'blob' }),
+  speak: (interviewId, text, voiceStyle = 'default', options = {}) =>
+    api.post(`/interviews/${interviewId}/speak`, { text, voiceStyle, ...options }, { responseType: 'blob' }),
   transcribe: (interviewId, formData) =>
     api.post(`/interviews/${interviewId}/transcribe`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },

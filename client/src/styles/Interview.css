@@ -912,6 +912,64 @@
   font: inherit;
 }
 
+.tts-settings {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(180px, 1.4fr);
+  gap: 12px;
+  align-items: end;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.tts-settings--compact {
+  grid-template-columns: 1fr;
+  padding: 10px;
+}
+
+.tts-field {
+  display: grid;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tts-field select,
+.tts-field input[type='range'] {
+  width: 100%;
+}
+
+.tts-field select {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2, var(--surface));
+  color: var(--text);
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.tts-field input[type='range'] {
+  accent-color: var(--accent);
+}
+
+.tts-test-btn {
+  min-height: 38px;
+  justify-self: start;
+}
+
+.iv-audio-diagnostics {
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.iv-audio-diagnostics--warn {
+  color: #f59e0b;
+}
+
 .iv-tts-selector {
   justify-content: flex-start;
 }

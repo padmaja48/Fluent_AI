@@ -11,6 +11,7 @@ const ttsSchema = z.object({
     speaker: z.enum(['priya', 'rahul', 'meera', 'arjun']).default('priya'),
     context: z.enum(['listening', 'speaking', 'interview', 'preview']).default('listening'),
     level: z.enum(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']).optional(),
+    pace: z.coerce.number().min(0.75).max(1.35).optional(),
   }),
 });
 
@@ -26,6 +27,7 @@ router.post(
     const audio = await synthesizeSpeech(req.body.text, 'default', undefined, speaker, {
       context: req.body.context,
       level: req.body.level,
+      pace: req.body.pace,
     });
     res.setHeader('X-TTS-Cache-Key', audio.cacheKey);
     res.setHeader('Cache-Control', 'private, max-age=86400');

@@ -5,10 +5,17 @@ import { Report } from '../models/Report';
 import { Resume } from '../models/Resume';
 import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
-import { evaluateAnswer, generateInterviewQuestions, generateReport, transcribeAudio } from '../services/ai.service';
+import {
+  buildJobDescriptionProfile,
+  evaluateAnswer,
+  generateAdaptiveInterviewQuestion,
+  generateInterviewQuestions,
+  generateReport,
+  transcribeAudio,
+} from '../services/ai.service';
 import { uploadBuffer, uploadText } from '../services/storage.service';
 import { getPersonaIntro, getPersonaVoiceStyle, synthesizeSpeech } from '../services/voice.service';
-import { buildInterviewQuestionSet, isKnownCompany } from '../services/companyQuestions.service';
+import { buildInterviewQuestionSet, getCompanyInterviewGuidance, getInterviewQuestionCount, isKnownCompany } from '../services/companyQuestions.service';
 
 const idParams = z.object({
   params: z.object({
@@ -54,6 +61,7 @@ export const speakSchema = z.object({
     text: z.string().min(1),
     voiceStyle: z.enum(['default', 'professional_female', 'professional_male', 'neutral']).default('default'),
     voiceId: z.string().min(1).optional(),
+    pace: z.coerce.number().min(0.75).max(1.35).optional(),
   }),
   params: z.object({
     id: z.string().min(1),
@@ -94,6 +102,49 @@ const PERSONA_PERSONALITIES: Record<string, string> = {
 const getPersonaPersonality = (personaId?: string) =>
   personaId ? (PERSONA_PERSONALITIES[personaId] ?? '') : '';
 
+const buildContextFromInterview = (interview: Awaited<ReturnType<typeof getInterviewForUser>>) => ({
+  roleLevel: interview.roleLevel,
+  roleDomain: interview.roleDomain,
+  interviewStyle: (interview as any).interviewType ?? interview.interviewStyle,
+  duration: interview.duration,
+  resumeText: interview.resumeText,
+  jobDescription: (interview as any).jobDescription,
+  personaId: (interview as any).personaId,
+  personaPersonality: getPersonaPersonality((interview as any).personaId),
+  interviewType: (interview as any).interviewType,
+  complexity: (interview as any).complexity,
+  targetCompany: (interview as any).targetCompany,
+  resumeSkills: (interview as any).resumeSkills ?? [],
+  resumeExperienceLevel: (interview as any).resumeExperienceLevel ?? '',
+  resumeSuggestedQuestions: (interview as any).resumeSuggestedQuestions ?? [],
+  resumeSummary: (interview as any).resumeSummary ?? '',
+});
+
+const averageMetric = (previous: number | undefined, next: number | undefined, count: number) => {
+  if (typeof next !== 'number') return previous;
+  if (count <= 1 || typeof previous !== 'number') return Math.round(next);
+  return Math.round(((previous * (count - 1)) + next) / count);
+};
+
+const getPublicState = (interview: Awaited<ReturnType<typeof getInterviewForUser>>) => ({
+  status: interview.status,
+  currentQuestionIndex: interview.currentQuestionIndex,
+  currentQuestion: interview.questions[interview.currentQuestionIndex],
+  totalQuestions: (interview as any).totalPlannedQuestions ?? interview.questions.length,
+  questions: interview.questions,
+  liveScores: (interview as any).liveScores ?? {},
+});
+
+const toGeneratedQuestion = (item: any) => ({
+  question: item.question,
+  expectedSignals: item.expectedSignals ?? [],
+  questionType: item.questionType,
+  resumeReference: item.resumeReference,
+  difficulty: item.difficulty,
+  topic: item.topic,
+  followUpIntent: item.followUpIntent,
+});
+
 export const logViolationSchema = z.object({
   body: z.object({
     type: z.string().min(1),
@@ -132,6 +183,13 @@ export const createInterview = asyncHandler(async (req, res) => {
     }
   }
 
+  const jdProfile = buildJobDescriptionProfile(req.body.jobDescription, {
+    roleLevel: req.body.roleLevel,
+    roleDomain: req.body.roleDomain,
+    resumeSkills,
+  });
+  const companyGuidance = getCompanyInterviewGuidance(req.body.targetCompany);
+
   const interview = await Interview.create({
     userId: req.userId,
     ...req.body,
@@ -140,6 +198,10 @@ export const createInterview = asyncHandler(async (req, res) => {
     resumeExperienceLevel,
     resumeSuggestedQuestions,
     resumeSummary,
+    jdProfile,
+    companyGuidance,
+    totalPlannedQuestions: getInterviewQuestionCount(req.body.duration ?? 30),
+    liveScores: {},
     status: 'Setup',
   });
 
@@ -170,23 +232,7 @@ export const startInterview = asyncHandler(async (req, res) => {
   const interview = await getInterviewForUser(interviewId, req.userId);
 
   if (interview.questions.length === 0) {
-    const generated = await generateInterviewQuestions({
-      roleLevel: interview.roleLevel,
-      roleDomain: interview.roleDomain,
-      interviewStyle: (interview as any).interviewType ?? interview.interviewStyle,
-      duration: interview.duration,
-      resumeText: interview.resumeText,
-      jobDescription: (interview as any).jobDescription,
-      personaId: (interview as any).personaId,
-      personaPersonality: getPersonaPersonality((interview as any).personaId),
-      interviewType: (interview as any).interviewType,
-      complexity: (interview as any).complexity,
-      targetCompany: (interview as any).targetCompany,
-      resumeSkills: (interview as any).resumeSkills ?? [],
-      resumeExperienceLevel: (interview as any).resumeExperienceLevel ?? '',
-      resumeSuggestedQuestions: (interview as any).resumeSuggestedQuestions ?? [],
-      resumeSummary: (interview as any).resumeSummary ?? '',
-    });
+    const generated = await generateInterviewQuestions(buildContextFromInterview(interview));
 
     interview.questions = buildInterviewQuestionSet({
       generatedQuestions: generated.questions,
@@ -194,18 +240,25 @@ export const startInterview = asyncHandler(async (req, res) => {
       duration: interview.duration,
       prioritizeGenerated: Boolean((interview as any).jobDescription?.trim()),
     });
+    (interview as any).totalPlannedQuestions = interview.questions.length;
+  }
+
+  if (!(interview as any).jdProfile) {
+    (interview as any).jdProfile = buildJobDescriptionProfile((interview as any).jobDescription, {
+      roleLevel: interview.roleLevel,
+      roleDomain: interview.roleDomain,
+      resumeSkills: (interview as any).resumeSkills ?? [],
+    });
+  }
+  if (!(interview as any).companyGuidance) {
+    (interview as any).companyGuidance = getCompanyInterviewGuidance((interview as any).targetCompany);
   }
 
   interview.status = 'In Progress';
   interview.startedAt = interview.startedAt ?? new Date();
   await interview.save();
 
-  const state = {
-    status: interview.status,
-    currentQuestionIndex: interview.currentQuestionIndex,
-    currentQuestion: interview.questions[interview.currentQuestionIndex],
-    totalQuestions: interview.questions.length,
-  };
+  const state = getPublicState(interview);
 
   await writeInterviewState(String(interview._id), state);
   res.json({ interview, state });
@@ -240,15 +293,58 @@ export const submitAnswer = asyncHandler(async (req, res) => {
     });
   }
 
-  interview.currentQuestionIndex = questionIndex + 1; // may exceed length; that signals completion
+  const answeredCount = interview.questions.filter((item) => typeof item.score === 'number').length;
+  const liveScores = (interview as any).liveScores ?? {};
+  (interview as any).liveScores = {
+    confidence: averageMetric(liveScores.confidence, evaluation.confidenceScore, answeredCount),
+    completeness: averageMetric(liveScores.completeness, evaluation.completenessScore, answeredCount),
+    depth: averageMetric(liveScores.depth, evaluation.depthScore, answeredCount),
+    terminology: averageMetric(liveScores.terminology, evaluation.terminologyScore, answeredCount),
+    grammar: averageMetric(liveScores.grammar, evaluation.grammarScore, answeredCount),
+    vocabulary: averageMetric(liveScores.vocabulary, evaluation.vocabularyScore, answeredCount),
+    domain: averageMetric(liveScores.domain, evaluation.domainScore, answeredCount),
+  };
+
+  const nextIndex = questionIndex + 1;
+  const targetQuestionCount = (interview as any).totalPlannedQuestions ?? interview.questions.length;
+  if (nextIndex < targetQuestionCount) {
+    const previousQuestionDocs = interview.questions.slice(0, nextIndex);
+    const previousQuestions = previousQuestionDocs.map(toGeneratedQuestion);
+    const lastQuestion = toGeneratedQuestion(interview.questions[questionIndex]);
+    const nextQuestion = await generateAdaptiveInterviewQuestion({
+      ...buildContextFromInterview(interview),
+      previousQuestions,
+      transcript: previousQuestionDocs.map((item) => ({
+        question: item.question,
+        answer: item.userAnswer,
+        score: item.score,
+        feedback: item.feedback,
+        questionType: item.questionType,
+        resumeReference: item.resumeReference,
+        difficulty: item.difficulty,
+        topic: item.topic,
+      })),
+      lastQuestion,
+      lastAnswer: req.body.answer,
+      lastEvaluation: evaluation,
+      targetQuestionCount,
+      currentQuestionIndex: questionIndex,
+      jdProfile: (interview as any).jdProfile,
+      companyGuidance: (interview as any).companyGuidance,
+    });
+
+    if (interview.questions[nextIndex]) {
+      interview.questions[nextIndex] = nextQuestion;
+    } else {
+      interview.questions.push(nextQuestion);
+    }
+    interview.markModified('questions');
+  }
+
+  interview.currentQuestionIndex = nextIndex; // may equal target count; that signals completion
   await interview.save();
 
-  const state = {
-    status: interview.status,
-    currentQuestionIndex: interview.currentQuestionIndex,
-    currentQuestion: interview.questions[interview.currentQuestionIndex],
-    totalQuestions: interview.questions.length,
-  };
+  const state = getPublicState(interview);
 
   await writeInterviewState(String(interview._id), state);
   res.json({ interview, evaluation, state });
@@ -275,6 +371,8 @@ export const completeInterview = asyncHandler(async (req, res) => {
     score: item.score,
     questionType: (item as any).questionType,
     resumeReference: (item as any).resumeReference,
+    difficulty: (item as any).difficulty,
+    topic: (item as any).topic,
   }));
   const aiReport = await generateReport(transcript);
   const storedReport = await uploadText(JSON.stringify(aiReport, null, 2), `interview-${interview._id}.json`, 'reports');
@@ -315,7 +413,7 @@ export const getInterviewState = asyncHandler(async (req, res) => {
 
   const interview = await getInterviewForUser(interviewId, req.userId);
   const cached = await getRedis().get(`interview:${interview._id}:state`);
-  res.json(cached ? JSON.parse(cached) : { status: interview.status, currentQuestionIndex: interview.currentQuestionIndex });
+  res.json(cached ? JSON.parse(cached) : getPublicState(interview));
 });
 
 export const synthesizeQuestion = asyncHandler(async (req, res) => {
@@ -326,10 +424,12 @@ export const synthesizeQuestion = asyncHandler(async (req, res) => {
 
   const interview = await getInterviewForUser(interviewId, req.userId);
   const personaId = (interview as any).personaId as string | undefined;
-  const voiceStyle = personaId ? getPersonaVoiceStyle(personaId) : req.body.voiceStyle;
-  const audio = await synthesizeSpeech(req.body.text, voiceStyle, personaId, undefined, {
+  const requestedVoiceStyle = req.body.voiceStyle !== 'default' ? req.body.voiceStyle : undefined;
+  const voiceStyle = requestedVoiceStyle ?? (personaId ? getPersonaVoiceStyle(personaId) : req.body.voiceStyle);
+  const audio = await synthesizeSpeech(req.body.text, voiceStyle, requestedVoiceStyle ? undefined : personaId, undefined, {
     context: 'interview',
-    pace: 1.0,
+    pace: req.body.pace ?? 1.0,
+    voiceId: req.body.voiceId,
   });
   res.setHeader('X-TTS-Cache-Key', audio.cacheKey);
   res.setHeader('Cache-Control', 'private, max-age=86400');

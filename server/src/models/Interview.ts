@@ -11,6 +11,9 @@ export interface IInterviewQuestion {
   score?: number;
   questionType?: 'behavioural' | 'technical' | 'situational';
   resumeReference?: string;
+  difficulty?: 'easy' | 'easy-medium' | 'medium' | 'medium-hard' | 'scenario' | 'problem-solving' | 'behavioral';
+  topic?: string;
+  followUpIntent?: 'deepen' | 'clarify' | 'bridge-topic' | 'challenge' | 'recover-confidence';
 }
 
 export interface IInterviewViolation {
@@ -56,6 +59,18 @@ export interface IInterview extends Document {
   resumeExperienceLevel?: string;
   resumeSuggestedQuestions: string[];
   resumeSummary?: string;
+  jdProfile?: unknown;
+  companyGuidance?: unknown;
+  liveScores?: {
+    confidence?: number;
+    completeness?: number;
+    depth?: number;
+    terminology?: number;
+    grammar?: number;
+    vocabulary?: number;
+    domain?: number;
+  };
+  totalPlannedQuestions?: number;
 }
 
 const interviewQuestionSchema = new Schema<IInterviewQuestion>(
@@ -68,6 +83,9 @@ const interviewQuestionSchema = new Schema<IInterviewQuestion>(
     score: Number,
     questionType: { type: String, enum: ['behavioural', 'technical', 'situational'] },
     resumeReference: String,
+    difficulty: { type: String, enum: ['easy', 'easy-medium', 'medium', 'medium-hard', 'scenario', 'problem-solving', 'behavioral'] },
+    topic: String,
+    followUpIntent: { type: String, enum: ['deepen', 'clarify', 'bridge-topic', 'challenge', 'recover-confidence'] },
   },
   { _id: false },
 );
@@ -121,6 +139,18 @@ const interviewSchema = new Schema<IInterview>(
     resumeExperienceLevel: String,
     resumeSuggestedQuestions: { type: [String], default: [] },
     resumeSummary: String,
+    jdProfile: { type: Schema.Types.Mixed },
+    companyGuidance: { type: Schema.Types.Mixed },
+    liveScores: {
+      confidence: Number,
+      completeness: Number,
+      depth: Number,
+      terminology: Number,
+      grammar: Number,
+      vocabulary: Number,
+      domain: Number,
+    },
+    totalPlannedQuestions: Number,
   },
   { timestamps: true },
 );
