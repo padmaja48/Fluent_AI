@@ -12,7 +12,7 @@ const STEPS = ['Resume', 'Persona', 'Config', 'System Check'];
 const MAX_VIOLATIONS = 3;
 const PERSON_CHECK_INTERVAL_MS = 1500;
 const PERSON_MISSING_GRACE_MS = 5000;
-const ANSWER_SILENCE_PROMPT_MS = 12000;
+const ANSWER_SILENCE_PROMPT_MS = 60000;
 const INTERVIEW_TTS_PLAYBACK_SETTINGS = {
   volume: 1.35,
   speechRate: 1,
@@ -572,6 +572,8 @@ function LiveSession({ interview, persona, onComplete }) {
   const finishingRef        = useRef(false);
   const sessionClosedRef    = useRef(false);
   const transcriptRef       = useRef([]);
+  const interimTextRef      = useRef('');
+  const keepSpeechRecognitionAliveRef = useRef(false);
   const personMissingSinceRef = useRef(null);
   const lastCameraViolationAtRef = useRef(0);
   const lastAnswerActivityAtRef = useRef(Date.now());
@@ -579,6 +581,7 @@ function LiveSession({ interview, persona, onComplete }) {
 
   // Keep transcriptRef in sync
   useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
+  useEffect(() => { interimTextRef.current = interimText; }, [interimText]);
 
   useEffect(() => {
     lastAnswerActivityAtRef.current = Date.now();
@@ -587,6 +590,7 @@ function LiveSession({ interview, persona, onComplete }) {
 
   /* ── Stop listening ─────────────────────────────── */
   const stopListening = useCallback(() => {
+    keepSpeechRecognitionAliveRef.current = false;
     const rec = recognitionRef.current;
     recognitionRef.current = null;
     if (rec) { try { rec.onend = null; rec.stop(); } catch {} }
@@ -945,6 +949,19 @@ function LiveSession({ interview, persona, onComplete }) {
     setTranscript(prev => [...prev, { role: 'candidate', text: clean }]);
   }, []);
 
+  const getAnswerSinceLastQuestion = useCallback(() => {
+    const curr = transcriptRef.current;
+    const lastInterviewerIdx = [...curr].map((m, i) => m.role === 'interviewer' ? i : -1).filter(i => i >= 0).pop() ?? -1;
+    const finalText = curr
+      .slice(lastInterviewerIdx + 1)
+      .filter(m => m.role === 'candidate')
+      .map(m => m.text)
+      .join(' ')
+      .trim();
+    const interim = answerCaptureModeRef.current === 'speech' ? interimTextRef.current.trim() : '';
+    return [finalText, interim].filter(Boolean).join(' ').trim();
+  }, []);
+
   useEffect(() => {
     if (!isListening || ending || isProcessingAnswer) return undefined;
 
@@ -953,14 +970,25 @@ function LiveSession({ interview, persona, onComplete }) {
       if (Date.now() - lastAnswerActivityAtRef.current < ANSWER_SILENCE_PROMPT_MS) return;
 
       silencePromptedRef.current = true;
+      const hasAnswer = Boolean(getAnswerSinceLastQuestion() || interimTextRef.current.trim());
+      if (!hasAnswer) {
+        setTranscript(prev => [...prev, {
+          role: 'system',
+          text: 'No answer was detected for one minute. Moving to the next question.',
+        }]);
+        stopListening();
+        submitAnswer('', true);
+        return;
+      }
+
       setTranscript(prev => [...prev, {
         role: 'system',
-        text: 'Take your time. Would you like to add anything else?',
+        text: 'Take your time. When you finish your answer, click Stop & submit.',
       }]);
     }, 1000);
 
     return () => clearInterval(silenceTimer);
-  }, [ending, isListening, isProcessingAnswer]);
+  }, [ending, getAnswerSinceLastQuestion, isListening, isProcessingAnswer]);
 
   const startRecordedAnswer = async () => {
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
@@ -983,6 +1011,7 @@ function LiveSession({ interview, persona, onComplete }) {
       answerStreamRef.current = stream;
       answerRecorderRef.current = recorder;
       answerCaptureModeRef.current = 'recording';
+      keepSpeechRecognitionAliveRef.current = false;
 
       recorder.ondataavailable = (event) => {
         if (event.data?.size > 0) answerChunksRef.current.push(event.data);
@@ -1032,9 +1061,27 @@ function LiveSession({ interview, persona, onComplete }) {
       setInterimText(interim);
       if (final) { setInterimText(''); addCandidateTranscript(final); }
     };
-    rec.onend = () => { if (!sessionClosedRef.current) setIsListening(false); };
-    rec.onerror = () => {
+    rec.onend = () => {
+      if (sessionClosedRef.current || !keepSpeechRecognitionAliveRef.current || answerCaptureModeRef.current !== 'speech') {
+        if (!sessionClosedRef.current) setIsListening(false);
+        return;
+      }
+
+      setTimeout(() => {
+        if (sessionClosedRef.current || !keepSpeechRecognitionAliveRef.current || answerCaptureModeRef.current !== 'speech') return;
+        try {
+          rec.start();
+          setIsListening(true);
+        } catch {
+          setIsListening(false);
+        }
+      }, 250);
+    };
+    rec.onerror = (event) => {
+      const recoverable = event?.error === 'no-speech' || event?.error === 'aborted';
+      if (recoverable && keepSpeechRecognitionAliveRef.current) return;
       if (!sessionClosedRef.current && answerCaptureModeRef.current === 'speech' && allowRecordingFallback) {
+        keepSpeechRecognitionAliveRef.current = false;
         startRecordedAnswer();
       }
     };
@@ -1046,21 +1093,11 @@ function LiveSession({ interview, persona, onComplete }) {
     }
     recognitionRef.current = rec;
     answerCaptureModeRef.current = 'speech';
+    keepSpeechRecognitionAliveRef.current = true;
     lastAnswerActivityAtRef.current = Date.now();
     silencePromptedRef.current = false;
     setIsListening(true);
   };
-
-  const getAnswerSinceLastQuestion = useCallback(() => {
-    const curr = transcriptRef.current;
-    const lastInterviewerIdx = [...curr].map((m, i) => m.role === 'interviewer' ? i : -1).filter(i => i >= 0).pop() ?? -1;
-    return curr
-      .slice(lastInterviewerIdx + 1)
-      .filter(m => m.role === 'candidate')
-      .map(m => m.text)
-      .join(' ')
-      .trim();
-  }, []);
 
   const finishRecordedAnswer = async () => {
     const recorder = answerRecorderRef.current;
@@ -1281,7 +1318,7 @@ function LiveSession({ interview, persona, onComplete }) {
               disabled={ending || isProcessingAnswer}
               onClick={handleAnswerButton}
             >
-              {isProcessingAnswer ? 'Checking answer...' : isListening ? 'Submit answer' : 'Start answer'}
+              {isProcessingAnswer ? 'Checking answer...' : isListening ? 'Stop & submit' : 'Start answer'}
             </button>
             <button type="button" className="iv-btn iv-btn--ghost" disabled={ending || isProcessingAnswer}
               onClick={() => { stopListening(); submitAnswer('', true); }}>
