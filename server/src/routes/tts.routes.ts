@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
-import { normalizeTtsSpeaker, synthesizeSpeech } from '../services/voice.service';
+import { normalizeTtsSpeaker, synthesizeSpeech, VoiceStyle } from '../services/voice.service';
 
 const ttsSchema = z.object({
   body: z.object({
@@ -24,7 +24,8 @@ router.post(
   validate(ttsSchema),
   asyncHandler(async (req, res) => {
     const speaker = normalizeTtsSpeaker(req.body.speaker);
-    const audio = await synthesizeSpeech(req.body.text, 'default', undefined, speaker, {
+    const voiceStyle: VoiceStyle = req.body.context === 'listening' ? 'neutral' : 'default';
+    const audio = await synthesizeSpeech(req.body.text, voiceStyle, undefined, speaker, {
       context: req.body.context,
       level: req.body.level,
       pace: req.body.pace,

@@ -1,6 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { getTtsApiErrorMessage, playTtsAudio, stopTtsAudio } from '../lib/ttsAudio';
-import TtsVoiceSelector, { useTtsSpeaker } from './TtsVoiceSelector';
 
 const listeningSets = [
   {
@@ -134,7 +133,6 @@ export default function ListeningReferenceTask({ level, onBack }) {
   const [submitted, setSubmitted] = useState(false);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [error, setError] = useState('');
-  const [ttsSpeaker, setTtsSpeaker] = useTtsSpeaker();
   const audioRef = useRef(null);
 
   const selectedSet = useMemo(
@@ -160,7 +158,6 @@ export default function ListeningReferenceTask({ level, onBack }) {
       setAudioPlaying(true);
       const audio = await playTtsAudio({
         text: selectedSet.script,
-        speaker: ttsSpeaker,
         level,
         context: 'listening',
         onPlay: (audioElement) => {
@@ -204,7 +201,6 @@ export default function ListeningReferenceTask({ level, onBack }) {
             <p>Original practice sets inspired by standard listening-test formats</p>
           </div>
         </div>
-        <TtsVoiceSelector value={ttsSpeaker} onChange={setTtsSpeaker} />
       </div>
 
       <div className="listening-reference-layout">

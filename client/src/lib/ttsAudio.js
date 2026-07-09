@@ -415,7 +415,9 @@ export const playTtsAudio = async ({
   settings,
   onDiagnostics,
 }) => {
-  const voiceSettings = normalizeVoiceSettings(settings ?? getStoredTtsVoiceSettings());
+  const voiceSettings = normalizeVoiceSettings(
+    settings ?? (context === 'listening' ? DEFAULT_TTS_VOICE_SETTINGS : getStoredTtsVoiceSettings()),
+  );
   const blob = await getTtsAudioBlob(text, speaker, { level, context });
   return playProcessedTtsBlob(blob, {
     settings: voiceSettings,
