@@ -123,7 +123,7 @@ describe('ElevenLabs listening TTS pacing', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(String(fetchMock.mock.calls[0][0])).toContain('/paid-default-voice-id?');
-    expect(String(fetchMock.mock.calls[1][0])).toContain('/Xb7hH8MSUJpSbSDYk0k2?');
+    expect(String(fetchMock.mock.calls[1][0])).toContain('/XrExE9yKIg1WjnnlVkGX?');
     expect(audio.contentType).toBe('audio/mpeg');
     expect(audio.buffer).toEqual(makeMp3());
   });

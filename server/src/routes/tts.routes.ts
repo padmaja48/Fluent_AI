@@ -3,7 +3,12 @@ import { z } from 'zod';
 import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
-import { normalizeTtsSpeaker, synthesizeSpeech, VoiceStyle } from '../services/voice.service';
+import {
+  ELEVENLABS_LISTENING_NARRATOR_VOICE_ID,
+  normalizeTtsSpeaker,
+  synthesizeSpeech,
+  VoiceStyle,
+} from '../services/voice.service';
 
 const ttsSchema = z.object({
   body: z.object({
@@ -29,6 +34,7 @@ router.post(
       context: req.body.context,
       level: req.body.level,
       pace: req.body.pace,
+      voiceId: req.body.context === 'listening' ? ELEVENLABS_LISTENING_NARRATOR_VOICE_ID : undefined,
     });
     res.setHeader('X-TTS-Cache-Key', audio.cacheKey);
     res.setHeader('Cache-Control', 'private, max-age=86400');

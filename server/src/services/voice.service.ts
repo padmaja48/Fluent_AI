@@ -33,11 +33,13 @@ const SARVAM_PERSONA_SPEAKERS: Record<string, string> = {
 };
 
 const ELEVENLABS_PREMADE_VOICE_IDS: Record<VoiceStyle, string> = {
-  default: 'Xb7hH8MSUJpSbSDYk0k2',
-  professional_female: 'Xb7hH8MSUJpSbSDYk0k2',
+  default: 'XrExE9yKIg1WjnnlVkGX',
+  professional_female: 'XrExE9yKIg1WjnnlVkGX',
   professional_male: 'JBFqnCBsd6RMkjVDRZzb',
-  neutral: 'SAz9YHcvj6GT2YYXdXww',
+  neutral: 'XrExE9yKIg1WjnnlVkGX',
 };
+
+export const ELEVENLABS_LISTENING_NARRATOR_VOICE_ID = ELEVENLABS_PREMADE_VOICE_IDS.neutral;
 
 /* ── Per-persona voice style mapping ───────────────── */
 export const getPersonaVoiceStyle = (personaId: string): VoiceStyle => {
