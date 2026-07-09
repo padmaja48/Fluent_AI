@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { getApiErrorMessage, playTtsAudio, stopTtsAudio } from '../lib/ttsAudio';
+import { getTtsApiErrorMessage, playTtsAudio, stopTtsAudio } from '../lib/ttsAudio';
 import TtsVoiceSelector, { useTtsSpeaker } from './TtsVoiceSelector';
 
 const listeningSets = [
@@ -179,14 +179,7 @@ export default function ListeningReferenceTask({ level, onBack }) {
       });
       audioRef.current = audio;
     } catch (err) {
-      const message = await getApiErrorMessage(err, 'Unable to play listening audio.');
-      setError(
-        message.includes('ELEVENLABS_API_KEY')
-          ? 'ElevenLabs API key is missing in server/.env. Add ELEVENLABS_API_KEY and restart the server.'
-          : message.includes('ELEVENLABS_VOICE_ID')
-            ? 'ElevenLabs voice ID is missing in server/.env. Add ELEVENLABS_VOICE_ID and restart the server.'
-          : message,
-      );
+      setError(await getTtsApiErrorMessage(err, 'Unable to play listening audio.'));
       setAudioPlaying(false);
     }
   };

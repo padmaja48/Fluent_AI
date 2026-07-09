@@ -83,20 +83,49 @@ export const storeTtsSpeaker = (speaker) => {
   window.localStorage.setItem(TTS_SPEAKER_STORAGE_KEY, normalizeTtsSpeaker(speaker));
 };
 
-export const getApiErrorMessage = async (error, fallback = 'Unable to generate audio.') => {
+export const getApiErrorPayload = async (error) => {
   const data = error?.response?.data;
   if (data instanceof Blob) {
     const text = await data.text().catch(() => '');
-    if (!text) return fallback;
+    if (!text) return {};
     try {
       const parsed = JSON.parse(text);
-      return parsed.error || parsed.message || fallback;
+      return {
+        code: parsed.code,
+        message: parsed.error || parsed.message,
+      };
     } catch {
-      return text;
+      return { message: text };
     }
   }
 
-  return data?.error || data?.message || error?.message || fallback;
+  return {
+    code: data?.code,
+    message: data?.error || data?.message || error?.message,
+  };
+};
+
+export const getApiErrorMessage = async (error, fallback = 'Unable to generate audio.') => {
+  const payload = await getApiErrorPayload(error);
+  return payload.message || fallback;
+};
+
+export const getTtsApiErrorMessage = async (error, fallback = 'Unable to generate audio.') => {
+  const { code, message = '' } = await getApiErrorPayload(error);
+
+  if (code === 'ELEVENLABS_NOT_CONFIGURED' || message.includes('ELEVENLABS_API_KEY')) {
+    return 'ElevenLabs API key is missing in the server environment. Add ELEVENLABS_API_KEY and restart the server.';
+  }
+
+  if (code === 'ELEVENLABS_VOICE_NOT_CONFIGURED' || message.includes('ELEVENLABS_VOICE_ID is not configured')) {
+    return 'ElevenLabs voice ID is missing in the server environment. Add ELEVENLABS_VOICE_ID and restart the server.';
+  }
+
+  if (code === 'ELEVENLABS_VOICE_REQUIRES_PAID_PLAN' || /paid plan|payment required|subscription/i.test(message)) {
+    return 'Selected ElevenLabs voice requires a paid plan. Set the server ElevenLabs voice IDs to voices available to your API account, then restart the server.';
+  }
+
+  return message || fallback;
 };
 
 const hashInput = async (text, speaker, options = {}) => {

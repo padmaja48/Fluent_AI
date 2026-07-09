@@ -157,7 +157,7 @@ const elevenLabsAppError = (responseStatus: number, errorText: string) => {
 
   if (isPaidPlanRequired) {
     return new AppError(
-      'Selected ElevenLabs voice requires a paid plan. Use a voice available to your ElevenLabs API account or update ELEVENLABS_VOICE_ID in server/.env.',
+      'Selected ElevenLabs voice requires a paid plan. Use a voice available to your ElevenLabs API account.',
       402,
       'ELEVENLABS_VOICE_REQUIRES_PAID_PLAN',
     );
