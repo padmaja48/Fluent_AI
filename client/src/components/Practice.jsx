@@ -5,7 +5,7 @@ import { createAudioRecorder, getRecordedAudioFileName } from '../lib/audioRecor
 import { getTtsApiErrorMessage, playTtsAudio, stopTtsAudio } from '../lib/ttsAudio';
 import ImageDescriptionTask from './ImageDescriptionTask';
 import ListeningReferenceTask from './ListeningReferenceTask';
-import TtsVoiceSelector, { useTtsSpeaker } from './TtsVoiceSelector';
+import { useTtsSpeaker } from './TtsVoiceSelector';
 import '../styles/Practice.css';
 import '../styles/Writing.css';
 import '../styles/Reading.css';
@@ -64,7 +64,7 @@ export const Practice = ({
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const ttsAudioRef = useRef(null);
-  const [ttsSpeaker, setTtsSpeaker] = useTtsSpeaker();
+  const [ttsSpeaker] = useTtsSpeaker();
 
   const stopCurrentTts = useCallback(() => {
     stopTtsAudio(ttsAudioRef.current);
@@ -902,7 +902,6 @@ export const Practice = ({
               <audio controls src={currentQuestion.audioUrl} />
             ) : (
               <div className="listening-controls">
-                <TtsVoiceSelector value={ttsSpeaker} onChange={setTtsSpeaker} />
                 <button type="button" className="audio-btn" onClick={playListeningAudio}>
                   {audioPlaying ? 'Stop Audio' : 'Play Listening Audio'}
                 </button>
