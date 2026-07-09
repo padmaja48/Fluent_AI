@@ -2,6 +2,14 @@ import { env } from '../config/env';
 import { getListeningPaceForLevel, splitTextIntoSentences, synthesizeSpeech } from '../services/voice.service';
 
 const makeMp3 = () => Buffer.from([0xff, 0xfb, 0x90, 0x64]);
+const paidPlanBody = JSON.stringify({
+  detail: {
+    status: 'payment_required',
+    message: 'Please upgrade your subscription to use this voice.',
+    code: 'paid_plan_required',
+    request_id: 'test-request',
+  },
+});
 
 describe('ElevenLabs listening TTS pacing', () => {
   afterEach(() => {
@@ -53,6 +61,64 @@ describe('ElevenLabs listening TTS pacing', () => {
     expect(payload.voice_settings.speed).toBe(0.85);
     expect(audio.contentType).toBe('audio/mpeg');
     expect(audio.buffer).toEqual(makeMp3());
+  });
+
+  it('retries with the default ElevenLabs voice when a style voice requires a paid plan', async () => {
+    (env as typeof env & { ELEVENLABS_API_KEY: string }).ELEVENLABS_API_KEY = 'test-key';
+    (env as typeof env & { ELEVENLABS_VOICE_ID: string }).ELEVENLABS_VOICE_ID = 'default-voice-id';
+    (env as typeof env & { ELEVENLABS_PROFESSIONAL_FEMALE_VOICE_ID: string }).ELEVENLABS_PROFESSIONAL_FEMALE_VOICE_ID = 'paid-female-voice-id';
+    (env as typeof env & { ELEVENLABS_OUTPUT_FORMAT: string }).ELEVENLABS_OUTPUT_FORMAT = 'mp3_44100_128';
+    (env as typeof env & { ELEVENLABS_MODEL_ID: string }).ELEVENLABS_MODEL_ID = 'eleven_multilingual_v2';
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockImplementationOnce(async () =>
+        new Response(paidPlanBody, {
+          status: 402,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockImplementationOnce(async () =>
+        new Response(makeMp3(), {
+          status: 200,
+          headers: { 'content-type': 'audio/mpeg' },
+        }),
+      );
+
+    const audio = await synthesizeSpeech('This retry should use the default voice.', 'professional_female', undefined, undefined, {
+      context: 'listening',
+      level: 'B1',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/paid-female-voice-id?');
+    expect(String(fetchMock.mock.calls[1][0])).toContain('/default-voice-id?');
+    expect(audio.contentType).toBe('audio/mpeg');
+    expect(audio.buffer).toEqual(makeMp3());
+  });
+
+  it('returns a friendly ElevenLabs paid-plan error when no fallback voice is available', async () => {
+    (env as typeof env & { ELEVENLABS_API_KEY: string }).ELEVENLABS_API_KEY = 'test-key';
+    (env as typeof env & { ELEVENLABS_VOICE_ID: string }).ELEVENLABS_VOICE_ID = 'paid-default-voice-id';
+    (env as typeof env & { ELEVENLABS_PROFESSIONAL_FEMALE_VOICE_ID: string | undefined }).ELEVENLABS_PROFESSIONAL_FEMALE_VOICE_ID = undefined;
+    (env as typeof env & { ELEVENLABS_OUTPUT_FORMAT: string }).ELEVENLABS_OUTPUT_FORMAT = 'mp3_44100_128';
+    const fetchMock = jest.spyOn(global, 'fetch').mockImplementation(async () =>
+      new Response(paidPlanBody, {
+        status: 402,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    await expect(
+      synthesizeSpeech('This paid voice has no fallback.', 'professional_female', undefined, undefined, {
+        context: 'listening',
+        level: 'B1',
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 402,
+      code: 'ELEVENLABS_VOICE_REQUIRES_PAID_PLAN',
+      message: expect.stringContaining('Selected ElevenLabs voice requires a paid plan'),
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('uses Sarvam Indian English speakers for interview personas', async () => {

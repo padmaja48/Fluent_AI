@@ -119,6 +119,61 @@ const contentTypeForSarvamCodec = (codec: string) => {
   return 'audio/wav';
 };
 
+type ProviderErrorDetails = {
+  status?: string;
+  code?: string;
+  message?: string;
+};
+
+const parseProviderError = (errorText: string): ProviderErrorDetails => {
+  if (!errorText) return {};
+
+  try {
+    const payload = JSON.parse(errorText) as {
+      detail?: string | { status?: string; message?: string; code?: string };
+      message?: string;
+      error?: string;
+    };
+    const detail = typeof payload.detail === 'object' ? payload.detail : undefined;
+    return {
+      status: detail?.status,
+      code: detail?.code,
+      message: detail?.message ?? (typeof payload.detail === 'string' ? payload.detail : undefined) ?? payload.message ?? payload.error,
+    };
+  } catch {
+    return { message: errorText };
+  }
+};
+
+const elevenLabsAppError = (responseStatus: number, errorText: string) => {
+  const providerError = parseProviderError(errorText);
+  const providerStatus = providerError.status?.toLowerCase();
+  const providerCode = providerError.code?.toLowerCase();
+  const isPaidPlanRequired =
+    responseStatus === 402 ||
+    providerStatus === 'payment_required' ||
+    providerCode === 'paid_plan_required' ||
+    /paid plan|payment required|subscription/i.test(providerError.message ?? '');
+
+  if (isPaidPlanRequired) {
+    return new AppError(
+      'Selected ElevenLabs voice requires a paid plan. Use a voice available to your ElevenLabs API account or update ELEVENLABS_VOICE_ID in server/.env.',
+      402,
+      'ELEVENLABS_VOICE_REQUIRES_PAID_PLAN',
+    );
+  }
+
+  const providerMessage = providerError.message ? `: ${providerError.message}` : '';
+  return new AppError(
+    `ElevenLabs TTS failed with status ${responseStatus}${providerMessage}`,
+    502,
+    'ELEVENLABS_TTS_FAILED',
+  );
+};
+
+const isElevenLabsPaidPlanError = (error: unknown) =>
+  error instanceof AppError && error.code === 'ELEVENLABS_VOICE_REQUIRES_PAID_PLAN';
+
 const cacheKeyFor = (
   text: string,
   speaker: TtsSpeaker,
@@ -210,11 +265,7 @@ const callElevenLabs = async (
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => '');
-    throw new AppError(
-      `ElevenLabs TTS ${response.status}: ${errorText || response.statusText}`,
-      502,
-      'ELEVENLABS_TTS_FAILED',
-    );
+    throw elevenLabsAppError(response.status, errorText || response.statusText);
   }
 
   const contentType = response.headers.get('content-type') ?? contentTypeForOutputFormat(outputFormat);
@@ -224,6 +275,31 @@ const callElevenLabs = async (
     buffer: Buffer.from(arrayBuffer),
     contentType: contentType.includes('audio/') ? contentType : contentTypeForOutputFormat(outputFormat),
   };
+};
+
+const getCachedElevenLabsSpeech = async (
+  normalizedText: string,
+  selectedSpeaker: TtsSpeaker,
+  voiceId: string,
+  context: TtsContext,
+  pace: number,
+) => {
+  const outputFormat = env.ELEVENLABS_OUTPUT_FORMAT;
+  const cacheKey = cacheKeyFor(normalizedText, selectedSpeaker, voiceId, {
+    context,
+    pace,
+    outputFormat,
+  });
+  const cached = speechCache.get(cacheKey);
+  if (cached) return cached;
+
+  const audio = await callElevenLabs(normalizedText, voiceId, pace);
+  const item = {
+    ...audio,
+    cacheKey,
+  };
+  remember(item);
+  return item;
 };
 
 const callSarvam = async (
@@ -312,25 +388,18 @@ export const synthesizeSpeech = async (
     }
   }
 
+  const defaultVoiceId = configuredValue(env.ELEVENLABS_VOICE_ID);
   const voiceId = configuredValue(options.voiceId) ?? resolveVoiceId(selectedSpeaker, resolvedVoiceStyle);
   if (!voiceId) {
     throw new AppError('ELEVENLABS_VOICE_ID is not configured.', 503, 'ELEVENLABS_VOICE_NOT_CONFIGURED');
   }
 
-  const outputFormat = env.ELEVENLABS_OUTPUT_FORMAT;
-  const cacheKey = cacheKeyFor(normalizedText, selectedSpeaker, voiceId, {
-    context,
-    pace,
-    outputFormat,
-  });
-  const cached = speechCache.get(cacheKey);
-  if (cached) return cached;
-
-  const audio = await callElevenLabs(normalizedText, voiceId, pace);
-  const item = {
-    ...audio,
-    cacheKey,
-  };
-  remember(item);
-  return item;
+  try {
+    return await getCachedElevenLabsSpeech(normalizedText, selectedSpeaker, voiceId, context, pace);
+  } catch (error) {
+    if (isElevenLabsPaidPlanError(error) && defaultVoiceId && defaultVoiceId !== voiceId) {
+      return getCachedElevenLabsSpeech(normalizedText, selectedSpeaker, defaultVoiceId, context, pace);
+    }
+    throw error;
+  }
 };

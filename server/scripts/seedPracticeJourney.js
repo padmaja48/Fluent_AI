@@ -1117,26 +1117,26 @@ const buildListeningPassage = ({ level, context, competency, index }) => {
   const minute = 5 + ((clipNumber * 7) % 50);
 
   if (level.id === 'A1') {
-    return `${speakerOne}: Hello ${speakerTwo}. This is ${reference}, a short ${context} message at the ${setting}. I have the ${artifact} and the important detail is the ${detail}. ${speakerTwo}: I understand. We need to ${outcome} at minute ${minute}.`;
+    return `${speakerOne}: Hello ${speakerTwo}. This is ${reference}, a ${context} message at the ${setting}. Please listen carefully. I have the ${artifact}. First, the important detail is the ${detail}. Second, the note says ${measure}, so we cannot finish too quickly. ${speakerTwo}: Thanks. Do we need to call anyone? ${speakerOne}: Not now. We need to ${outcome} at minute ${minute}. Please write it in your notes. ${speakerTwo}: Okay. I will remember the ${detail} and the time.`;
   }
 
   if (level.id === 'A2') {
-    return `${speakerOne}: Hi ${speakerTwo}, ${reference} is about ${context} during the ${setting}. The ${artifact} shows ${measure}, but ${concern}. ${speakerTwo}: Okay, so the next step is to ${outcome} ${timeMarker}. ${speakerOne}: Correct, and please mention the ${detail}.`;
+    return `${speakerOne}: Hi ${speakerTwo}, ${reference} is about ${context} during the ${setting}. The ${artifact} shows ${measure}, but ${concern}. I checked the first page this morning, and it still has the same problem. ${speakerTwo}: Should we wait for a new message, or should we act now? ${speakerOne}: We should act now. The next step is to ${outcome} ${timeMarker}. ${speakerTwo}: Okay, I will make a note. ${speakerOne}: Correct, and please mention the ${detail}, because that is the easiest detail for listeners to miss.`;
   }
 
   if (level.id === 'B1') {
-    return `${speakerOne}: In ${reference}, the ${setting} focused on ${context}. The ${artifact} listed ${measure}, and the main issue was that ${concern}. ${speakerTwo}: I suggested we ${outcome}, but only after checking the ${detail}. ${speakerOne}: That is why the final plan sounds ${tone}, not rushed.`;
+    return `${speakerOne}: In ${reference}, the ${setting} focused on ${context}. At the start, everyone thought the situation was simple, but the ${artifact} listed ${measure}, and the main issue was that ${concern}. ${speakerTwo}: I noticed that too. If we move too fast, people may understand the plan differently. I suggested we ${outcome}, but only after checking the ${detail}. ${speakerOne}: That is why the final plan sounds ${tone}, not rushed. The speakers agree with the goal, yet they also want one more check before the decision is shared.`;
   }
 
   if (level.id === 'B2') {
-    return `${speakerOne}: During ${reference}, a ${setting} about ${context}, the team compared the ${artifact} with the ${detail}. One option addressed ${measure} quickly, but ${concern}. ${speakerTwo}: The stronger choice is to ${outcome}, because it keeps momentum while protecting quality. ${speakerOne}: Exactly, and that ${tone} tradeoff is the point listeners should notice.`;
+    return `${speakerOne}: During ${reference}, a ${setting} about ${context}, the team compared the ${artifact} with the ${detail}. The first option addressed ${measure} quickly, which made it attractive at first. However, the group also saw that ${concern}. ${speakerTwo}: That means the quick answer may solve the visible problem while creating a quieter risk later. ${speakerOne}: Exactly. The stronger choice is to ${outcome}, because it keeps momentum while protecting quality. ${speakerTwo}: So the key is not speed alone. It is the ${tone} tradeoff between acting now and preserving trust in the process.`;
   }
 
   if (level.id === 'C1') {
-    return `${speakerOne}: In ${reference}, a ${setting} about ${context}, the speakers weigh the ${artifact} against the ${detail} without stating every concern directly. ${speakerTwo}: The surface agreement is positive, yet the hesitation around ${measure} suggests that ${concern}. ${speakerOne}: By proposing to ${outcome} ${timeMarker}, the speaker encourages alignment while leaving room for revision. The ${tone} register is the key clue for ${competency}.`;
+    return `${speakerOne}: In ${reference}, a ${setting} about ${context}, the speakers weigh the ${artifact} against the ${detail} without stating every concern directly. ${speakerTwo}: The surface agreement is positive, yet the hesitation around ${measure} suggests that ${concern}. Nobody rejects the proposal, but nobody treats it as settled either. ${speakerOne}: That is why the wording matters. By proposing to ${outcome} ${timeMarker}, the speaker encourages alignment while leaving room for revision. ${speakerTwo}: The ${tone} register is the key clue for ${competency}: progress is welcomed, but only if the unresolved detail is handled with care.`;
   }
 
-  return `${speakerOne}: ${reference} frames ${context} in a ${setting} as a question of judgment rather than preference, using the ${artifact}, ${detail}, and ${measure} as evidence. ${speakerTwo}: Notice the calibrated language: support is offered, but the speaker quietly signals that ${concern}. ${speakerOne}: The recommendation to ${outcome} ${timeMarker} works as a ${tone} compromise, preserving authority while inviting scrutiny. This clip tests ${competency}.`;
+  return `${speakerOne}: ${reference} frames ${context} in a ${setting} as a question of judgment rather than preference, using the ${artifact}, ${detail}, and ${measure} as evidence. ${speakerTwo}: Notice the calibrated language: support is offered, but the speaker quietly signals that ${concern}. The disagreement is not dramatic; it is carried through qualifications, timing, and the order in which evidence is mentioned. ${speakerOne}: The recommendation to ${outcome} ${timeMarker} works as a ${tone} compromise, preserving authority while inviting scrutiny. ${speakerTwo}: This clip tests ${competency}, especially whether the listener can hear the difference between agreement, caution, and final approval.`;
 };
 
 const main = async () => {
