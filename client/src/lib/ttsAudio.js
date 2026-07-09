@@ -129,12 +129,13 @@ export const getTtsApiErrorMessage = async (error, fallback = 'Unable to generat
 };
 
 const hashInput = async (text, speaker, options = {}) => {
+  const normalizedOptions = normalizeTtsRequestOptions(options);
   const input = JSON.stringify({
     text,
     speaker,
-    context: options.context || 'listening',
-    level: options.level || '',
-    pace: options.pace || '',
+    context: normalizedOptions.context || 'listening',
+    level: normalizedOptions.level || '',
+    pace: normalizedOptions.pace || '',
   });
   if (window.crypto?.subtle) {
     const encoded = new TextEncoder().encode(input);
@@ -149,14 +150,28 @@ const hashInput = async (text, speaker, options = {}) => {
   return String(hash);
 };
 
+const normalizeTtsRequestOptions = (options = {}) => {
+  const requestOptions = {
+    level: options.level,
+    context: options.context || 'listening',
+  };
+
+  if (requestOptions.context !== 'listening' && typeof options.pace === 'number') {
+    requestOptions.pace = options.pace;
+  }
+
+  return requestOptions;
+};
+
 export const getTtsAudioBlob = async (text, speaker = 'priya', options = {}) => {
   const cleanText = String(text || '').trim();
   const selectedSpeaker = normalizeTtsSpeaker(speaker);
-  const cacheKey = await hashInput(cleanText, selectedSpeaker, options);
+  const requestOptions = normalizeTtsRequestOptions(options);
+  const cacheKey = await hashInput(cleanText, selectedSpeaker, requestOptions);
   const cached = audioBlobCache.get(cacheKey);
   if (cached) return cached;
 
-  const response = await ttsAPI.synthesize(cleanText, selectedSpeaker, options);
+  const response = await ttsAPI.synthesize(cleanText, selectedSpeaker, requestOptions);
   const blob = response.data;
   audioBlobCache.set(cacheKey, blob);
   return blob;
@@ -401,7 +416,7 @@ export const playTtsAudio = async ({
   onDiagnostics,
 }) => {
   const voiceSettings = normalizeVoiceSettings(settings ?? getStoredTtsVoiceSettings());
-  const blob = await getTtsAudioBlob(text, speaker, { level, context, pace: voiceSettings.speechRate });
+  const blob = await getTtsAudioBlob(text, speaker, { level, context });
   return playProcessedTtsBlob(blob, {
     settings: voiceSettings,
     onPlay,
