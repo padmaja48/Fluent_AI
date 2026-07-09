@@ -96,29 +96,36 @@ describe('ElevenLabs listening TTS pacing', () => {
     expect(audio.buffer).toEqual(makeMp3());
   });
 
-  it('returns a friendly ElevenLabs paid-plan error when no fallback voice is available', async () => {
+  it('retries with a premade ElevenLabs voice when the configured default voice requires a paid plan', async () => {
     (env as typeof env & { ELEVENLABS_API_KEY: string }).ELEVENLABS_API_KEY = 'test-key';
     (env as typeof env & { ELEVENLABS_VOICE_ID: string }).ELEVENLABS_VOICE_ID = 'paid-default-voice-id';
     (env as typeof env & { ELEVENLABS_PROFESSIONAL_FEMALE_VOICE_ID: string | undefined }).ELEVENLABS_PROFESSIONAL_FEMALE_VOICE_ID = undefined;
     (env as typeof env & { ELEVENLABS_OUTPUT_FORMAT: string }).ELEVENLABS_OUTPUT_FORMAT = 'mp3_44100_128';
-    const fetchMock = jest.spyOn(global, 'fetch').mockImplementation(async () =>
-      new Response(paidPlanBody, {
-        status: 402,
-        headers: { 'content-type': 'application/json' },
-      }),
-    );
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockImplementationOnce(async () =>
+        new Response(paidPlanBody, {
+          status: 402,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockImplementationOnce(async () =>
+        new Response(makeMp3(), {
+          status: 200,
+          headers: { 'content-type': 'audio/mpeg' },
+        }),
+      );
 
-    await expect(
-      synthesizeSpeech('This paid voice has no fallback.', 'professional_female', undefined, undefined, {
-        context: 'listening',
-        level: 'B1',
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 402,
-      code: 'ELEVENLABS_VOICE_REQUIRES_PAID_PLAN',
-      message: expect.stringContaining('Selected ElevenLabs voice requires a paid plan'),
+    const audio = await synthesizeSpeech('This paid voice should use a premade fallback.', 'professional_female', undefined, undefined, {
+      context: 'listening',
+      level: 'B1',
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/paid-default-voice-id?');
+    expect(String(fetchMock.mock.calls[1][0])).toContain('/Xb7hH8MSUJpSbSDYk0k2?');
+    expect(audio.contentType).toBe('audio/mpeg');
+    expect(audio.buffer).toEqual(makeMp3());
   });
 
   it('uses Sarvam Indian English speakers for interview personas', async () => {

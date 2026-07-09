@@ -32,6 +32,13 @@ const SARVAM_PERSONA_SPEAKERS: Record<string, string> = {
   'ru-russian': 'ratan',
 };
 
+const ELEVENLABS_PREMADE_VOICE_IDS: Record<VoiceStyle, string> = {
+  default: 'Xb7hH8MSUJpSbSDYk0k2',
+  professional_female: 'Xb7hH8MSUJpSbSDYk0k2',
+  professional_male: 'JBFqnCBsd6RMkjVDRZzb',
+  neutral: 'SAz9YHcvj6GT2YYXdXww',
+};
+
 /* ── Per-persona voice style mapping ───────────────── */
 export const getPersonaVoiceStyle = (personaId: string): VoiceStyle => {
   const map: Record<string, VoiceStyle> = {
@@ -101,6 +108,26 @@ const resolveVoiceId = (speaker: TtsSpeaker, voiceStyle: VoiceStyle) => {
 
   return configuredValue(env.ELEVENLABS_PROFESSIONAL_FEMALE_VOICE_ID) ?? defaultVoiceId;
 };
+
+const fallbackVoiceIdFor = (speaker: TtsSpeaker, voiceStyle: VoiceStyle) => {
+  if (voiceStyle === 'neutral') return ELEVENLABS_PREMADE_VOICE_IDS.neutral;
+  if (voiceStyle === 'professional_male' || speaker === 'rahul') {
+    return ELEVENLABS_PREMADE_VOICE_IDS.professional_male;
+  }
+  return ELEVENLABS_PREMADE_VOICE_IDS.professional_female;
+};
+
+const voiceCandidatesFor = (voiceId: string | undefined, speaker: TtsSpeaker, voiceStyle: VoiceStyle) =>
+  Array.from(
+    new Set(
+      [
+        voiceId,
+        configuredValue(env.ELEVENLABS_VOICE_ID),
+        fallbackVoiceIdFor(speaker, voiceStyle),
+        ELEVENLABS_PREMADE_VOICE_IDS.default,
+      ].filter(Boolean) as string[],
+    ),
+  );
 
 const contentTypeForOutputFormat = (outputFormat: string) => {
   if (outputFormat.startsWith('wav_')) return 'audio/wav';
@@ -388,18 +415,21 @@ export const synthesizeSpeech = async (
     }
   }
 
-  const defaultVoiceId = configuredValue(env.ELEVENLABS_VOICE_ID);
   const voiceId = configuredValue(options.voiceId) ?? resolveVoiceId(selectedSpeaker, resolvedVoiceStyle);
-  if (!voiceId) {
+  const voiceCandidates = voiceCandidatesFor(voiceId, selectedSpeaker, resolvedVoiceStyle);
+  if (!voiceCandidates.length) {
     throw new AppError('ELEVENLABS_VOICE_ID is not configured.', 503, 'ELEVENLABS_VOICE_NOT_CONFIGURED');
   }
 
-  try {
-    return await getCachedElevenLabsSpeech(normalizedText, selectedSpeaker, voiceId, context, pace);
-  } catch (error) {
-    if (isElevenLabsPaidPlanError(error) && defaultVoiceId && defaultVoiceId !== voiceId) {
-      return getCachedElevenLabsSpeech(normalizedText, selectedSpeaker, defaultVoiceId, context, pace);
+  let paidPlanError: unknown;
+  for (const candidateVoiceId of voiceCandidates) {
+    try {
+      return await getCachedElevenLabsSpeech(normalizedText, selectedSpeaker, candidateVoiceId, context, pace);
+    } catch (error) {
+      if (!isElevenLabsPaidPlanError(error)) throw error;
+      paidPlanError = error;
     }
-    throw error;
   }
+
+  throw paidPlanError;
 };
