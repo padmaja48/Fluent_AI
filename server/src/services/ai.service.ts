@@ -146,6 +146,8 @@ export type AdaptiveQuestionContext = InterviewContext & {
   currentQuestionIndex: number;
   jdProfile?: JobDescriptionProfile;
   companyGuidance?: CompanyInterviewGuidance;
+  interviewRoadmap?: InterviewRoadmap;
+  interviewState?: InterviewRuntimeState;
 };
 
 export type CompanyInterviewGuidance = {
@@ -157,6 +159,99 @@ export type CompanyInterviewGuidance = {
   systemDesignExpectations: string;
   technicalDepth: string;
   caution: string;
+};
+
+export type ResumeInterviewProfile = {
+  candidateInformation: {
+    name?: string;
+    education?: string[];
+    degree?: string;
+    branch?: string;
+    cgpa?: string;
+    college?: string;
+  };
+  skills: {
+    programmingLanguages: string[];
+    frameworks: string[];
+    libraries: string[];
+    databases: string[];
+    cloudTechnologies: string[];
+    operatingSystems: string[];
+    developerTools: string[];
+    versionControl: string[];
+    technicalSkills: string[];
+    softSkills: string[];
+  };
+  projects: string[];
+  internships: string[];
+  workExperience: string[];
+  certifications: string[];
+  achievements: string[];
+  hackathons: string[];
+  researchPapers: string[];
+  publications: string[];
+  leadership: string[];
+  positionsOfResponsibility: string[];
+  strengths: string[];
+  areasOfInterest: string[];
+  targetJobRole?: string;
+  expectedCompany?: string;
+};
+
+export type InterviewRoadmapSectionKey =
+  | 'self_introduction'
+  | 'resume_overview'
+  | 'programming_languages'
+  | 'technical_skills'
+  | 'projects'
+  | 'internship'
+  | 'certifications'
+  | 'role_specific'
+  | 'company_specific'
+  | 'coding_problem_solving'
+  | 'system_design'
+  | 'behavioral'
+  | 'hr'
+  | 'candidate_questions'
+  | 'closing';
+
+export type InterviewRoadmapSection = {
+  key: InterviewRoadmapSectionKey;
+  title: string;
+  topics: string[];
+  questionBudget: number;
+};
+
+export type InterviewRoadmap = {
+  duration: number;
+  targetQuestionCount: number;
+  difficulty: 'Easy' | 'Medium' | 'Hard';
+  roleDomain: string;
+  roleLevel: string;
+  targetCompany?: string;
+  resumeProfile: ResumeInterviewProfile;
+  sections: InterviewRoadmapSection[];
+  projectQuestionLimit: number;
+  followUpLimit: number;
+};
+
+export type InterviewRuntimeState = {
+  current_section?: InterviewRoadmapSectionKey;
+  current_project?: string;
+  projects_completed: string[];
+  skills_completed: string[];
+  internship_completed: boolean;
+  certifications_completed: string[];
+  company_questions_completed: boolean;
+  role_questions_completed: boolean;
+  behavioral_completed: boolean;
+  hr_completed: boolean;
+  coding_completed: boolean;
+  remaining_time: number;
+  questions_asked: number;
+  followups_current_topic: number;
+  covered_concepts: string[];
+  asked_questions: string[];
 };
 
 export type ResumeAnalysis = {
@@ -570,6 +665,14 @@ const difficultyForPosition = (index: number, total: number): NonNullable<Genera
   return 'behavioral';
 };
 
+const plannedQuestionCountForDuration = (duration: number) => {
+  if (duration <= 15) return 10;
+  if (duration <= 20) return 13;
+  if (duration <= 30) return 18;
+  if (duration <= 45) return 26;
+  return 34;
+};
+
 const fallbackInitialQuestions = (
   context: InterviewContext,
   questionCount: number,
@@ -639,7 +742,7 @@ const fallbackInitialQuestions = (
 };
 
 export const generateInterviewQuestions = (context: InterviewContext) => {
-  const questionCount = Math.max(4, Math.ceil(context.duration / 5));
+  const questionCount = plannedQuestionCountForDuration(context.duration);
 
   // Unique session seed — guarantees different questions every call even for the same resume
   const sessionSeed = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -902,8 +1005,47 @@ const topicCoverage = (transcript: AdaptiveQuestionContext['transcript']) => {
   return coverage;
 };
 
+const sameCoverageTopic = (left?: string, right?: string) => {
+  const a = canonicalize(left ?? '').toLowerCase();
+  const b = canonicalize(right ?? '').toLowerCase();
+  return Boolean(a && b && (a === b || a.includes(b) || b.includes(a)));
+};
+
+const sectionForTopic = (context: AdaptiveQuestionContext, topic?: string) =>
+  context.interviewRoadmap?.sections.find((section) =>
+    section.topics.some((sectionTopic) => sameCoverageTopic(topic, sectionTopic)),
+  );
+
+const projectForTopic = (context: AdaptiveQuestionContext, topic?: string) =>
+  context.interviewRoadmap?.resumeProfile.projects.find((project) => sameCoverageTopic(topic, project));
+
+const topicAskCount = (context: AdaptiveQuestionContext, topic?: string) =>
+  context.transcript.filter((item) => sameCoverageTopic(item.topic || item.resumeReference, topic)).length;
+
+const consecutiveTopicCount = (context: AdaptiveQuestionContext, topic?: string) => {
+  let count = 0;
+  for (let index = context.transcript.length - 1; index >= 0; index -= 1) {
+    const item = context.transcript[index];
+    if (!sameCoverageTopic(item.topic || item.resumeReference, topic)) break;
+    count += 1;
+  }
+  return count;
+};
+
+const isTopicExhausted = (context: AdaptiveQuestionContext, topic?: string) => {
+  const project = projectForTopic(context, topic);
+  const projectLimit = context.interviewRoadmap?.projectQuestionLimit ?? 3;
+  const followUpLimit = context.interviewRoadmap?.followUpLimit ?? 2;
+  if (project && topicAskCount(context, project) >= projectLimit) return true;
+  return consecutiveTopicCount(context, topic) > followUpLimit;
+};
+
+const roadmapTopicsInOrder = (context: AdaptiveQuestionContext) =>
+  unique((context.interviewRoadmap?.sections ?? []).flatMap((section) => section.topics));
+
 const chooseCoverageTopic = (context: AdaptiveQuestionContext) => {
   const jdTopics = unique([
+    ...roadmapTopicsInOrder(context),
     ...(context.jdProfile?.requiredSkills ?? []),
     ...(context.jdProfile?.toolsTechnologies ?? []),
     ...(context.jdProfile?.domainKnowledge ?? []),
@@ -911,9 +1053,18 @@ const chooseCoverageTopic = (context: AdaptiveQuestionContext) => {
     context.roleDomain,
   ]).filter(Boolean);
   const coverage = topicCoverage(context.transcript);
+  const lastSection = sectionForTopic(context, context.lastQuestion.topic || context.lastQuestion.resumeReference);
+  const nextRoadmapTopic = context.interviewRoadmap?.sections
+    .filter((section) => section.key !== lastSection?.key || isTopicExhausted(context, context.lastQuestion.topic))
+    .flatMap((section) => section.topics)
+    .find((topic) => !coverage.has(topic) && !isTopicExhausted(context, topic));
+
   return (
+    nextRoadmapTopic ??
     jdTopics.find((topic) => !coverage.has(topic)) ??
-    jdTopics.sort((a, b) => (coverage.get(a)?.asked ?? 0) - (coverage.get(b)?.asked ?? 0))[0] ??
+    jdTopics
+      .filter((topic) => !isTopicExhausted(context, topic))
+      .sort((a, b) => (coverage.get(a)?.asked ?? 0) - (coverage.get(b)?.asked ?? 0))[0] ??
     context.lastQuestion.topic ??
     context.roleDomain
   );
@@ -928,19 +1079,31 @@ const transitionForAction = (action: AnswerEvaluation['nextAction'], score: numb
 };
 
 const fallbackAdaptiveQuestion = (context: AdaptiveQuestionContext): GeneratedQuestion => {
-  const action = context.lastEvaluation.nextAction ?? 'move_topic';
+  const sameTopic = context.lastQuestion.topic || context.lastQuestion.resumeReference || context.roleDomain;
+  const exhausted = isTopicExhausted(context, sameTopic);
+  const action = exhausted ? 'move_topic' : context.lastEvaluation.nextAction ?? 'move_topic';
   const difficulty = nextDifficulty(
     context.lastQuestion.difficulty,
     context.lastEvaluation,
     context.currentQuestionIndex + 1,
     context.targetQuestionCount,
   );
-  const sameTopic = context.lastQuestion.topic || context.lastQuestion.resumeReference || context.roleDomain;
   const coverageTopic = chooseCoverageTopic(context);
   const topic = action === 'ask_deeper' || action === 'clarify' || action === 'challenge' || action === 'reduce_difficulty'
     ? sameTopic
     : coverageTopic;
-  const transition = transitionForAction(action, context.lastEvaluation.score);
+  const projectTransition = projectForTopic(context, sameTopic)
+    ? "Great. Let's move to another project."
+    : sectionForTopic(context, coverageTopic)?.key === 'certifications'
+    ? `I noticed ${coverageTopic} on your resume.`
+    : sectionForTopic(context, coverageTopic)?.key === 'internship'
+    ? "I'd like to discuss your internship now."
+    : sectionForTopic(context, coverageTopic)?.key === 'company_specific'
+    ? "Let's move to some company-specific questions."
+    : sectionForTopic(context, coverageTopic)?.key === 'behavioral'
+    ? "Now I'd like to ask a behavioral question."
+    : `Now let's evaluate your ${coverageTopic} skills.`;
+  const transition = action === 'move_topic' ? projectTransition : transitionForAction(action, context.lastEvaluation.score);
   const questionType: GeneratedQuestion['questionType'] =
     difficulty === 'behavioral'
       ? 'behavioural'
@@ -1014,6 +1177,10 @@ ${JSON.stringify(context.jdProfile ?? buildJobDescriptionProfile(context.jobDesc
 
 RESUME SUMMARY: ${context.resumeSummary ?? 'Not available'}
 RESUME SKILLS: ${(context.resumeSkills ?? []).join(', ') || 'Not available'}
+INTERNAL INTERVIEW ROADMAP:
+${context.interviewRoadmap ? JSON.stringify(context.interviewRoadmap, null, 2) : 'No internal roadmap available.'}
+CURRENT INTERVIEW STATE:
+${context.interviewState ? JSON.stringify(context.interviewState, null, 2) : 'No state snapshot available.'}
 
 LAST QUESTION:
 ${JSON.stringify(context.lastQuestion, null, 2)}
@@ -1034,11 +1201,14 @@ ${JSON.stringify(context.previousQuestions.map((item) => ({
 
 NEXT QUESTION REQUIREMENTS:
 - Must depend directly on the candidate's previous answer and evaluation.
-- If the answer was strong, ask a deeper or more challenging continuation on the same topic.
-- If the answer was partial, ask a clarifying follow-up.
-- If the answer was weak, reduce difficulty immediately and rebuild confidence.
-- If enough depth was shown, move to an uncovered JD/resume topic without feeling random.
+- Follow the INTERNAL INTERVIEW ROADMAP, but do not reveal it to the candidate.
+- If a project has reached ${context.interviewRoadmap?.projectQuestionLimit ?? 3} total questions, move to another project or section.
+- Never exceed ${context.interviewRoadmap?.followUpLimit ?? 2} follow-ups on the same topic.
+- Ask a follow-up only when clarification is needed, the answer is incomplete, the candidate mentioned a new technology, or a deeper challenge is justified.
+- If enough depth was shown or a topic is exhausted, move to an uncovered resume/JD/company section without feeling random.
+- Cover projects, skills, internship/work experience, certifications, role-specific, company-specific, coding/problem-solving, behavioral, and HR sections when present.
 - Do not repeat a previous question or ask semantically similar questions.
+- Do not repeat a covered concept from CURRENT INTERVIEW STATE.
 - Respect target difficulty: ${difficulty}.
 - Prefer JD-required skills and resume/JD overlap over generic programming.
 - For coding-style questions, ask for complexity, edge cases, alternatives, and optimization. Do not reveal solutions.
@@ -1058,11 +1228,19 @@ Return ONLY this JSON:
   }
 }`,
     { question: fallback },
-  ).then((result) => ({
-    ...fallback,
-    ...result.question,
-    expectedSignals: result.question.expectedSignals?.length ? result.question.expectedSignals : fallback.expectedSignals,
-  }));
+  ).then((result) => {
+    const candidate = {
+      ...fallback,
+      ...result.question,
+      expectedSignals: result.question.expectedSignals?.length ? result.question.expectedSignals : fallback.expectedSignals,
+    };
+    const normalizedCandidate = canonicalize(candidate.question).toLowerCase().replace(/[?.!]+$/g, '');
+    const repeatedQuestion = context.previousQuestions.some(
+      (item) => canonicalize(item.question).toLowerCase().replace(/[?.!]+$/g, '') === normalizedCandidate,
+    );
+    const exhaustedTopic = candidate.topic !== fallback.topic && isTopicExhausted(context, candidate.topic);
+    return repeatedQuestion || exhaustedTopic ? fallback : candidate;
+  });
 };
 
 export type WritingEvaluation = {

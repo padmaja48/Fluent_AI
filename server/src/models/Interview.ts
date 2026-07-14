@@ -61,6 +61,8 @@ export interface IInterview extends Document {
   resumeSummary?: string;
   jdProfile?: unknown;
   companyGuidance?: unknown;
+  interviewRoadmap?: unknown;
+  interviewState?: unknown;
   liveScores?: {
     confidence?: number;
     completeness?: number;
@@ -100,7 +102,7 @@ const interviewSchema = new Schema<IInterview>(
     roleLevel: { type: String, enum: ['Fresher', 'Mid', 'Senior', 'Lead'], required: true },
     roleDomain: { type: String, required: true },
     interviewStyle: { type: String, default: 'Mixed' },
-    duration: { type: Number, enum: [15, 30, 45, 60], default: 30 },
+    duration: { type: Number, enum: [15, 20, 30, 45, 60], default: 30 },
     questions: [interviewQuestionSchema],
     currentQuestionIndex: { type: Number, default: 0 },
     recordingUrl: String,
@@ -141,6 +143,8 @@ const interviewSchema = new Schema<IInterview>(
     resumeSummary: String,
     jdProfile: { type: Schema.Types.Mixed },
     companyGuidance: { type: Schema.Types.Mixed },
+    interviewRoadmap: { type: Schema.Types.Mixed },
+    interviewState: { type: Schema.Types.Mixed },
     liveScores: {
       confidence: Number,
       completeness: Number,

@@ -15,7 +15,12 @@ import {
 } from '../services/ai.service';
 import { uploadBuffer, uploadText } from '../services/storage.service';
 import { getPersonaIntro, getPersonaVoiceStyle, synthesizeSpeech } from '../services/voice.service';
-import { buildInterviewQuestionSet, getCompanyInterviewGuidance, getInterviewQuestionCount, isKnownCompany } from '../services/companyQuestions.service';
+import {
+  buildInterviewQuestionSet,
+  buildInterviewRoadmap,
+  deriveInterviewRuntimeState,
+  getCompanyInterviewGuidance,
+} from '../services/companyQuestions.service';
 
 const idParams = z.object({
   params: z.object({
@@ -34,11 +39,11 @@ export const createInterviewSchema = z.object({
     roleLevel: z.enum(['Fresher', 'Mid', 'Senior', 'Lead']),
     roleDomain: z.string().min(2),
     interviewStyle: z.string().min(2).default('Mixed'),
-    duration: z.coerce.number().int().min(15).max(60).default(30),
+    duration: z.coerce.number().int().refine((value) => [15, 20, 30, 45, 60].includes(value), 'Unsupported interview duration').default(30),
     personaId: z.enum(['us-american', 'us-indian', 'us-australian', 'ru-russian']).optional(),
     interviewType: z.enum(['Behavioural', 'Technical', 'Mixed']).optional(),
     complexity: z.enum(['Beginner', 'Intermediate', 'Advanced']).optional(),
-    targetCompany: z.string().refine(isKnownCompany, 'Unknown target company').optional(),
+    targetCompany: z.string().min(1).max(120).optional(),
   }),
 });
 
@@ -189,6 +194,22 @@ export const createInterview = asyncHandler(async (req, res) => {
     resumeSkills,
   });
   const companyGuidance = getCompanyInterviewGuidance(req.body.targetCompany);
+  const interviewRoadmap = buildInterviewRoadmap({
+    resumeText,
+    resumeSkills,
+    resumeSummary,
+    roleDomain: req.body.roleDomain,
+    roleLevel: req.body.roleLevel,
+    duration: req.body.duration ?? 30,
+    complexity: req.body.complexity,
+    targetCompany: req.body.targetCompany,
+    jdProfile,
+    companyGuidance,
+  });
+  const interviewState = deriveInterviewRuntimeState({
+    roadmap: interviewRoadmap,
+    transcript: [],
+  });
 
   const interview = await Interview.create({
     userId: req.userId,
@@ -200,7 +221,9 @@ export const createInterview = asyncHandler(async (req, res) => {
     resumeSummary,
     jdProfile,
     companyGuidance,
-    totalPlannedQuestions: getInterviewQuestionCount(req.body.duration ?? 30),
+    interviewRoadmap,
+    interviewState,
+    totalPlannedQuestions: interviewRoadmap.targetQuestionCount,
     liveScores: {},
     status: 'Setup',
   });
@@ -231,18 +254,6 @@ export const startInterview = asyncHandler(async (req, res) => {
 
   const interview = await getInterviewForUser(interviewId, req.userId);
 
-  if (interview.questions.length === 0) {
-    const generated = await generateInterviewQuestions(buildContextFromInterview(interview));
-
-    interview.questions = buildInterviewQuestionSet({
-      generatedQuestions: generated.questions,
-      targetCompany: (interview as any).targetCompany,
-      duration: interview.duration,
-      prioritizeGenerated: Boolean((interview as any).jobDescription?.trim()),
-    });
-    (interview as any).totalPlannedQuestions = interview.questions.length;
-  }
-
   if (!(interview as any).jdProfile) {
     (interview as any).jdProfile = buildJobDescriptionProfile((interview as any).jobDescription, {
       roleLevel: interview.roleLevel,
@@ -252,6 +263,40 @@ export const startInterview = asyncHandler(async (req, res) => {
   }
   if (!(interview as any).companyGuidance) {
     (interview as any).companyGuidance = getCompanyInterviewGuidance((interview as any).targetCompany);
+  }
+  if (!(interview as any).interviewRoadmap) {
+    (interview as any).interviewRoadmap = buildInterviewRoadmap({
+      resumeText: interview.resumeText,
+      resumeSkills: (interview as any).resumeSkills ?? [],
+      resumeSummary: (interview as any).resumeSummary,
+      roleDomain: interview.roleDomain,
+      roleLevel: interview.roleLevel,
+      duration: interview.duration,
+      complexity: (interview as any).complexity,
+      targetCompany: (interview as any).targetCompany,
+      jdProfile: (interview as any).jdProfile,
+      companyGuidance: (interview as any).companyGuidance,
+    });
+  }
+  if (!(interview as any).interviewState) {
+    (interview as any).interviewState = deriveInterviewRuntimeState({
+      roadmap: (interview as any).interviewRoadmap,
+      transcript: [],
+    });
+  }
+  (interview as any).totalPlannedQuestions =
+    (interview as any).interviewRoadmap?.targetQuestionCount ?? (interview as any).totalPlannedQuestions;
+
+  if (interview.questions.length === 0) {
+    const generated = await generateInterviewQuestions(buildContextFromInterview(interview));
+
+    interview.questions = buildInterviewQuestionSet({
+      generatedQuestions: generated.questions,
+      targetCompany: (interview as any).targetCompany,
+      duration: interview.duration,
+      interviewRoadmap: (interview as any).interviewRoadmap,
+      prioritizeGenerated: Boolean((interview as any).jobDescription?.trim()),
+    });
   }
 
   interview.status = 'In Progress';
@@ -307,6 +352,21 @@ export const submitAnswer = asyncHandler(async (req, res) => {
 
   const nextIndex = questionIndex + 1;
   const targetQuestionCount = (interview as any).totalPlannedQuestions ?? interview.questions.length;
+  const answeredTranscript = interview.questions.slice(0, nextIndex).map((item) => ({
+    question: item.question,
+    answer: item.userAnswer,
+    score: item.score,
+    feedback: item.feedback,
+    questionType: item.questionType,
+    resumeReference: item.resumeReference,
+    difficulty: item.difficulty,
+    topic: item.topic,
+  }));
+  (interview as any).interviewState = deriveInterviewRuntimeState({
+    roadmap: (interview as any).interviewRoadmap,
+    transcript: answeredTranscript,
+  });
+
   if (nextIndex < targetQuestionCount) {
     const previousQuestionDocs = interview.questions.slice(0, nextIndex);
     const previousQuestions = previousQuestionDocs.map(toGeneratedQuestion);
@@ -331,6 +391,8 @@ export const submitAnswer = asyncHandler(async (req, res) => {
       currentQuestionIndex: questionIndex,
       jdProfile: (interview as any).jdProfile,
       companyGuidance: (interview as any).companyGuidance,
+      interviewRoadmap: (interview as any).interviewRoadmap,
+      interviewState: (interview as any).interviewState,
     });
 
     if (interview.questions[nextIndex]) {
@@ -340,6 +402,7 @@ export const submitAnswer = asyncHandler(async (req, res) => {
     }
     interview.markModified('questions');
   }
+  interview.markModified('interviewState');
 
   interview.currentQuestionIndex = nextIndex; // may equal target count; that signals completion
   await interview.save();
