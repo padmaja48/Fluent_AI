@@ -8,7 +8,6 @@ import { asyncHandler } from '../utils/asyncHandler';
 import {
   buildJobDescriptionProfile,
   evaluateAnswer,
-  generateAdaptiveInterviewQuestion,
   generateInterviewQuestions,
   generateReport,
   transcribeAudio,
@@ -161,9 +160,6 @@ const toGeneratedQuestion = (item: any) => ({
   topic: item.topic,
   followUpIntent: item.followUpIntent,
 });
-
-const isRequiredCoverageQuestion = (question?: { resumeReference?: string }) =>
-  Boolean(question?.resumeReference && /^(Skill coverage|Skill deep dive|Skill production scenario):/i.test(question.resumeReference));
 
 export const logViolationSchema = z.object({
   body: z.object({
@@ -419,48 +415,9 @@ export const submitAnswer = asyncHandler(async (req, res) => {
   });
 
   if (nextIndex < targetQuestionCount) {
-    const previousQuestionDocs = interview.questions.slice(0, nextIndex);
-    const previousQuestions = previousQuestionDocs.map(toGeneratedQuestion);
-    const lastQuestion = toGeneratedQuestion(interview.questions[questionIndex]);
     const plannedNextQuestion = interview.questions[nextIndex];
-    const nextQuestion = isRequiredCoverageQuestion(plannedNextQuestion)
-      ? toGeneratedQuestion(plannedNextQuestion)
-      : await generateAdaptiveInterviewQuestion({
-      ...buildContextFromInterview(interview),
-      previousQuestions,
-      transcript: previousQuestionDocs.map((item) => ({
-        question: item.question,
-        answer: item.userAnswer,
-        score: item.score,
-        feedback: item.feedback,
-        questionType: item.questionType,
-        resumeReference: item.resumeReference,
-        difficulty: item.difficulty,
-        topic: item.topic,
-        idealAnswer: (item as any).idealAnswer,
-        samplePerfectAnswer: (item as any).samplePerfectAnswer,
-        conceptsCovered: (item as any).conceptsCovered,
-        missingConcepts: (item as any).missingConcepts,
-        incorrectStatements: (item as any).incorrectStatements,
-        wrongTerminology: (item as any).wrongTerminology,
-        technicalMistakes: (item as any).technicalMistakes,
-        dynamicFeedback: (item as any).dynamicFeedback,
-      })),
-      lastQuestion,
-      lastAnswer: req.body.answer,
-      lastEvaluation: evaluation,
-      targetQuestionCount,
-      currentQuestionIndex: questionIndex,
-      jdProfile: (interview as any).jdProfile,
-      companyGuidance: (interview as any).companyGuidance,
-      interviewRoadmap: (interview as any).interviewRoadmap,
-      interviewState: (interview as any).interviewState,
-    });
-
-    if (interview.questions[nextIndex]) {
-      interview.questions[nextIndex] = nextQuestion;
-    } else {
-      interview.questions.push(nextQuestion);
+    if (plannedNextQuestion) {
+      interview.questions[nextIndex] = toGeneratedQuestion(plannedNextQuestion);
     }
     interview.markModified('questions');
   }

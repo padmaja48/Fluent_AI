@@ -9,7 +9,7 @@ import VoiceIndicator from './interview/VoiceIndicator';
 import '../styles/Interview.css';
 
 const STEPS = ['Resume', 'Persona', 'Config', 'System Check'];
-const MAX_VIOLATIONS = 3;
+const REVIEW_WARNING_THRESHOLD = 3;
 const PERSON_CHECK_INTERVAL_MS = 1500;
 const PERSON_MISSING_GRACE_MS = 5000;
 const ANSWER_SILENCE_PROMPT_MS = 60000;
@@ -514,7 +514,7 @@ function SystemCheckStep({ onStart, onBack, loading }) {
           <li><strong>Copy/paste:</strong> Clipboard actions are disabled.</li>
           <li><strong>Right-click:</strong> Context menus are disabled.</li>
           <li><strong>Camera:</strong> Keep your face visible at all times.</li>
-          <li><strong>Violations:</strong> {MAX_VIOLATIONS} violations will terminate the interview automatically.</li>
+          <li><strong>Warnings:</strong> Fullscreen, camera, and focus issues are recorded for review, but the interview will not auto-end.</li>
         </ul>
       </div>
 
@@ -673,16 +673,12 @@ function LiveSession({ interview, persona, onComplete }) {
     violationCountRef.current += 1;
     const count = violationCountRef.current;
     setViolations(count);
-    setViolationMsg(`Warning (${count}/${MAX_VIOLATIONS}): ${description}`);
+    setViolationMsg(`Warning ${count}: ${description}`);
     setViolationFlash(true);
     setTimeout(() => setViolationFlash(false), 800);
     try { await interviewAPI.logViolation(interview._id, type, description); } catch {}
-    if (count >= MAX_VIOLATIONS && !autoSubmittedRef.current) {
-      autoSubmittedRef.current = true;
-      finishSession({ terminatedBySystem: true });
-    }
     setTimeout(() => setViolationMsg(''), 5000);
-  }, [finishSession, interview._id]);
+  }, [interview._id]);
 
   /* ── STRICT PROCTORING ──────────────────────────── */
   useEffect(() => {
@@ -1262,15 +1258,15 @@ function LiveSession({ interview, persona, onComplete }) {
   };
 
   /* Violation color: green → yellow → orange → red */
-  const violationColor = ['#10b981', '#f59e0b', '#f97316', '#ef4444'][Math.min(violations, 3)];
+  const violationColor = ['#10b981', '#f59e0b', '#f97316', '#ef4444'][Math.min(violations, REVIEW_WARNING_THRESHOLD)];
 
   if (terminated) {
     return (
       <div className="iv-terminated">
         <div className="iv-terminated-icon">!</div>
         <h2>Interview Terminated</h2>
-        <p>You exceeded <strong>{MAX_VIOLATIONS} integrity violations</strong>.</p>
-        <p>Your session has been auto-submitted and flagged for review.</p>
+        <p>The interview was ended by the system.</p>
+        <p>Your session has been submitted and flagged for review.</p>
         <button className="iv-btn iv-btn--primary" onClick={() => onComplete(interview._id)}>
           View Results
         </button>
@@ -1298,7 +1294,7 @@ function LiveSession({ interview, persona, onComplete }) {
         </span>
         {violations > 0 && (
           <span className="iv-violation-count" style={{ color: violationColor }}>
-            {violations}/{MAX_VIOLATIONS} violations
+            {violations} warning{violations === 1 ? '' : 's'}
           </span>
         )}
         <span className="iv-proctor-status">{isSpeaking ? 'Interviewer speaking' : isListening ? 'Listening' : 'Ready'}</span>
