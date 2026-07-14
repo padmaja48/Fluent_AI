@@ -94,7 +94,19 @@ const requestedInterviewId = (req: { params: { id?: unknown }; body: { interview
   firstString(req.params.id) ?? firstString(req.body.interviewId);
 
 const writeInterviewState = async (interviewId: string, state: unknown) => {
-  await getRedis().set(`interview:${interviewId}:state`, JSON.stringify(state), 'EX', 60 * 60 * 4);
+  try {
+    await getRedis().set(`interview:${interviewId}:state`, JSON.stringify(state), 'EX', 60 * 60 * 4);
+  } catch (error) {
+    console.warn('Interview state cache write failed; continuing with database state.', error);
+  }
+};
+
+const deleteInterviewState = async (interviewId: string) => {
+  try {
+    await getRedis().del(`interview:${interviewId}:state`);
+  } catch (error) {
+    console.warn('Interview state cache delete failed; continuing with database state.', error);
+  }
 };
 
 const PERSONA_PERSONALITIES: Record<string, string> = {
@@ -473,7 +485,7 @@ export const completeInterview = asyncHandler(async (req, res) => {
   if (interview.status === 'Completed') {
     const report = await Report.findOne({ interviewId: interview._id }).sort({ createdAt: -1 });
     await interview.populate('userId', 'name email');
-    await getRedis().del(`interview:${interview._id}:state`);
+    await deleteInterviewState(String(interview._id));
     res.json({ interview, report });
     return;
   }
@@ -524,7 +536,7 @@ export const completeInterview = asyncHandler(async (req, res) => {
   await interview.save();
   await interview.populate('userId', 'name email');
 
-  await getRedis().del(`interview:${interview._id}:state`);
+  await deleteInterviewState(String(interview._id));
   res.json({ interview, report });
 });
 
@@ -535,7 +547,10 @@ export const getInterviewState = asyncHandler(async (req, res) => {
   }
 
   const interview = await getInterviewForUser(interviewId, req.userId);
-  const cached = await getRedis().get(`interview:${interview._id}:state`);
+  const cached = await getRedis().get(`interview:${interview._id}:state`).catch((error) => {
+    console.warn('Interview state cache read failed; using database state.', error);
+    return null;
+  });
   res.json(cached ? JSON.parse(cached) : getPublicState(interview));
 });
 

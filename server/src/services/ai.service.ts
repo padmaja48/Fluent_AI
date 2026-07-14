@@ -555,37 +555,41 @@ const extractJson = <T>(text: string): T => {
 };
 
 const generateJson = async <T>(prompt: string, fallback: T): Promise<T> => {
-  if (env.AI_PROVIDER === 'openai' && openai) {
-    const client = openai as unknown as {
-      responses: {
-        create(input: {
-          model: string;
-          input: string;
-          text: { format: { type: 'json_object' } };
-        }): Promise<{ output_text: string }>;
+  try {
+    if (env.AI_PROVIDER === 'openai' && openai) {
+      const client = openai as unknown as {
+        responses: {
+          create(input: {
+            model: string;
+            input: string;
+            text: { format: { type: 'json_object' } };
+          }): Promise<{ output_text: string }>;
+        };
       };
-    };
 
-    const response = await client.responses.create({
-      model: env.OPENAI_MODEL,
-      input: prompt,
-      text: { format: { type: 'json_object' } },
-    });
+      const response = await client.responses.create({
+        model: env.OPENAI_MODEL,
+        input: prompt,
+        text: { format: { type: 'json_object' } },
+      });
 
-    return extractJson<T>(response.output_text);
-  }
+      return extractJson<T>(response.output_text);
+    }
 
-  if (env.AI_PROVIDER === 'groq' && groq) {
-    const response = await groq.chat.completions.create({
-      model: env.GROQ_MODEL,
-      messages: [
-        { role: 'system', content: 'Return strict JSON only. Do not include markdown.' },
-        { role: 'user', content: prompt },
-      ],
-      response_format: { type: 'json_object' },
-    });
+    if (env.AI_PROVIDER === 'groq' && groq) {
+      const response = await groq.chat.completions.create({
+        model: env.GROQ_MODEL,
+        messages: [
+          { role: 'system', content: 'Return strict JSON only. Do not include markdown.' },
+          { role: 'user', content: prompt },
+        ],
+        response_format: { type: 'json_object' },
+      });
 
-    return extractJson<T>(response.choices[0]?.message?.content ?? '{}');
+      return extractJson<T>(response.choices[0]?.message?.content ?? '{}');
+    }
+  } catch (error) {
+    console.warn('AI JSON generation failed; using deterministic fallback.', error);
   }
 
   return fallback;
