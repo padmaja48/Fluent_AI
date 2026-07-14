@@ -392,6 +392,7 @@ const TECHNICAL_SKILL_PATTERNS: Array<[string, RegExp]> = [
   ['GraphQL', /\bgraphql\b/i],
   ['Machine Learning', /\bmachine learning|\bml\b/i],
   ['Deep Learning', /\bdeep learning\b/i],
+  ['Artificial Intelligence', /\bartificial intelligence|\bai\b/i],
   ['Generative AI', /\bgenerative ai|genai|llm|large language model\b/i],
   ['RAG', /\brag|retrieval augmented generation\b/i],
   ['Vector Databases', /\bvector database|embeddings?\b/i],
@@ -584,7 +585,6 @@ const isTechnicalInterviewRole = (roleDomain: string) =>
 const roleSpecificTopics = (roleDomain: string) => {
   if (/\bdigital\s*marketing|marketing\b/i.test(roleDomain)) {
     return [
-      roleDomain,
       'campaign strategy',
       'SEO and SEM',
       'social media marketing',
@@ -595,17 +595,55 @@ const roleSpecificTopics = (roleDomain: string) => {
     ];
   }
 
-  if (/\bbusiness\s*analyst|product|sales|operations|hr|human resources|finance|accounting\b/i.test(roleDomain)) {
-    return [roleDomain, 'requirements analysis', 'stakeholder communication', 'metrics and reporting', 'business impact'];
+  if (/\bai|artificial intelligence|ml|machine learning\b/i.test(roleDomain)) {
+    return ['model selection', 'data preprocessing', 'feature evaluation', 'model validation', 'AI product integration', 'responsible AI checks'];
   }
 
-  return [roleDomain];
+  if (/\bsoftware|developer|programmer\b/i.test(roleDomain)) {
+    return ['feature requirements breakdown', 'technology selection', 'implementation workflow', 'testing strategy', 'debugging approach', 'code quality'];
+  }
+
+  if (/\bfrontend\b/i.test(roleDomain)) {
+    return ['responsive UI implementation', 'state management', 'API integration', 'accessibility', 'performance optimization'];
+  }
+
+  if (/\bbackend\b/i.test(roleDomain)) {
+    return ['API design basics', 'database interaction', 'authentication flow', 'error handling', 'testing strategy'];
+  }
+
+  if (/\bbusiness\s*analyst|product|sales|operations|hr|human resources|finance|accounting\b/i.test(roleDomain)) {
+    return ['requirements analysis', 'stakeholder communication', 'metrics and reporting', 'business impact'];
+  }
+
+  return ['role responsibilities', 'practical workflow', 'tools used', 'success metrics'];
 };
 
 const problemSolvingTopicsForRole = (roleDomain: string, resumeProfile: ResumeInterviewProfile) =>
   isTechnicalInterviewRole(roleDomain)
-    ? uniqueTopics(['Data Structures', 'Algorithms', ...(resumeProfile.skills.programmingLanguages.slice(0, 3))])
+    ? uniqueTopics([
+        ...resumeProfile.skills.programmingLanguages.slice(0, 3),
+        ...resumeProfile.skills.technicalSkills.slice(0, 5),
+        'debugging',
+        'testing',
+      ])
     : uniqueTopics(['role scenario', 'prioritization', 'metrics analysis', 'execution plan']);
+
+const shouldAskSystemDesign = (
+  roleDomain: string,
+  roleLevel: string,
+  skillTopics: string[],
+  jdProfile?: JobDescriptionProfile,
+) => {
+  const explicitSystemDesign = uniqueTopics([
+    roleDomain,
+    ...skillTopics,
+    ...(jdProfile?.requiredSkills ?? []),
+    ...(jdProfile?.responsibilities ?? []),
+    ...(jdProfile?.toolsTechnologies ?? []),
+  ]).some((topic) => /\b(system design|architecture|scalability|distributed systems|microservices|platform architecture)\b/i.test(topic));
+
+  return isTechnicalInterviewRole(roleDomain) && (explicitSystemDesign || roleLevel === 'Senior' || roleLevel === 'Lead');
+};
 
 const distributeBudget = (sections: Omit<InterviewRoadmapSection, 'questionBudget'>[], targetQuestionCount: number) => {
   const weights: Record<InterviewRoadmapSectionKey, number> = {
@@ -662,7 +700,7 @@ export const buildInterviewRoadmap = ({
   const technicalRole = isTechnicalInterviewRole(roleDomain);
   const technicalSkillTopics = allTechnicalSkillTopics(resumeProfile, jdProfile);
   const coverageQuestionCount = technicalSkillTopics.length * skillQuestionDepth(duration, complexity);
-  const systemDesignApplicable = technicalRole && (roleLevel === 'Senior' || roleLevel === 'Lead' || /architect|backend|full stack|cloud|devops|engineer/i.test(roleDomain));
+  const systemDesignApplicable = shouldAskSystemDesign(roleDomain, roleLevel, technicalSkillTopics, jdProfile);
   const coreSectionReserve =
     1 + // introduction
     2 + // role-specific and coding/problem-solving
@@ -1413,8 +1451,8 @@ const questionForRoadmapTopic = (
       };
     case 'technical_skills':
       return {
-        question: `Now let's move to ${topic}. Explain one practical use case, one common mistake, and how you would validate it in production.`,
-        expectedSignals: ['practical use case', 'common pitfall', 'validation or testing'],
+        question: `You mentioned ${topic}. Explain one practical use case from your learning, internship, or project work, one common mistake, and how you would test or verify it.`,
+        expectedSignals: ['practical use case', 'common pitfall', 'testing or verification'],
         questionType: 'technical',
         difficulty: index % 3 === 0 ? 'medium' : 'easy-medium',
         followUpIntent: 'deepen',
@@ -1422,8 +1460,8 @@ const questionForRoadmapTopic = (
       };
     case 'projects':
       return {
-        question: `Great. Let's move to another project. In ${topic}, what was the architecture, your exact contribution, and the hardest trade-off?`,
-        expectedSignals: ['architecture', 'personal contribution', 'trade-off or challenge'],
+        question: `Great. Let's discuss ${topic}. What problem did it solve, what was your exact contribution, and what was the hardest technical or execution challenge?`,
+        expectedSignals: ['problem solved', 'personal contribution', 'technical or execution challenge'],
         questionType: 'technical',
         difficulty: 'medium',
         followUpIntent: 'deepen',
@@ -1450,10 +1488,10 @@ const questionForRoadmapTopic = (
     case 'role_specific':
       return {
         question: technicalRole
-          ? `For a ${roadmap.roleDomain} role, how would you approach ${topic} from requirements to implementation and testing?`
+          ? `For a ${roadmap.roleDomain} role, how would you handle ${topic} in a project? Mention the steps you would take, the resume skills you would use, and how you would verify the result.`
           : `For a ${roadmap.roleDomain} role, how would you plan and execute ${topic}, and how would you measure whether it worked?`,
         expectedSignals: technicalRole
-          ? ['structured approach', 'implementation detail', 'testing mindset']
+          ? ['structured steps', 'resume skill connection', 'verification mindset']
           : ['structured plan', 'execution steps', 'success metrics'],
         questionType: 'situational',
         difficulty: 'scenario',
@@ -1480,10 +1518,10 @@ const questionForRoadmapTopic = (
     case 'coding_problem_solving':
       return {
         question: technicalRole
-          ? `Let's do a coding-style discussion using ${topic}. Explain your approach, edge cases, complexity, and one optimization for a practical problem in this area.`
+          ? `Let's discuss a practical problem involving ${topic}. What would you build or debug, what cases would you check, and how would you know your solution is working?`
           : `Let's discuss a practical ${roadmap.roleDomain} scenario around ${topic}. What would you do first, what constraints would you consider, and how would you track success?`,
         expectedSignals: technicalRole
-          ? ['algorithmic approach', 'edge cases', 'complexity and optimization']
+          ? ['practical approach', 'cases checked', 'verification']
           : ['problem framing', 'prioritization', 'success metrics'],
         questionType: technicalRole ? 'technical' : 'situational',
         difficulty: technicalRole ? 'problem-solving' : 'scenario',
@@ -1612,10 +1650,10 @@ const roleFocusQuestions = (roadmap?: InterviewRoadmap): GeneratedQuestion[] => 
   return roleTopics.flatMap((topic, index) => {
     const base: GeneratedQuestion = {
       question: technicalRole
-        ? `For a ${roadmap.roleDomain} interview, explain how you would use ${topic} in a real project and what trade-offs you would consider.`
+        ? `For a ${roadmap.roleDomain} interview, explain how you would apply ${topic} in one of your projects or internship tasks, and how you would check that it worked.`
         : `For a ${roadmap.roleDomain} interview, walk me through how you would handle ${topic} in a real business situation and how you would measure success.`,
       expectedSignals: technicalRole
-        ? ['role relevance', 'practical implementation', 'trade-off reasoning']
+        ? ['role relevance', 'project connection', 'verification']
         : ['role relevance', 'practical execution', 'success metrics'],
       questionType: technicalRole ? 'technical' : 'situational',
       resumeReference: `Role focus: ${topic}`,
@@ -1626,7 +1664,7 @@ const roleFocusQuestions = (roadmap?: InterviewRoadmap): GeneratedQuestion[] => 
 
     const followUp: GeneratedQuestion = {
       question: technicalRole
-        ? `Staying with ${topic}, what would make your approach fail in production, and how would you debug or prevent that?`
+        ? `Staying with ${topic}, what mistake or failure could happen while implementing it, and how would you debug or prevent that?`
         : `Staying with ${topic}, what could go wrong during execution, and how would you adjust your plan based on performance data?`,
       expectedSignals: technicalRole
         ? ['failure mode', 'debugging approach', 'prevention']

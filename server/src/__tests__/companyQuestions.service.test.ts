@@ -213,6 +213,39 @@ describe('company question composition', () => {
     expect(questions.some((question) => question.resumeReference?.startsWith('Role Scenario / Problem Solving:'))).toBe(true);
   });
 
+  it('keeps fresher software interviews grounded in resume skills without generic system design', () => {
+    const roadmap = buildInterviewRoadmap({
+      roleDomain: 'Software Engineering',
+      roleLevel: 'Fresher',
+      duration: 15,
+      complexity: 'Beginner',
+      resumeSkills: ['Artificial Intelligence', 'Machine Learning', 'Python'],
+      resumeText: [
+        'Padmaja',
+        'Education',
+        'B.Tech Artificial Intelligence and Machine Learning',
+        'Projects',
+        'AI Interview Platform - Python and Machine Learning',
+        'Internship',
+        'AI Intern at Intellibiotics',
+      ].join('\n'),
+    });
+
+    const questions = buildInterviewQuestionSet({
+      duration: 15,
+      generatedQuestions: [],
+      interviewRoadmap: roadmap,
+    });
+
+    const questionText = questions.map((question) => question.question).join(' ');
+    expect(roadmap.sections.some((section) => section.key === 'system_design')).toBe(false);
+    expect(questionText).toMatch(/Artificial Intelligence|Machine Learning|Python|AI Interview Platform/i);
+    expect(questionText).not.toMatch(/system design|Design around Scalability|cover APIs, storage, scaling/i);
+    expect(questionText).not.toContain('approach Software Engineering from requirements to implementation and testing');
+    expect(questions.some((question) => question.resumeReference === 'Role-specific Questions: Software Engineering')).toBe(false);
+    expect(questions.some((question) => question.resumeReference === 'Role focus: Software Engineering')).toBe(false);
+  });
+
   it('makes selected role and resume skills the majority of interview questions', () => {
     const roadmap = buildInterviewRoadmap({
       roleDomain: 'digital marketing',
