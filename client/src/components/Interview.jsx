@@ -13,6 +13,9 @@ const MAX_VIOLATIONS = 3;
 const PERSON_CHECK_INTERVAL_MS = 1500;
 const PERSON_MISSING_GRACE_MS = 5000;
 const ANSWER_SILENCE_PROMPT_MS = 60000;
+const FULLSCREEN_RECHECK_MS = 1500;
+const FOCUS_RECHECK_MS = 1500;
+const VIOLATION_COOLDOWN_MS = 5000;
 const INTERVIEW_TTS_PLAYBACK_SETTINGS = {
   volume: 1.35,
   speechRate: 1,
@@ -573,6 +576,10 @@ function LiveSession({ interview, persona, onComplete }) {
   const sessionClosedRef    = useRef(false);
   const transcriptRef       = useRef([]);
   const interimTextRef      = useRef('');
+  const currentAnswerPartsRef = useRef([]);
+  const violationCooldownRef = useRef({});
+  const fullscreenRecoveryTimerRef = useRef(null);
+  const focusRecoveryTimerRef = useRef(null);
   const keepSpeechRecognitionAliveRef = useRef(false);
   const personMissingSinceRef = useRef(null);
   const lastCameraViolationAtRef = useRef(0);
@@ -584,6 +591,7 @@ function LiveSession({ interview, persona, onComplete }) {
   useEffect(() => { interimTextRef.current = interimText; }, [interimText]);
 
   useEffect(() => {
+    currentAnswerPartsRef.current = [];
     lastAnswerActivityAtRef.current = Date.now();
     silencePromptedRef.current = false;
   }, [currentIdx]);
@@ -591,13 +599,16 @@ function LiveSession({ interview, persona, onComplete }) {
   const getAnswerSinceLastQuestionFromRefs = useCallback(() => {
     const curr = transcriptRef.current;
     const lastInterviewerIdx = [...curr].map((m, i) => m.role === 'interviewer' ? i : -1).filter(i => i >= 0).pop() ?? -1;
-    const finalText = curr
+    const transcriptText = curr
       .slice(lastInterviewerIdx + 1)
       .filter(m => m.role === 'candidate')
       .map(m => m.text)
       .join(' ')
       .trim();
+    const bufferedText = currentAnswerPartsRef.current.join(' ').trim();
+    const finalText = bufferedText || transcriptText;
     const interim = answerCaptureModeRef.current === 'speech' ? interimTextRef.current.trim() : '';
+    if (interim && finalText.toLowerCase().endsWith(interim.toLowerCase())) return finalText;
     return [finalText, interim].filter(Boolean).join(' ').trim();
   }, []);
 
@@ -656,6 +667,9 @@ function LiveSession({ interview, persona, onComplete }) {
   /* ── Log violation ──────────────────────────────── */
   const logViolation = useCallback(async (type, description) => {
     if (sessionClosedRef.current || autoSubmittedRef.current) return;
+    const now = Date.now();
+    if (now - (violationCooldownRef.current[type] ?? 0) < VIOLATION_COOLDOWN_MS) return;
+    violationCooldownRef.current[type] = now;
     violationCountRef.current += 1;
     const count = violationCountRef.current;
     setViolations(count);
@@ -679,24 +693,35 @@ function LiveSession({ interview, persona, onComplete }) {
 
     const onFSChange = () => {
       if (fullscreenRequired && !document.fullscreenElement && !document.webkitFullscreenElement && !autoSubmittedRef.current) {
-        logViolation('fullscreen_exit', 'Exited fullscreen mode');
-        setTimeout(() => {
-          if (!sessionClosedRef.current)
-            requestAppFullscreen().catch(() => {});
-        }, 500);
+        clearTimeout(fullscreenRecoveryTimerRef.current);
+        fullscreenRecoveryTimerRef.current = setTimeout(() => {
+          if (sessionClosedRef.current || autoSubmittedRef.current) return;
+          if (document.fullscreenElement || document.webkitFullscreenElement) return;
+          logViolation('fullscreen_exit', 'Exited fullscreen mode');
+          requestAppFullscreen().catch(() => {});
+        }, FULLSCREEN_RECHECK_MS);
       }
     };
 
     // 3. Tab switch / visibility change
     const onVisibility = () => {
-      if (document.hidden && !autoSubmittedRef.current)
-        logViolation('tab_switch', 'Switched to another tab or minimized window');
+      if (!document.hidden || autoSubmittedRef.current) return;
+      setTimeout(() => {
+        if (document.hidden && !sessionClosedRef.current && !autoSubmittedRef.current) {
+          logViolation('tab_switch', 'Switched to another tab or minimized window');
+        }
+      }, FOCUS_RECHECK_MS);
     };
 
     // 4. Window blur (alt+tab, click outside)
     const onBlur = () => {
-      if (!autoSubmittedRef.current)
-        logViolation('window_blur', 'Window lost focus');
+      if (autoSubmittedRef.current) return;
+      clearTimeout(focusRecoveryTimerRef.current);
+      focusRecoveryTimerRef.current = setTimeout(() => {
+        if (document.hidden && !sessionClosedRef.current && !autoSubmittedRef.current) {
+          logViolation('tab_switch', 'Window lost focus');
+        }
+      }, FOCUS_RECHECK_MS);
     };
 
     // 5. Copy / Cut / Paste
@@ -753,6 +778,8 @@ function LiveSession({ interview, persona, onComplete }) {
       document.removeEventListener('contextmenu', onContextMenu, true);
       window.removeEventListener('blur', onBlur);
       window.removeEventListener('keydown', onKeyDown, true);
+      clearTimeout(fullscreenRecoveryTimerRef.current);
+      clearTimeout(focusRecoveryTimerRef.current);
       clearInterval(devToolsCheck);
       if (document.fullscreenElement || document.webkitFullscreenElement) exitAppFullscreen().catch(() => {});
     };
@@ -964,6 +991,7 @@ function LiveSession({ interview, persona, onComplete }) {
   const addCandidateTranscript = useCallback((text) => {
     const clean = String(text || '').trim();
     if (!clean) return;
+    currentAnswerPartsRef.current = [...currentAnswerPartsRef.current, clean];
     lastAnswerActivityAtRef.current = Date.now();
     silencePromptedRef.current = false;
     setTranscript(prev => [...prev, { role: 'candidate', text: clean }]);
@@ -1165,8 +1193,8 @@ function LiveSession({ interview, persona, onComplete }) {
       return;
     }
 
-    await stopListening();
     const ans = getAnswerSinceLastQuestion();
+    stopListening();
     if (ans) submitAnswer(ans);
   };
 
@@ -1177,6 +1205,11 @@ function LiveSession({ interview, persona, onComplete }) {
     if (ending || isProcessingAnswer) return;
     if (isListening || answerCaptureModeRef.current) {
       finishUserAnswer();
+      return;
+    }
+    const bufferedAnswer = getAnswerSinceLastQuestion();
+    if (bufferedAnswer) {
+      submitAnswer(bufferedAnswer);
       return;
     }
     startListening({
@@ -1199,6 +1232,8 @@ function LiveSession({ interview, persona, onComplete }) {
 
       if (Array.isArray(nextQuestions)) setQuestions(nextQuestions);
       if (state?.totalQuestions) setTotalQuestions(state.totalQuestions);
+      currentAnswerPartsRef.current = [];
+      setInterimText('');
       setCurrentIdx(nextIndex);
 
       if (nextQuestion?.question) {
@@ -1207,13 +1242,10 @@ function LiveSession({ interview, persona, onComplete }) {
         finishSession();
       }
     } catch {
-      const next = currentIdx + 1;
-      if (next < questions.length) {
-        setCurrentIdx(next);
-        speakQuestion(questions[next].question);
-      } else {
-        finishSession();
-      }
+      setTranscript(prev => [...prev, {
+        role: 'system',
+        text: 'Could not submit your answer. Please check your connection and click Submit answer again.',
+      }]);
     } finally {
       setIsProcessingAnswer(false);
     }
@@ -1221,6 +1253,7 @@ function LiveSession({ interview, persona, onComplete }) {
 
   const fmtTime = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
   const currentQ = questions[currentIdx];
+  const hasBufferedAnswer = !isListening && Boolean(getAnswerSinceLastQuestion());
 
   const playCurrentQuestion = () => {
     if (!currentQ?.question || sessionClosedRef.current || ending) return;
@@ -1329,7 +1362,7 @@ function LiveSession({ interview, persona, onComplete }) {
               disabled={ending || isProcessingAnswer}
               onClick={handleAnswerButton}
             >
-              {isProcessingAnswer ? 'Checking answer...' : isListening ? 'Stop & submit' : 'Start answer'}
+              {isProcessingAnswer ? 'Checking answer...' : isListening ? 'Stop & submit' : hasBufferedAnswer ? 'Submit answer' : 'Start answer'}
             </button>
             <button type="button" className="iv-btn iv-btn--ghost" disabled={ending || isProcessingAnswer}
               onClick={() => { stopListening(); submitAnswer('', true); }}>
