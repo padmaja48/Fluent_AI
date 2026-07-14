@@ -157,6 +157,31 @@ describe('company question composition', () => {
     expect(questions.some((question) => question.resumeReference?.startsWith('Certifications:'))).toBe(true);
   });
 
+  it('adds at least one connected skill-coverage question for every detected technical skill', () => {
+    const skills = ['Python', 'SQL', 'JavaScript', 'React', 'AWS', 'Machine Learning'];
+    const roadmap = buildInterviewRoadmap({
+      roleDomain: 'AI Engineer',
+      roleLevel: 'Mid',
+      duration: 30,
+      complexity: 'Intermediate',
+      resumeSkills: skills,
+      resumeText: ['Projects', 'ML Dashboard - Python, SQL, JavaScript, React, AWS, Machine Learning'].join('\n'),
+    });
+
+    const questions = buildInterviewQuestionSet({
+      duration: 30,
+      targetCompany: undefined,
+      generatedQuestions: [],
+      interviewRoadmap: roadmap,
+    });
+
+    skills.forEach((skill) => {
+      expect(questions.some((question) => question.resumeReference === `Skill coverage: ${skill}`)).toBe(true);
+    });
+    const coverageBlock = questions.slice(1, 1 + skills.length);
+    expect(coverageBlock.every((question) => question.resumeReference?.startsWith('Skill coverage:'))).toBe(true);
+  });
+
   it('derives runtime state with completed projects and covered concepts', () => {
     const roadmap = buildInterviewRoadmap({
       roleDomain: 'Backend Developer',

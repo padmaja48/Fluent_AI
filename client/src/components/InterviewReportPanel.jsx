@@ -1,20 +1,12 @@
 import React from 'react';
 import { jsPDF } from 'jspdf';
+import { COMPANY_OPTIONS } from '../lib/companyOptions';
 
 /* ── Helpers ─────────────────────────────────────────────────── */
 const scoreToDeg = (s) => `${(Math.min(100, Math.max(0, s || 0)) / 100 * 360).toFixed(1)}deg`;
-const fmtDt = (v) => v
-  ? new Date(v).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+const fmtReportDate = (v) => v
+  ? new Date(v).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
   : '—';
-
-const PERSONA_NAMES = {
-  'us-indian':    { name: 'Priya Sharma', title: 'Engineering Manager' },
-  'us-australian':{ name: 'Ananya Rao', title: 'Product Director' },
-  'ru-russian':   { name: 'Rahul Menon', title: 'Principal Engineer' },
-  'us-american':  { name: 'Ryan Carter', title: 'Senior Tech Lead' },
-};
-
-const getPersona = (id) => PERSONA_NAMES[id] || { name: id || 'Interviewer', title: 'AI Interviewer' };
 
 const cleanText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
 
@@ -30,6 +22,29 @@ const scoreColor = (v) => {
   if (v >= 80) return '#10b981';
   if (v >= 60) return '#f59e0b';
   return '#ef4444';
+};
+
+const companyLabelByValue = new Map(COMPANY_OPTIONS.map((company) => [company.value, company.label]));
+
+const titleFromSlug = (value) =>
+  cleanText(value)
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+
+const getCandidateInfo = (interview = {}) => {
+  const user = typeof interview.userId === 'object' && interview.userId !== null ? interview.userId : {};
+  return {
+    name: cleanText(interview.candidateName || user.name) || 'Candidate',
+    email: cleanText(interview.candidateEmail || user.email),
+    role: cleanText(interview.roleDomain) || 'Role Not Selected',
+    company: cleanText(companyLabelByValue.get(interview.targetCompany) || titleFromSlug(interview.targetCompany)) || 'General Interview',
+    interviewType: cleanText(interview.interviewType || interview.interviewStyle) || 'Interview',
+    duration: interview.duration ? `${interview.duration} Minutes` : 'Duration Not Selected',
+    difficulty: cleanText(interview.complexity) || cleanText(interview.roleLevel) || 'Difficulty Not Selected',
+    date: fmtReportDate(interview.completedAt || interview.createdAt),
+  };
 };
 
 /* ── Metric bar (mirrors practice design) ────────────────────── */
@@ -48,7 +63,7 @@ const ScoreBar = ({ label, value, fillClass }) => (
   </div>
 );
 
-const downloadInterviewPdf = ({ selectedInterview, report, persona, qa }) => {
+const downloadInterviewPdf = ({ selectedInterview, report, candidate, qa }) => {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const page = {
     width: doc.internal.pageSize.getWidth(),
@@ -95,15 +110,18 @@ const downloadInterviewPdf = ({ selectedInterview, report, persona, qa }) => {
   doc.setTextColor('#ffffff');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(20);
-  doc.text('AI Mock Interview Report', page.margin, 38);
+  doc.text('Candidate Interview Report', page.margin, 38);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  doc.text(`${persona.name} - ${selectedInterview.roleDomain || 'Interview'} - ${fmtDt(selectedInterview.completedAt || selectedInterview.createdAt)}`, page.margin, 62);
+  doc.text(`${candidate.name} - ${candidate.role} - ${candidate.date}`, page.margin, 62);
   y = 118;
 
   addHeading('Overview');
   addText(`Overall Score: ${report.overallScore != null ? Number(report.overallScore).toFixed(1) : '-'} / 100`);
-  addText(`Interview: ${selectedInterview.interviewType || selectedInterview.interviewStyle || '-'} | Duration: ${selectedInterview.duration || '-'} min | Level: ${selectedInterview.roleLevel || '-'}`);
+  if (candidate.email) addText(`Candidate Email: ${candidate.email}`);
+  addText(`Applied Role: ${candidate.role}`);
+  addText(`Target Company: ${candidate.company}`);
+  addText(`Interview Type: ${candidate.interviewType} | Duration: ${candidate.duration} | Difficulty: ${candidate.difficulty}`);
   addText(`Scores: Communication ${report.communicationScore ?? '-'}, Technical ${report.technicalScore ?? '-'}, Behavioural ${report.behavioralScore ?? '-'}`);
 
   if (report.transcriptSummary) {
@@ -134,9 +152,12 @@ const downloadInterviewPdf = ({ selectedInterview, report, persona, qa }) => {
     if (item.feedback) addText(`Feedback: ${item.feedback}`, { gap: 8 });
     if (item.whatWorked) addText(`What worked: ${item.whatWorked}`, { gap: 8 });
     if (item.whatToImprove) addText(`Improve: ${item.whatToImprove}`, { gap: 12 });
+    if ((item.missingConcepts || []).length > 0) addText(`Missing concepts: ${(item.missingConcepts || []).join(', ')}`, { gap: 8 });
+    if ((item.technicalMistakes || []).length > 0) addText(`Technical mistakes: ${(item.technicalMistakes || []).join(', ')}`, { gap: 8 });
+    if (item.samplePerfectAnswer) addText(`Sample perfect answer: ${item.samplePerfectAnswer}`, { gap: 12 });
   });
 
-  const fileName = `${safeFilePart(selectedInterview.roleDomain)}-${safeFilePart(persona.name)}-report.pdf`;
+  const fileName = `${safeFilePart(candidate.name)}-${safeFilePart(candidate.role)}-report.pdf`;
   doc.save(fileName);
 };
 
@@ -164,7 +185,7 @@ export const InterviewReportPanel = ({ interviews, selectedInterview, report, on
         </div>
         <div className="sessions-list">
           {interviews.map((iv) => {
-            const p = getPersona(iv.personaId);
+            const candidate = getCandidateInfo(iv);
             const score = iv.totalScore != null ? Number(iv.totalScore).toFixed(1) : null;
             const isActive = selectedInterview?._id === iv._id;
             return (
@@ -175,12 +196,13 @@ export const InterviewReportPanel = ({ interviews, selectedInterview, report, on
               >
                 <span className="session-item-dot" />
                 <div className="session-item-body">
-                  <span className="session-item-title">{p.name}</span>
-                  <span className="session-item-sub">{p.title}</span>
+                  <span className="session-item-title">{candidate.name}</span>
+                  <span className="session-item-sub">{candidate.role}</span>
+                  <span className="session-item-sub">{candidate.company}</span>
                   <span className="session-item-sub">
-                    {iv.interviewType || iv.interviewStyle} · {iv.duration} min
+                    {candidate.interviewType} · {candidate.duration}
                   </span>
-                  <span className="session-item-sub">{fmtDt(iv.completedAt || iv.createdAt)}</span>
+                  <span className="session-item-sub">{candidate.date}</span>
                 </div>
                 {score != null && (
                   <span className="session-item-score" style={{ color: scoreColor(Number(score)) }}>
@@ -204,7 +226,7 @@ export const InterviewReportPanel = ({ interviews, selectedInterview, report, on
         )}
 
         {!loading && report && selectedInterview && (() => {
-          const p = getPersona(selectedInterview.personaId);
+          const candidate = getCandidateInfo(selectedInterview);
           const qa = report.questionAnalysis?.length
             ? report.questionAnalysis
             : (selectedInterview.questions || []);
@@ -223,24 +245,25 @@ export const InterviewReportPanel = ({ interviews, selectedInterview, report, on
                   </div>
                 </div>
                 <div className="results-info">
-                  <h3>{p.name} · {p.title}</h3>
-                  <p>{selectedInterview.interviewType || selectedInterview.interviewStyle} interview · {selectedInterview.duration} min</p>
-                  <p>{selectedInterview.roleDomain} · {selectedInterview.roleLevel}</p>
-                  <div className="results-info-badges">
-                    <span className="results-badge results-badge--accent">
-                      {qa.length} question{qa.length !== 1 ? 's' : ''}
-                    </span>
-                    <span className="results-badge">
-                      📅 {fmtDt(selectedInterview.completedAt || selectedInterview.createdAt)}
-                    </span>
-                    {selectedInterview.complexity && (
-                      <span className="results-badge">{selectedInterview.complexity}</span>
-                    )}
+                  <div className="report-candidate-heading">
+                    <h3>{candidate.name}</h3>
+                    <p>{candidate.role} Candidate</p>
+                    {candidate.email && <span>{candidate.email}</span>}
+                  </div>
+                  <div className="report-meta-grid">
+                    <div><span>Applied Role</span><strong>{candidate.role}</strong></div>
+                    <div><span>Target Company</span><strong>{candidate.company}</strong></div>
+                    <div><span>Interview Type</span><strong>{candidate.interviewType}</strong></div>
+                    <div><span>Duration</span><strong>{candidate.duration}</strong></div>
+                    <div><span>Difficulty</span><strong>{candidate.difficulty}</strong></div>
+                    <div><span>Interview Date</span><strong>{candidate.date}</strong></div>
+                    <div><span>Question Count</span><strong>{qa.length} question{qa.length !== 1 ? 's' : ''}</strong></div>
+                    <div><span>Overall Score</span><strong>{report.overallScore != null ? `${Number(report.overallScore).toFixed(1)}%` : '—'}</strong></div>
                   </div>
                   <button
                     type="button"
                     className="report-download-btn"
-                    onClick={() => downloadInterviewPdf({ selectedInterview, report, persona: p, qa })}
+                    onClick={() => downloadInterviewPdf({ selectedInterview, report, candidate, qa })}
                   >
                     Download PDF
                   </button>
@@ -340,10 +363,43 @@ export const InterviewReportPanel = ({ interviews, selectedInterview, report, on
                             <div className="report-feedback-label">AI Feedback</div>
                             {item.feedback && <p>{item.feedback}</p>}
                             {item.whatWorked && (
-                              <div className="report-micro-row green">✓ {item.whatWorked}</div>
+                              <div className="report-micro-row green">{item.whatWorked}</div>
                             )}
                             {item.whatToImprove && (
-                              <div className="report-micro-row amber">→ {item.whatToImprove}</div>
+                              <div className="report-micro-row amber">{item.whatToImprove}</div>
+                            )}
+                            {item.dynamicFeedback?.communication && (
+                              <p><strong>Communication:</strong> {item.dynamicFeedback.communication}</p>
+                            )}
+                            {item.dynamicFeedback?.confidence && (
+                              <p><strong>Confidence:</strong> {item.dynamicFeedback.confidence}</p>
+                            )}
+                            {(item.conceptsCovered || []).length > 0 && (
+                              <p><strong>Concepts covered:</strong> {(item.conceptsCovered || []).join(', ')}</p>
+                            )}
+                            {(item.missingConcepts || []).length > 0 && (
+                              <p><strong>Missing concepts:</strong> {(item.missingConcepts || []).join(', ')}</p>
+                            )}
+                            {(item.technicalMistakes || []).length > 0 && (
+                              <p><strong>Technical mistakes:</strong> {(item.technicalMistakes || []).join(', ')}</p>
+                            )}
+                            {(item.wrongTerminology || []).length > 0 && (
+                              <p><strong>Terminology issues:</strong> {(item.wrongTerminology || []).join(', ')}</p>
+                            )}
+                            {item.dynamicFeedback?.practicalUnderstanding && (
+                              <p><strong>Practical understanding:</strong> {item.dynamicFeedback.practicalUnderstanding}</p>
+                            )}
+                            {item.dynamicFeedback?.interviewReadiness && (
+                              <p><strong>Interview readiness:</strong> {item.dynamicFeedback.interviewReadiness}</p>
+                            )}
+                            {(item.dynamicFeedback?.nextLearningSuggestions || []).length > 0 && (
+                              <p><strong>Learning suggestions:</strong> {item.dynamicFeedback.nextLearningSuggestions.join(' ')}</p>
+                            )}
+                            {item.samplePerfectAnswer && (
+                              <>
+                                <div className="report-feedback-label">Sample Perfect Answer</div>
+                                <p>{item.samplePerfectAnswer}</p>
+                              </>
                             )}
                           </div>
                         )}

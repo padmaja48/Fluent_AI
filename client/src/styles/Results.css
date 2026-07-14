@@ -289,6 +289,63 @@
   line-height: 1.5;
 }
 
+.report-candidate-heading {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 14px;
+}
+
+.report-candidate-heading h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: 0;
+}
+
+.report-candidate-heading p,
+.report-candidate-heading span {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.report-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 10px 0 14px;
+  max-width: 760px;
+}
+
+.report-meta-grid div {
+  min-width: 0;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 86%, var(--bg));
+}
+
+.report-meta-grid span {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+}
+
+.report-meta-grid strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.35;
+}
+
 .results-info-badges {
   display: flex;
   flex-wrap: wrap;

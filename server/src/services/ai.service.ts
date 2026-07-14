@@ -75,6 +75,24 @@ export type GeneratedQuestion = {
 export type AnswerEvaluation = {
   score: number;
   feedback: string;
+  idealAnswer?: string;
+  samplePerfectAnswer?: string;
+  conceptsCovered?: string[];
+  missingConcepts?: string[];
+  incorrectStatements?: string[];
+  wrongTerminology?: string[];
+  technicalMistakes?: string[];
+  dynamicFeedback?: {
+    strengths: string[];
+    missingConcepts: string[];
+    technicalMistakes: string[];
+    communication: string;
+    confidence: string;
+    areasToImprove: string[];
+    nextLearningSuggestions: string[];
+    practicalUnderstanding: string;
+    interviewReadiness: string;
+  };
   communicationScore: number;
   technicalScore: number;
   behavioralScore: number;
@@ -100,6 +118,14 @@ export type QuestionAnalysisItem = {
   whatToImprove: string;
   questionType: string;
   resumeReference: string;
+  idealAnswer?: string;
+  samplePerfectAnswer?: string;
+  conceptsCovered?: string[];
+  missingConcepts?: string[];
+  incorrectStatements?: string[];
+  wrongTerminology?: string[];
+  technicalMistakes?: string[];
+  dynamicFeedback?: AnswerEvaluation['dynamicFeedback'];
 };
 
 export type InterviewReport = {
@@ -850,7 +876,114 @@ Return ONLY valid JSON. No markdown fences, no preamble, no explanation.
   );
 };
 
-export const evaluateAnswer = (question: string, answer: string) => {
+type AnswerEvaluationContext = {
+  expectedSignals?: string[];
+  roleDomain?: string;
+  roleLevel?: string;
+  targetCompany?: string;
+  difficulty?: string;
+  questionType?: string;
+  topic?: string;
+};
+
+const sentenceFromSignal = (signal: string, topic: string) => {
+  const cleanSignal = canonicalize(signal).replace(/[.]+$/, '');
+  return cleanSignal
+    ? `It should clearly address ${cleanSignal}${topic ? ` in the context of ${topic}` : ''}.`
+    : '';
+};
+
+const buildIdealAnswerFallback = (question: string, context?: AnswerEvaluationContext) => {
+  const topic = context?.topic || context?.roleDomain || 'the topic';
+  const signals = context?.expectedSignals?.length
+    ? context.expectedSignals
+    : ['the core concept', 'a practical example', 'trade-offs or edge cases'];
+  const signalSentences = signals.map((signal) => sentenceFromSignal(signal, topic)).filter(Boolean).join(' ');
+  const companyContext = context?.targetCompany ? ` For ${context.targetCompany}, it should connect the answer to practical engineering judgement and role expectations.` : '';
+  return canonicalize(
+    `A strong interview answer to "${question}" should start with a direct explanation of ${topic}, then support it with a concrete example. ${signalSentences} It should mention relevant trade-offs, validation or testing, and the impact of the decision. The answer should be structured, technically accurate, concise, and confident.${companyContext}`,
+  );
+};
+
+const tokenizeConcepts = (value: string) =>
+  Array.from(
+    new Set(
+      value
+        .toLowerCase()
+        .replace(/[^a-z0-9+#.\s-]/g, ' ')
+        .split(/\s+/)
+        .map((word) => word.trim())
+        .filter((word) => word.length > 3 && !/^(that|this|with|from|they|have|were|when|what|would|should|could|about|because|using|used|into|their|there|then|than|also)$/i.test(word)),
+    ),
+  );
+
+const fallbackComparisonEvaluation = (
+  question: string,
+  answer: string,
+  context?: AnswerEvaluationContext,
+): AnswerEvaluation => {
+  const idealAnswer = buildIdealAnswerFallback(question, context);
+  const expectedSignals = context?.expectedSignals ?? [];
+  const answerTokens = tokenizeConcepts(answer);
+  const signalCoverage = expectedSignals.filter((signal) =>
+    tokenizeConcepts(signal).some((token) => answerTokens.includes(token)),
+  );
+  const missingSignals = expectedSignals.filter((signal) => !signalCoverage.includes(signal));
+  const wordCount = answer.trim().split(/\s+/).filter(Boolean).length;
+  const completeness = expectedSignals.length
+    ? Math.round((signalCoverage.length / expectedSignals.length) * 100)
+    : Math.min(100, wordCount * 3);
+  const depth = Math.min(100, Math.round(wordCount * 2 + (/\b(example|trade[-\s]?off|because|tested|deployed|optimized|measured|edge case)\b/i.test(answer) ? 20 : 0)));
+  const communication = Math.min(100, Math.max(20, Math.round(wordCount * 2.2)));
+  const terminology = Math.min(100, Math.round((answerTokens.length / Math.max(1, tokenizeConcepts(idealAnswer).length)) * 100));
+  const score = Math.round((completeness * 0.35) + (depth * 0.25) + (communication * 0.2) + (terminology * 0.2));
+  const missingConcepts = missingSignals.length ? missingSignals : ['No clear gap was identified from the expected signals, but more specificity would improve the answer.'];
+  const strengths = [
+    ...(signalCoverage.length ? [`Covered ${signalCoverage.slice(0, 2).join(', ')}.`] : []),
+    ...(wordCount >= 30 ? ['Gave enough detail for evaluation.'] : []),
+  ];
+
+  return {
+    score,
+    feedback: `The answer was compared against the expected signals for ${context?.topic || context?.roleDomain || 'this question'}. It covered ${signalCoverage.length}/${Math.max(1, expectedSignals.length)} expected points and needs stronger depth around ${missingConcepts[0]}.`,
+    idealAnswer,
+    samplePerfectAnswer: idealAnswer,
+    conceptsCovered: signalCoverage,
+    missingConcepts,
+    incorrectStatements: [],
+    wrongTerminology: [],
+    technicalMistakes: [],
+    dynamicFeedback: {
+      strengths: strengths.length ? strengths : ['The answer attempted the question directly.'],
+      missingConcepts,
+      technicalMistakes: [],
+      communication: wordCount < 25 ? 'The answer needs clearer structure and more complete sentences.' : 'The answer is understandable; it can improve by using a clearer beginning, middle, and conclusion.',
+      confidence: /\b(maybe|i think|not sure|probably)\b/i.test(answer) ? 'The wording sounds tentative; use more decisive language after stating assumptions.' : 'The answer sounds reasonably confident based on wording.',
+      areasToImprove: missingConcepts.map((item) => `Add a precise explanation for ${item}.`).slice(0, 4),
+      nextLearningSuggestions: missingConcepts.map((item) => `Review ${item} and practice explaining it with a project example.`).slice(0, 4),
+      practicalUnderstanding: /\b(project|built|implemented|deployed|tested|used)\b/i.test(answer)
+        ? 'The answer includes some practical framing.'
+        : 'The answer should include a practical implementation or project example.',
+      interviewReadiness: score >= 70 ? 'Ready for follow-up depth on this concept.' : 'Needs more preparation before a real interview follow-up.',
+    },
+    communicationScore: communication,
+    technicalScore: context?.questionType === 'behavioural' ? Math.round(score * 0.5) : score,
+    behavioralScore: context?.questionType === 'technical' ? Math.round(score * 0.4) : score,
+    confidenceScore: /\b(maybe|i think|not sure|probably)\b/i.test(answer) ? Math.max(30, score - 20) : score,
+    completenessScore: completeness,
+    depthScore: depth,
+    terminologyScore: terminology,
+    grammarScore: communication,
+    vocabularyScore: terminology,
+    domainScore: score,
+    nextAction: score < 40 ? 'reduce_difficulty' : score < 60 ? 'clarify' : score >= 85 ? 'challenge' : score >= 70 ? 'ask_deeper' : 'move_topic',
+    suggestedDifficulty: score < 40 ? 'easy' : context?.difficulty as GeneratedQuestion['difficulty'] ?? 'medium',
+    detectedSignals: signalCoverage,
+    missingSignals,
+  };
+};
+
+export const evaluateAnswer = (question: string, answer: string, context?: AnswerEvaluationContext) => {
   // Detect empty / skipped answers immediately — no AI call needed
   const trimmed = answer.trim();
   const isSkipped =
@@ -860,9 +993,28 @@ export const evaluateAnswer = (question: string, answer: string) => {
     /^\(?(no answer|skipped?|n\/a|nothing|none)\)?$/i.test(trimmed);
 
   if (isSkipped) {
+    const idealAnswer = buildIdealAnswerFallback(question, context);
     return Promise.resolve<AnswerEvaluation>({
       score: 0,
       feedback: 'No answer was provided for this question. Skipped or empty answers score zero.',
+      idealAnswer,
+      samplePerfectAnswer: idealAnswer,
+      conceptsCovered: [],
+      missingConcepts: context?.expectedSignals?.length ? context.expectedSignals : ['No answer was provided'],
+      incorrectStatements: [],
+      wrongTerminology: [],
+      technicalMistakes: [],
+      dynamicFeedback: {
+        strengths: [],
+        missingConcepts: context?.expectedSignals?.length ? context.expectedSignals : ['No answer was provided'],
+        technicalMistakes: [],
+        communication: 'No communication could be evaluated because no answer was provided.',
+        confidence: 'No confidence could be evaluated because no answer was provided.',
+        areasToImprove: ['Answer the question with a structured explanation and at least one relevant example.'],
+        nextLearningSuggestions: ['Review the sample perfect answer and practice a 60-90 second response aloud.'],
+        practicalUnderstanding: 'No practical understanding was demonstrated.',
+        interviewReadiness: 'Not interview-ready for this question until a substantive answer is provided.',
+      },
       communicationScore: 0,
       technicalScore: 0,
       behavioralScore: 0,
@@ -881,11 +1033,24 @@ export const evaluateAnswer = (question: string, answer: string) => {
   }
 
   return generateJson<AnswerEvaluation>(
-    `You are a strict, professional interview evaluator. Evaluate the candidate's answer to the interview question below.
+    `You are a strict, professional interview evaluator and answer-comparison engine. Generate a fresh internal ideal answer, compare it to the candidate's answer, and evaluate the answer.
 
 QUESTION: ${question}
+ROLE: ${context?.roleDomain ?? 'Not specified'} ${context?.roleLevel ?? ''}
+TARGET COMPANY: ${context?.targetCompany ?? 'Not specified'}
+DIFFICULTY: ${context?.difficulty ?? 'Not specified'}
+QUESTION TYPE: ${context?.questionType ?? 'Not specified'}
+TOPIC: ${context?.topic ?? 'Not specified'}
+EXPECTED SIGNALS:
+${JSON.stringify(context?.expectedSignals ?? [], null, 2)}
 
 CANDIDATE ANSWER: ${answer}
+
+IDEAL ANSWER REQUIREMENTS:
+- Generate an ideal answer internally before scoring.
+- The ideal answer must be professional, interview quality, easy to understand, and cover all expected concepts.
+- The samplePerfectAnswer must NOT personalize to the candidate and must NOT copy candidate wording.
+- Compare ideal answer vs candidate answer.
 
 SCORING RULES (be strict and honest — do NOT inflate scores):
 - Score 0–20  → No meaningful answer, completely off-topic, or just a few words
@@ -899,6 +1064,7 @@ IMPORTANT:
 - If the answer contains no specific examples or evidence, cap at 50
 - If the answer is a filler phrase, meaningless text, or off-topic, score it 0–15
 - Do NOT give high scores to vague answers — be honest even if it means scoring 10 or 20
+- Base the score on actual comparison to the ideal answer: technical correctness, completeness, communication, confidence, logical flow, examples, missing concepts, and practical understanding
 - The communicationScore reflects clarity and structure of expression
 - The technicalScore reflects relevance of technical knowledge shown (0 if non-technical question)
 - The behavioralScore reflects self-awareness, teamwork, and professional maturity shown
@@ -918,7 +1084,25 @@ IMPORTANT:
 Return ONLY a JSON object:
 {
   "score": number (0-100, strict),
-  "feedback": string (2-3 sentences, reference the actual answer content — what was good or missing),
+  "feedback": string (2-3 dynamic sentences comparing candidate answer against the ideal answer; no templates),
+  "idealAnswer": string (internal ideal answer used for comparison),
+  "samplePerfectAnswer": string (professionally written perfect answer for the candidate to learn from; generic, not personalized),
+  "conceptsCovered": string[],
+  "missingConcepts": string[],
+  "incorrectStatements": string[],
+  "wrongTerminology": string[],
+  "technicalMistakes": string[],
+  "dynamicFeedback": {
+    "strengths": string[],
+    "missingConcepts": string[],
+    "technicalMistakes": string[],
+    "communication": string,
+    "confidence": string,
+    "areasToImprove": string[],
+    "nextLearningSuggestions": string[],
+    "practicalUnderstanding": string,
+    "interviewReadiness": string
+  },
   "communicationScore": number (0-100),
   "technicalScore": number (0-100),
   "behavioralScore": number (0-100),
@@ -934,24 +1118,7 @@ Return ONLY a JSON object:
   "detectedSignals": string[],
   "missingSignals": string[]
 }`,
-    {
-      score: 0,
-      feedback: 'Unable to evaluate this answer. No meaningful content was detected.',
-      communicationScore: 0,
-      technicalScore: 0,
-      behavioralScore: 0,
-      confidenceScore: 0,
-      completenessScore: 0,
-      depthScore: 0,
-      terminologyScore: 0,
-      grammarScore: 0,
-      vocabularyScore: 0,
-      domainScore: 0,
-      nextAction: 'reduce_difficulty',
-      suggestedDifficulty: 'easy',
-      detectedSignals: [],
-      missingSignals: ['Unable to evaluate answer content'],
-    },
+    fallbackComparisonEvaluation(question, answer, context),
   );
 };
 
@@ -1296,6 +1463,14 @@ export const generateReport = (
     resumeReference?: string;
     difficulty?: string;
     topic?: string;
+    idealAnswer?: string;
+    samplePerfectAnswer?: string;
+    conceptsCovered?: string[];
+    missingConcepts?: string[];
+    incorrectStatements?: string[];
+    wrongTerminology?: string[];
+    technicalMistakes?: string[];
+    dynamicFeedback?: AnswerEvaluation['dynamicFeedback'];
   }>
 ) => {
   // Pre-compute honest per-question scores for skipped/empty answers
@@ -1356,6 +1531,14 @@ export const generateReport = (
         whatToImprove: 'Provide a substantive answer addressing the question directly.',
         questionType: t.questionType ?? 'general',
         resumeReference: t.resumeReference ?? 'general',
+        idealAnswer: t.idealAnswer,
+        samplePerfectAnswer: t.samplePerfectAnswer,
+        conceptsCovered: [],
+        missingConcepts: t.missingConcepts ?? [t.topic ?? t.resumeReference ?? 'Expected answer content'],
+        incorrectStatements: [],
+        wrongTerminology: [],
+        technicalMistakes: [],
+        dynamicFeedback: t.dynamicFeedback,
       })),
     });
   }
@@ -1385,6 +1568,8 @@ STRICT EVALUATION RULES:
 6. Pre-computed average per-question score: ${Math.round(precomputedAvg)} — your overallScore should be close to this
 7. Strengths array must be EMPTY [] if the candidate gave no meaningful answers
 8. Reference actual answer content in all feedback — do NOT fabricate content the candidate did not say
+9. Preserve each transcript item's idealAnswer, samplePerfectAnswer, conceptsCovered, missingConcepts, incorrectStatements, wrongTerminology, technicalMistakes, and dynamicFeedback when present
+10. Question-level feedback must be dynamic and based on the answer comparison, not a repeated template
 
 Return ONLY this exact JSON structure (no markdown):
 {
@@ -1418,7 +1603,25 @@ Return ONLY this exact JSON structure (no markdown):
       "whatWorked": string (what specifically was good, or "Nothing — no answer was provided"),
       "whatToImprove": string (specific gap or "Provide a substantive answer"),
       "questionType": string,
-      "resumeReference": string
+      "resumeReference": string,
+      "idealAnswer": string,
+      "samplePerfectAnswer": string,
+      "conceptsCovered": string[],
+      "missingConcepts": string[],
+      "incorrectStatements": string[],
+      "wrongTerminology": string[],
+      "technicalMistakes": string[],
+      "dynamicFeedback": {
+        "strengths": string[],
+        "missingConcepts": string[],
+        "technicalMistakes": string[],
+        "communication": string,
+        "confidence": string,
+        "areasToImprove": string[],
+        "nextLearningSuggestions": string[],
+        "practicalUnderstanding": string,
+        "interviewReadiness": string
+      }
     }
   ]
 }`,
@@ -1457,13 +1660,48 @@ Return ONLY this exact JSON structure (no markdown):
         answer: t.answer ?? '(no answer)',
         score: t.score ?? 0,
         feedback: t.feedback ?? 'No answer was provided.',
-        whatWorked: t.score && t.score > 40 ? 'Some relevant content was provided' : 'Nothing — no meaningful answer was given.',
-        whatToImprove: 'Provide a complete, structured answer with specific examples.',
+        whatWorked: t.dynamicFeedback?.strengths?.[0] ?? (t.score && t.score > 40 ? 'Some relevant content was provided' : 'Nothing — no meaningful answer was given.'),
+        whatToImprove: t.dynamicFeedback?.areasToImprove?.[0] ?? 'Provide a complete, structured answer with specific examples.',
         questionType: t.questionType ?? 'general',
         resumeReference: t.resumeReference ?? 'general',
+        idealAnswer: t.idealAnswer,
+        samplePerfectAnswer: t.samplePerfectAnswer,
+        conceptsCovered: t.conceptsCovered ?? [],
+        missingConcepts: t.missingConcepts ?? [],
+        incorrectStatements: t.incorrectStatements ?? [],
+        wrongTerminology: t.wrongTerminology ?? [],
+        technicalMistakes: t.technicalMistakes ?? [],
+        dynamicFeedback: t.dynamicFeedback,
       })),
     },
-  );
+  ).then((report) => {
+    const analysis = report.questionAnalysis?.length ? report.questionAnalysis : [];
+    const questionAnalysis = transcript.map((item, index) => ({
+      ...(analysis[index] ?? {
+        question: item.question,
+        answer: item.answer ?? '(no answer)',
+        score: item.score ?? 0,
+        feedback: item.feedback ?? 'No answer was provided.',
+        whatWorked: item.dynamicFeedback?.strengths?.[0] ?? 'No specific strength recorded.',
+        whatToImprove: item.dynamicFeedback?.areasToImprove?.[0] ?? 'Provide a complete, structured answer with specific examples.',
+        questionType: item.questionType ?? 'general',
+        resumeReference: item.resumeReference ?? 'general',
+      }),
+      idealAnswer: item.idealAnswer ?? analysis[index]?.idealAnswer,
+      samplePerfectAnswer: item.samplePerfectAnswer ?? analysis[index]?.samplePerfectAnswer,
+      conceptsCovered: item.conceptsCovered ?? analysis[index]?.conceptsCovered ?? [],
+      missingConcepts: item.missingConcepts ?? analysis[index]?.missingConcepts ?? [],
+      incorrectStatements: item.incorrectStatements ?? analysis[index]?.incorrectStatements ?? [],
+      wrongTerminology: item.wrongTerminology ?? analysis[index]?.wrongTerminology ?? [],
+      technicalMistakes: item.technicalMistakes ?? analysis[index]?.technicalMistakes ?? [],
+      dynamicFeedback: item.dynamicFeedback ?? analysis[index]?.dynamicFeedback,
+    }));
+
+    return {
+      ...report,
+      questionAnalysis,
+    };
+  });
 };
 
 export const analyzeResume = (resumeText: string) =>

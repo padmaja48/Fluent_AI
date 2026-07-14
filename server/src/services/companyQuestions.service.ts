@@ -546,6 +546,26 @@ const getDifficultyLimits = (complexity?: string) => {
   return { difficulty: 'Medium' as const, projectQuestionLimit: 3, followUpLimit: 2 };
 };
 
+const allTechnicalSkillTopics = (profile: ResumeInterviewProfile, jdProfile?: JobDescriptionProfile) =>
+  uniqueTopics([
+    ...(jdProfile?.requiredSkills ?? []),
+    ...(jdProfile?.toolsTechnologies ?? []),
+    ...profile.skills.programmingLanguages,
+    ...profile.skills.frameworks,
+    ...profile.skills.libraries,
+    ...profile.skills.databases,
+    ...profile.skills.cloudTechnologies,
+    ...profile.skills.developerTools,
+    ...profile.skills.technicalSkills,
+  ]).filter((skill) => !profile.skills.softSkills.includes(skill));
+
+const skillQuestionDepth = (duration: number, complexity?: string) => {
+  if (duration >= 60) return complexity === 'Beginner' ? 2 : 3;
+  if (duration >= 45) return complexity === 'Advanced' ? 3 : 2;
+  if (duration >= 30) return complexity === 'Advanced' ? 2 : 1;
+  return 1;
+};
+
 const distributeBudget = (sections: Omit<InterviewRoadmapSection, 'questionBudget'>[], targetQuestionCount: number) => {
   const weights: Record<InterviewRoadmapSectionKey, number> = {
     self_introduction: 1,
@@ -598,18 +618,12 @@ export const buildInterviewRoadmap = ({
   companyGuidance?: CompanyInterviewGuidance;
 }): InterviewRoadmap => {
   const resumeProfile = analyzeResumeForInterview({ resumeText, resumeSkills, resumeSummary, roleDomain, targetCompany });
-  const targetQuestionCount = getInterviewQuestionCount(duration);
+  const technicalSkillTopics = allTechnicalSkillTopics(resumeProfile, jdProfile);
+  const coverageQuestionCount = technicalSkillTopics.length * skillQuestionDepth(duration, complexity);
+  const coreSectionReserve = 5 + Math.min(4, resumeProfile.projects.length) + Math.min(2, resumeProfile.certifications.length);
+  const targetQuestionCount = Math.max(getInterviewQuestionCount(duration), coverageQuestionCount + coreSectionReserve);
   const limits = getDifficultyLimits(complexity);
-  const technicalTopics = uniqueTopics([
-    ...(jdProfile?.requiredSkills ?? []),
-    ...(jdProfile?.toolsTechnologies ?? []),
-    ...resumeProfile.skills.technicalSkills,
-    ...resumeProfile.skills.frameworks,
-    ...resumeProfile.skills.libraries,
-    ...resumeProfile.skills.databases,
-    ...resumeProfile.skills.cloudTechnologies,
-    ...resumeProfile.skills.developerTools,
-  ]).slice(0, 18);
+  const technicalTopics = technicalSkillTopics.slice(0, 30);
   const sections: Omit<InterviewRoadmapSection, 'questionBudget'>[] = [
     { key: 'self_introduction', title: 'Self Introduction', topics: ['Candidate overview'] },
     { key: 'resume_overview', title: 'Resume Overview', topics: uniqueTopics([resumeProfile.candidateInformation.degree ?? '', resumeProfile.candidateInformation.college ?? '', roleDomain]).slice(0, 4) },
@@ -1458,6 +1472,52 @@ const roadmapQuestions = (roadmap?: InterviewRoadmap) => {
   });
 };
 
+const skillCoverageQuestions = (roadmap?: InterviewRoadmap): GeneratedQuestion[] => {
+  if (!roadmap) return [];
+  const skills = allTechnicalSkillTopics(roadmap.resumeProfile).slice(0, 40);
+  const depth = skillQuestionDepth(roadmap.duration, roadmap.difficulty === 'Hard' ? 'Advanced' : roadmap.difficulty === 'Easy' ? 'Beginner' : 'Intermediate');
+
+  return skills.flatMap((skill) => {
+    const questions: GeneratedQuestion[] = [
+      {
+        question: `Now let's evaluate your ${skill} skills. Explain the core concept you have used most, with one concrete project or implementation example.`,
+        expectedSignals: [`${skill} fundamentals`, 'specific example', 'clear practical usage'],
+        questionType: 'technical',
+        resumeReference: `Skill coverage: ${skill}`,
+        difficulty: 'easy-medium',
+        topic: skill,
+        followUpIntent: 'deepen',
+      },
+    ];
+
+    if (depth >= 2) {
+      questions.push({
+        question: `Staying with ${skill}, what is one failure mode, limitation, or common mistake engineers should watch for, and how would you prevent it?`,
+        expectedSignals: [`${skill} pitfalls`, 'prevention strategy', 'testing or validation'],
+        questionType: 'technical',
+        resumeReference: `Skill deep dive: ${skill}`,
+        difficulty: 'medium',
+        topic: skill,
+        followUpIntent: 'challenge',
+      });
+    }
+
+    if (depth >= 3) {
+      questions.push({
+        question: `Let's go one level deeper on ${skill}. Design a production-ready use case and explain performance, scalability, security, and trade-offs.`,
+        expectedSignals: [`${skill} architecture`, 'trade-off reasoning', 'production readiness'],
+        questionType: 'situational',
+        resumeReference: `Skill production scenario: ${skill}`,
+        difficulty: 'scenario',
+        topic: skill,
+        followUpIntent: 'challenge',
+      });
+    }
+
+    return questions;
+  });
+};
+
 const withQuestionMetadata = (questions: GeneratedQuestion[]) =>
   questions.map((question, index) => ({
     ...question,
@@ -1501,12 +1561,13 @@ export const buildInterviewQuestionSet = ({
   const companyQuestions = company ? getCompanyBank(company) : [];
   const targetCount = getInterviewQuestionCount(duration);
   const generatedWithoutIntro = generatedQuestions.filter((question) => !isIntroQuestion(question));
+  const skillQuestions = skillCoverageQuestions(interviewRoadmap);
   const plannedQuestions = roadmapQuestions(interviewRoadmap).filter((question) => !isIntroQuestion(question));
   const orderedQuestions = prioritizeGenerated
-    ? [INTRO_QUESTION, ...generatedWithoutIntro, ...plannedQuestions, ...companyQuestions]
-    : [INTRO_QUESTION, ...plannedQuestions, ...companyQuestions, ...generatedWithoutIntro];
+    ? [INTRO_QUESTION, ...skillQuestions, ...generatedWithoutIntro, ...plannedQuestions, ...companyQuestions]
+    : [INTRO_QUESTION, ...skillQuestions, ...plannedQuestions, ...companyQuestions, ...generatedWithoutIntro];
 
-  return withQuestionMetadata(uniqueByQuestion(orderedQuestions).slice(0, targetCount));
+  return withQuestionMetadata(uniqueByQuestion(orderedQuestions).slice(0, interviewRoadmap?.targetQuestionCount ?? targetCount));
 };
 
 const topicMatches = (candidate: string | undefined, topic: string) => {

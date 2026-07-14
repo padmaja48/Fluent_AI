@@ -9,6 +9,14 @@ export interface IInterviewQuestion {
   transcriptUrl?: string;
   feedback?: string;
   score?: number;
+  idealAnswer?: string;
+  samplePerfectAnswer?: string;
+  conceptsCovered?: string[];
+  missingConcepts?: string[];
+  incorrectStatements?: string[];
+  wrongTerminology?: string[];
+  technicalMistakes?: string[];
+  dynamicFeedback?: unknown;
   questionType?: 'behavioural' | 'technical' | 'situational';
   resumeReference?: string;
   difficulty?: 'easy' | 'easy-medium' | 'medium' | 'medium-hard' | 'scenario' | 'problem-solving' | 'behavioral';
@@ -83,6 +91,14 @@ const interviewQuestionSchema = new Schema<IInterviewQuestion>(
     transcriptUrl: String,
     feedback: String,
     score: Number,
+    idealAnswer: String,
+    samplePerfectAnswer: String,
+    conceptsCovered: [String],
+    missingConcepts: [String],
+    incorrectStatements: [String],
+    wrongTerminology: [String],
+    technicalMistakes: [String],
+    dynamicFeedback: { type: Schema.Types.Mixed },
     questionType: { type: String, enum: ['behavioural', 'technical', 'situational'] },
     resumeReference: String,
     difficulty: { type: String, enum: ['easy', 'easy-medium', 'medium', 'medium-hard', 'scenario', 'problem-solving', 'behavioral'] },

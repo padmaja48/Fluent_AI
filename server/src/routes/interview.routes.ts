@@ -52,7 +52,8 @@ router.post('/:id/transcribe', validate(interviewParamsSchema), upload.single('a
 router.post('/:id/recording', validate(interviewParamsSchema), upload.single('recording'), uploadRecording);
 router.patch('/:id/violation', validate(logViolationSchema), logViolation);
 router.get('/:id/report', asyncHandler(async (req, res) => {
-  const interview = await Interview.findOne({ _id: req.params.id, userId: req.userId });
+  const interview = await Interview.findOne({ _id: req.params.id, userId: req.userId })
+    .populate('userId', 'name email');
   if (!interview) throw new AppError('Not found', 404, 'NOT_FOUND');
   const report = await Report.findOne({ interviewId: interview._id });
   res.json({ interview, report });

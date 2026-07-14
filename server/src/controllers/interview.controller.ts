@@ -150,6 +150,9 @@ const toGeneratedQuestion = (item: any) => ({
   followUpIntent: item.followUpIntent,
 });
 
+const isRequiredCoverageQuestion = (question?: { resumeReference?: string }) =>
+  Boolean(question?.resumeReference && /^(Skill coverage|Skill deep dive|Skill production scenario):/i.test(question.resumeReference));
+
 export const logViolationSchema = z.object({
   body: z.object({
     type: z.string().min(1),
@@ -232,7 +235,9 @@ export const createInterview = asyncHandler(async (req, res) => {
 });
 
 export const getUserInterviews = asyncHandler(async (req, res) => {
-  const interviews = await Interview.find({ userId: req.userId }).sort({ createdAt: -1 });
+  const interviews = await Interview.find({ userId: req.userId })
+    .populate('userId', 'name email')
+    .sort({ createdAt: -1 });
   res.json(interviews);
 });
 
@@ -243,6 +248,7 @@ export const getInterview = asyncHandler(async (req, res) => {
   }
 
   const interview = await getInterviewForUser(interviewId, req.userId);
+  await interview.populate('userId', 'name email');
   res.json(interview);
 });
 
@@ -323,18 +329,43 @@ export const submitAnswer = asyncHandler(async (req, res) => {
     throw new AppError('No active question found', 400, 'NO_ACTIVE_QUESTION');
   }
 
-  const evaluation = await evaluateAnswer(currentQuestion, req.body.answer);
+  const activeQuestion = interview.questions[questionIndex];
+  const evaluation = await evaluateAnswer(currentQuestion, req.body.answer, {
+    expectedSignals: activeQuestion?.expectedSignals ?? [],
+    roleDomain: interview.roleDomain,
+    roleLevel: interview.roleLevel,
+    targetCompany: (interview as any).targetCompany,
+    difficulty: activeQuestion?.difficulty,
+    questionType: activeQuestion?.questionType,
+    topic: activeQuestion?.topic,
+  });
 
   if (interview.questions[questionIndex]) {
     interview.questions[questionIndex].userAnswer = req.body.answer;
     interview.questions[questionIndex].feedback = evaluation.feedback;
     interview.questions[questionIndex].score = evaluation.score;
+    interview.questions[questionIndex].idealAnswer = evaluation.idealAnswer;
+    interview.questions[questionIndex].samplePerfectAnswer = evaluation.samplePerfectAnswer;
+    interview.questions[questionIndex].conceptsCovered = evaluation.conceptsCovered;
+    interview.questions[questionIndex].missingConcepts = evaluation.missingConcepts;
+    interview.questions[questionIndex].incorrectStatements = evaluation.incorrectStatements;
+    interview.questions[questionIndex].wrongTerminology = evaluation.wrongTerminology;
+    interview.questions[questionIndex].technicalMistakes = evaluation.technicalMistakes;
+    interview.questions[questionIndex].dynamicFeedback = evaluation.dynamicFeedback;
   } else {
     interview.questions.push({
       question: currentQuestion,
       userAnswer: req.body.answer,
       feedback: evaluation.feedback,
       score: evaluation.score,
+      idealAnswer: evaluation.idealAnswer,
+      samplePerfectAnswer: evaluation.samplePerfectAnswer,
+      conceptsCovered: evaluation.conceptsCovered,
+      missingConcepts: evaluation.missingConcepts,
+      incorrectStatements: evaluation.incorrectStatements,
+      wrongTerminology: evaluation.wrongTerminology,
+      technicalMistakes: evaluation.technicalMistakes,
+      dynamicFeedback: evaluation.dynamicFeedback,
     });
   }
 
@@ -361,6 +392,14 @@ export const submitAnswer = asyncHandler(async (req, res) => {
     resumeReference: item.resumeReference,
     difficulty: item.difficulty,
     topic: item.topic,
+    idealAnswer: (item as any).idealAnswer,
+    samplePerfectAnswer: (item as any).samplePerfectAnswer,
+    conceptsCovered: (item as any).conceptsCovered,
+    missingConcepts: (item as any).missingConcepts,
+    incorrectStatements: (item as any).incorrectStatements,
+    wrongTerminology: (item as any).wrongTerminology,
+    technicalMistakes: (item as any).technicalMistakes,
+    dynamicFeedback: (item as any).dynamicFeedback,
   }));
   (interview as any).interviewState = deriveInterviewRuntimeState({
     roadmap: (interview as any).interviewRoadmap,
@@ -371,7 +410,10 @@ export const submitAnswer = asyncHandler(async (req, res) => {
     const previousQuestionDocs = interview.questions.slice(0, nextIndex);
     const previousQuestions = previousQuestionDocs.map(toGeneratedQuestion);
     const lastQuestion = toGeneratedQuestion(interview.questions[questionIndex]);
-    const nextQuestion = await generateAdaptiveInterviewQuestion({
+    const plannedNextQuestion = interview.questions[nextIndex];
+    const nextQuestion = isRequiredCoverageQuestion(plannedNextQuestion)
+      ? toGeneratedQuestion(plannedNextQuestion)
+      : await generateAdaptiveInterviewQuestion({
       ...buildContextFromInterview(interview),
       previousQuestions,
       transcript: previousQuestionDocs.map((item) => ({
@@ -383,6 +425,14 @@ export const submitAnswer = asyncHandler(async (req, res) => {
         resumeReference: item.resumeReference,
         difficulty: item.difficulty,
         topic: item.topic,
+        idealAnswer: (item as any).idealAnswer,
+        samplePerfectAnswer: (item as any).samplePerfectAnswer,
+        conceptsCovered: (item as any).conceptsCovered,
+        missingConcepts: (item as any).missingConcepts,
+        incorrectStatements: (item as any).incorrectStatements,
+        wrongTerminology: (item as any).wrongTerminology,
+        technicalMistakes: (item as any).technicalMistakes,
+        dynamicFeedback: (item as any).dynamicFeedback,
       })),
       lastQuestion,
       lastAnswer: req.body.answer,
@@ -422,6 +472,7 @@ export const completeInterview = asyncHandler(async (req, res) => {
   const interview = await getInterviewForUser(interviewId, req.userId);
   if (interview.status === 'Completed') {
     const report = await Report.findOne({ interviewId: interview._id }).sort({ createdAt: -1 });
+    await interview.populate('userId', 'name email');
     await getRedis().del(`interview:${interview._id}:state`);
     res.json({ interview, report });
     return;
@@ -436,6 +487,14 @@ export const completeInterview = asyncHandler(async (req, res) => {
     resumeReference: (item as any).resumeReference,
     difficulty: (item as any).difficulty,
     topic: (item as any).topic,
+    idealAnswer: (item as any).idealAnswer,
+    samplePerfectAnswer: (item as any).samplePerfectAnswer,
+    conceptsCovered: (item as any).conceptsCovered,
+    missingConcepts: (item as any).missingConcepts,
+    incorrectStatements: (item as any).incorrectStatements,
+    wrongTerminology: (item as any).wrongTerminology,
+    technicalMistakes: (item as any).technicalMistakes,
+    dynamicFeedback: (item as any).dynamicFeedback,
   }));
   const aiReport = await generateReport(transcript);
   const storedReport = await uploadText(JSON.stringify(aiReport, null, 2), `interview-${interview._id}.json`, 'reports');
@@ -463,6 +522,7 @@ export const completeInterview = asyncHandler(async (req, res) => {
   };
   interview.reportUrl = storedReport.url;
   await interview.save();
+  await interview.populate('userId', 'name email');
 
   await getRedis().del(`interview:${interview._id}:state`);
   res.json({ interview, report });
