@@ -189,6 +189,54 @@ describe('company question composition', () => {
     expect(questions[firstNonSkillIndex]?.resumeReference).toMatch(/^(Role-specific Questions|Coding \/ Problem Solving|System Design):/);
   });
 
+  it('uses role-specific marketing questions instead of coding prompts for digital marketing interviews', () => {
+    const roadmap = buildInterviewRoadmap({
+      roleDomain: 'digital marketing',
+      roleLevel: 'Fresher',
+      duration: 45,
+      complexity: 'Advanced',
+      targetCompany: 'flipkart',
+      resumeSkills: ['SEO', 'Google Ads', 'Social Media Marketing', 'Google Analytics'],
+    });
+
+    const questions = buildInterviewQuestionSet({
+      duration: 45,
+      targetCompany: 'flipkart',
+      generatedQuestions: [],
+      interviewRoadmap: roadmap,
+    });
+
+    const questionText = questions.map((question) => question.question).join(' ');
+    expect(questionText).toContain('digital marketing');
+    expect(questionText).toContain('SEO');
+    expect(questionText).not.toMatch(/coding-style|Data Structures|Algorithms|complexity|engineers|production-ready|technical interview/i);
+    expect(questions.some((question) => question.resumeReference?.startsWith('Role Scenario / Problem Solving:'))).toBe(true);
+  });
+
+  it('makes selected role and resume skills the majority of interview questions', () => {
+    const roadmap = buildInterviewRoadmap({
+      roleDomain: 'digital marketing',
+      roleLevel: 'Fresher',
+      duration: 15,
+      complexity: 'Beginner',
+      targetCompany: 'flipkart',
+      resumeSkills: ['SEO'],
+    });
+
+    const questions = buildInterviewQuestionSet({
+      duration: 15,
+      targetCompany: 'flipkart',
+      generatedQuestions: [],
+      interviewRoadmap: roadmap,
+    });
+    const roleOrSkillQuestions = questions.filter((question) =>
+      /^(Skill coverage|Skill deep dive|Skill production scenario|Role-specific Questions|Role Scenario \/ Problem Solving|Role focus|Role follow-up):/i.test(question.resumeReference ?? ''),
+    );
+
+    expect(roleOrSkillQuestions.length).toBeGreaterThan(questions.length / 2);
+    expect(questions.some((question) => question.resumeReference?.startsWith('Company-specific Questions:'))).toBe(true);
+  });
+
   it('derives runtime state with completed projects and covered concepts', () => {
     const roadmap = buildInterviewRoadmap({
       roleDomain: 'Backend Developer',

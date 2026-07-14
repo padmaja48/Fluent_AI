@@ -588,6 +588,19 @@ function LiveSession({ interview, persona, onComplete }) {
     silencePromptedRef.current = false;
   }, [currentIdx]);
 
+  const getAnswerSinceLastQuestionFromRefs = useCallback(() => {
+    const curr = transcriptRef.current;
+    const lastInterviewerIdx = [...curr].map((m, i) => m.role === 'interviewer' ? i : -1).filter(i => i >= 0).pop() ?? -1;
+    const finalText = curr
+      .slice(lastInterviewerIdx + 1)
+      .filter(m => m.role === 'candidate')
+      .map(m => m.text)
+      .join(' ')
+      .trim();
+    const interim = answerCaptureModeRef.current === 'speech' ? interimTextRef.current.trim() : '';
+    return [finalText, interim].filter(Boolean).join(' ').trim();
+  }, []);
+
   /* ── Stop listening ─────────────────────────────── */
   const stopListening = useCallback(() => {
     keepSpeechRecognitionAliveRef.current = false;
@@ -621,17 +634,24 @@ function LiveSession({ interview, persona, onComplete }) {
   const finishSession = useCallback(async ({ terminatedBySystem = false } = {}) => {
     if (finishingRef.current) return;
     finishingRef.current = true;
-    sessionClosedRef.current = true;
     autoSubmittedRef.current = true;
     setEnding(!terminatedBySystem);
     clearInterval(timerRef.current);
+    const pendingAnswer = getAnswerSinceLastQuestionFromRefs();
+    const currentQuestion = questions[currentIdx]?.question;
+    if (pendingAnswer && currentQuestion && !questions[currentIdx]?.userAnswer) {
+      try {
+        await interviewAPI.submitAnswer(interview._id, currentQuestion, pendingAnswer);
+      } catch {}
+    }
+    sessionClosedRef.current = true;
     stopListening();
     stopSpeech();
     try { await interviewAPI.completeInterview(interview._id); } catch {}
     if (document.fullscreenElement || document.webkitFullscreenElement) { try { await exitAppFullscreen(); } catch {} }
     if (terminatedBySystem) { setTerminated(true); setEnding(false); return; }
     onComplete(interview._id);
-  }, [interview._id, onComplete, stopListening, stopSpeech]);
+  }, [currentIdx, getAnswerSinceLastQuestionFromRefs, interview._id, onComplete, questions, stopListening, stopSpeech]);
 
   /* ── Log violation ──────────────────────────────── */
   const logViolation = useCallback(async (type, description) => {
@@ -950,17 +970,8 @@ function LiveSession({ interview, persona, onComplete }) {
   }, []);
 
   const getAnswerSinceLastQuestion = useCallback(() => {
-    const curr = transcriptRef.current;
-    const lastInterviewerIdx = [...curr].map((m, i) => m.role === 'interviewer' ? i : -1).filter(i => i >= 0).pop() ?? -1;
-    const finalText = curr
-      .slice(lastInterviewerIdx + 1)
-      .filter(m => m.role === 'candidate')
-      .map(m => m.text)
-      .join(' ')
-      .trim();
-    const interim = answerCaptureModeRef.current === 'speech' ? interimTextRef.current.trim() : '';
-    return [finalText, interim].filter(Boolean).join(' ').trim();
-  }, []);
+    return getAnswerSinceLastQuestionFromRefs();
+  }, [getAnswerSinceLastQuestionFromRefs]);
 
   useEffect(() => {
     if (!isListening || ending || isProcessingAnswer) return undefined;

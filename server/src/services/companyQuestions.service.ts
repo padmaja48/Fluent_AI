@@ -402,6 +402,18 @@ const TECHNICAL_SKILL_PATTERNS: Array<[string, RegExp]> = [
   ['Cyber Security', /\bcyber ?security|security\b/i],
   ['HTML', /\bhtml\b/i],
   ['CSS', /\bcss\b/i],
+  ['Digital Marketing', /\bdigital marketing\b/i],
+  ['SEO', /\bseo|search engine optimization\b/i],
+  ['SEM', /\bsem|search engine marketing\b/i],
+  ['Google Ads', /\bgoogle ads|adwords\b/i],
+  ['Meta Ads', /\bmeta ads|facebook ads|instagram ads\b/i],
+  ['Social Media Marketing', /\bsocial media marketing|social media\b/i],
+  ['Content Marketing', /\bcontent marketing|content strategy\b/i],
+  ['Email Marketing', /\bemail marketing\b/i],
+  ['Google Analytics', /\bgoogle analytics|ga4\b/i],
+  ['PPC', /\bppc|pay per click\b/i],
+  ['Campaign Management', /\bcampaign management|campaign strategy\b/i],
+  ['Conversion Optimization', /\bconversion optimization|cro\b/i],
 ];
 
 const SOFT_SKILL_PATTERNS: Array<[string, RegExp]> = [
@@ -566,6 +578,35 @@ const skillQuestionDepth = (duration: number, complexity?: string) => {
   return 1;
 };
 
+const isTechnicalInterviewRole = (roleDomain: string) =>
+  /\b(?:software|developer|engineer|frontend|backend|full\s*stack|data\s*(?:scientist|analyst|engineer)|ml|machine learning|ai|devops|cloud|cyber|security|qa|test|sdet|database|system|architect|programmer)\b/i.test(roleDomain);
+
+const roleSpecificTopics = (roleDomain: string) => {
+  if (/\bdigital\s*marketing|marketing\b/i.test(roleDomain)) {
+    return [
+      roleDomain,
+      'campaign strategy',
+      'SEO and SEM',
+      'social media marketing',
+      'content planning',
+      'marketing analytics',
+      'conversion optimization',
+      'budget allocation',
+    ];
+  }
+
+  if (/\bbusiness\s*analyst|product|sales|operations|hr|human resources|finance|accounting\b/i.test(roleDomain)) {
+    return [roleDomain, 'requirements analysis', 'stakeholder communication', 'metrics and reporting', 'business impact'];
+  }
+
+  return [roleDomain];
+};
+
+const problemSolvingTopicsForRole = (roleDomain: string, resumeProfile: ResumeInterviewProfile) =>
+  isTechnicalInterviewRole(roleDomain)
+    ? uniqueTopics(['Data Structures', 'Algorithms', ...(resumeProfile.skills.programmingLanguages.slice(0, 3))])
+    : uniqueTopics(['role scenario', 'prioritization', 'metrics analysis', 'execution plan']);
+
 const distributeBudget = (sections: Omit<InterviewRoadmapSection, 'questionBudget'>[], targetQuestionCount: number) => {
   const weights: Record<InterviewRoadmapSectionKey, number> = {
     self_introduction: 1,
@@ -618,9 +659,10 @@ export const buildInterviewRoadmap = ({
   companyGuidance?: CompanyInterviewGuidance;
 }): InterviewRoadmap => {
   const resumeProfile = analyzeResumeForInterview({ resumeText, resumeSkills, resumeSummary, roleDomain, targetCompany });
+  const technicalRole = isTechnicalInterviewRole(roleDomain);
   const technicalSkillTopics = allTechnicalSkillTopics(resumeProfile, jdProfile);
   const coverageQuestionCount = technicalSkillTopics.length * skillQuestionDepth(duration, complexity);
-  const systemDesignApplicable = roleLevel === 'Senior' || roleLevel === 'Lead' || /architect|backend|full stack|cloud|devops|engineer/i.test(roleDomain);
+  const systemDesignApplicable = technicalRole && (roleLevel === 'Senior' || roleLevel === 'Lead' || /architect|backend|full stack|cloud|devops|engineer/i.test(roleDomain));
   const coreSectionReserve =
     1 + // introduction
     2 + // role-specific and coding/problem-solving
@@ -651,11 +693,15 @@ export const buildInterviewRoadmap = ({
     ...(resumeProfile.certifications.length
       ? [{ key: 'certifications' as const, title: 'Certifications', topics: resumeProfile.certifications }]
       : []),
-    { key: 'role_specific', title: 'Role-specific Questions', topics: uniqueTopics([roleDomain, roleLevel, ...(jdProfile?.responsibilities ?? []).slice(0, 4)]) },
+    { key: 'role_specific', title: 'Role-specific Questions', topics: uniqueTopics([...roleSpecificTopics(roleDomain), ...(jdProfile?.responsibilities ?? []).slice(0, 4)]) },
     ...(targetCompany
       ? [{ key: 'company_specific' as const, title: 'Company-specific Questions', topics: uniqueTopics([companyGuidance?.company ?? targetCompany, ...(companyGuidance?.preferredTopics ?? [])]) }]
       : []),
-    { key: 'coding_problem_solving', title: 'Coding / Problem Solving', topics: uniqueTopics(['Data Structures', 'Algorithms', ...(resumeProfile.skills.programmingLanguages.slice(0, 3))]) },
+    {
+      key: 'coding_problem_solving',
+      title: technicalRole ? 'Coding / Problem Solving' : 'Role Scenario / Problem Solving',
+      topics: problemSolvingTopicsForRole(roleDomain, resumeProfile),
+    },
     ...(systemDesignApplicable
       ? [{ key: 'system_design' as const, title: 'System Design', topics: uniqueTopics(['Scalability', 'API design', 'Data storage', ...(companyGuidance?.preferredTopics ?? []).slice(0, 2)]) }]
       : []),
@@ -1338,6 +1384,7 @@ const questionForRoadmapTopic = (
   roadmap: InterviewRoadmap,
 ): GeneratedQuestion => {
   const company = roadmap.targetCompany ? COMPANY_LABELS[normalizeCompany(roadmap.targetCompany) ?? ''] ?? roadmap.targetCompany : undefined;
+  const technicalRole = isTechnicalInterviewRole(roadmap.roleDomain);
   const common = {
     topic,
     resumeReference: `${section.title}: ${topic}`,
@@ -1402,8 +1449,12 @@ const questionForRoadmapTopic = (
       };
     case 'role_specific':
       return {
-        question: `For a ${roadmap.roleDomain} role, how would you approach ${topic} from requirements to implementation and testing?`,
-        expectedSignals: ['structured approach', 'implementation detail', 'testing mindset'],
+        question: technicalRole
+          ? `For a ${roadmap.roleDomain} role, how would you approach ${topic} from requirements to implementation and testing?`
+          : `For a ${roadmap.roleDomain} role, how would you plan and execute ${topic}, and how would you measure whether it worked?`,
+        expectedSignals: technicalRole
+          ? ['structured approach', 'implementation detail', 'testing mindset']
+          : ['structured plan', 'execution steps', 'success metrics'],
         questionType: 'situational',
         difficulty: 'scenario',
         followUpIntent: 'challenge',
@@ -1411,10 +1462,16 @@ const questionForRoadmapTopic = (
       };
     case 'company_specific':
       return {
-        question: company
-          ? `Let's move to some ${company}-style expectations. How would you demonstrate ${topic} in a technical interview or project discussion?`
-          : `Let's move to company-specific expectations. How would you demonstrate ${topic} in a technical interview or project discussion?`,
-        expectedSignals: ['company awareness', 'specific example', 'interview readiness'],
+        question: technicalRole
+          ? company
+            ? `Let's move to some ${company}-style expectations. How would you demonstrate ${topic} in a technical interview or project discussion?`
+            : `Let's move to company-specific expectations. How would you demonstrate ${topic} in a technical interview or project discussion?`
+          : company
+          ? `Let's move to some ${company}-style expectations. How would you connect ${topic} to the ${roadmap.roleDomain} role with a practical example?`
+          : `Let's move to company-specific expectations. How would you connect ${topic} to the ${roadmap.roleDomain} role with a practical example?`,
+        expectedSignals: technicalRole
+          ? ['company awareness', 'specific example', 'interview readiness']
+          : ['company awareness', 'role alignment', 'specific example'],
         questionType: 'behavioural',
         difficulty: 'behavioral',
         followUpIntent: 'clarify',
@@ -1422,10 +1479,14 @@ const questionForRoadmapTopic = (
       };
     case 'coding_problem_solving':
       return {
-        question: `Let's do a coding-style discussion using ${topic}. Explain your approach, edge cases, complexity, and one optimization for a practical problem in this area.`,
-        expectedSignals: ['algorithmic approach', 'edge cases', 'complexity and optimization'],
-        questionType: 'technical',
-        difficulty: 'problem-solving',
+        question: technicalRole
+          ? `Let's do a coding-style discussion using ${topic}. Explain your approach, edge cases, complexity, and one optimization for a practical problem in this area.`
+          : `Let's discuss a practical ${roadmap.roleDomain} scenario around ${topic}. What would you do first, what constraints would you consider, and how would you track success?`,
+        expectedSignals: technicalRole
+          ? ['algorithmic approach', 'edge cases', 'complexity and optimization']
+          : ['problem framing', 'prioritization', 'success metrics'],
+        questionType: technicalRole ? 'technical' : 'situational',
+        difficulty: technicalRole ? 'problem-solving' : 'scenario',
         followUpIntent: 'challenge',
         ...common,
       };
@@ -1483,15 +1544,20 @@ const roadmapQuestions = (roadmap?: InterviewRoadmap) => {
 
 const skillCoverageQuestions = (roadmap?: InterviewRoadmap): GeneratedQuestion[] => {
   if (!roadmap) return [];
+  const technicalRole = isTechnicalInterviewRole(roadmap.roleDomain);
   const skills = allTechnicalSkillTopics(roadmap.resumeProfile).slice(0, 40);
   const depth = skillQuestionDepth(roadmap.duration, roadmap.difficulty === 'Hard' ? 'Advanced' : roadmap.difficulty === 'Easy' ? 'Beginner' : 'Intermediate');
 
   return skills.flatMap((skill) => {
     const questions: GeneratedQuestion[] = [
       {
-        question: `For the ${roadmap.roleDomain} role, let's evaluate your ${skill} skills. Explain the core concept you have used most, with one concrete project or implementation example.`,
-        expectedSignals: [`${skill} fundamentals`, `${roadmap.roleDomain} relevance`, 'specific example', 'clear practical usage'],
-        questionType: 'technical',
+        question: technicalRole
+          ? `For the ${roadmap.roleDomain} role, let's evaluate your ${skill} skills. Explain the core concept you have used most, with one concrete project or implementation example.`
+          : `For the ${roadmap.roleDomain} role, let's evaluate your ${skill} skills. Explain one practical campaign, task, or business example where you used it and what outcome you tracked.`,
+        expectedSignals: technicalRole
+          ? [`${skill} fundamentals`, `${roadmap.roleDomain} relevance`, 'specific example', 'clear practical usage']
+          : [`${skill} practical usage`, `${roadmap.roleDomain} relevance`, 'specific example', 'measured outcome'],
+        questionType: technicalRole ? 'technical' : 'situational',
         resumeReference: `Skill coverage: ${skill}`,
         difficulty: 'easy-medium',
         topic: skill,
@@ -1501,9 +1567,13 @@ const skillCoverageQuestions = (roadmap?: InterviewRoadmap): GeneratedQuestion[]
 
     if (depth >= 2) {
       questions.push({
-        question: `Staying with ${skill} for a ${roadmap.roleDomain} interview, what is one failure mode, limitation, or common mistake engineers should watch for, and how would you prevent it?`,
-        expectedSignals: [`${skill} pitfalls`, `${roadmap.roleDomain} judgement`, 'prevention strategy', 'testing or validation'],
-        questionType: 'technical',
+        question: technicalRole
+          ? `Staying with ${skill} for a ${roadmap.roleDomain} interview, what is one failure mode, limitation, or common mistake engineers should watch for, and how would you prevent it?`
+          : `Staying with ${skill} for a ${roadmap.roleDomain} interview, what is one common mistake, limitation, or campaign risk you would watch for, and how would you prevent it?`,
+        expectedSignals: technicalRole
+          ? [`${skill} pitfalls`, `${roadmap.roleDomain} judgement`, 'prevention strategy', 'testing or validation']
+          : [`${skill} pitfalls`, `${roadmap.roleDomain} judgement`, 'prevention strategy', 'measurement or review'],
+        questionType: technicalRole ? 'technical' : 'situational',
         resumeReference: `Skill deep dive: ${skill}`,
         difficulty: 'medium',
         topic: skill,
@@ -1513,8 +1583,12 @@ const skillCoverageQuestions = (roadmap?: InterviewRoadmap): GeneratedQuestion[]
 
     if (depth >= 3) {
       questions.push({
-        question: `Let's go one level deeper on ${skill}. Design a production-ready ${roadmap.roleDomain} use case and explain performance, scalability, security, and trade-offs.`,
-        expectedSignals: [`${skill} architecture`, `${roadmap.roleDomain} system thinking`, 'trade-off reasoning', 'production readiness'],
+        question: technicalRole
+          ? `Let's go one level deeper on ${skill}. Design a production-ready ${roadmap.roleDomain} use case and explain performance, scalability, security, and trade-offs.`
+          : `Let's go one level deeper on ${skill}. Design a ${roadmap.roleDomain} execution plan and explain audience, channels, budget or effort, metrics, and trade-offs.`,
+        expectedSignals: technicalRole
+          ? [`${skill} architecture`, `${roadmap.roleDomain} system thinking`, 'trade-off reasoning', 'production readiness']
+          : [`${skill} strategy`, `${roadmap.roleDomain} execution thinking`, 'trade-off reasoning', 'measurement plan'],
         questionType: 'situational',
         resumeReference: `Skill production scenario: ${skill}`,
         difficulty: 'scenario',
@@ -1524,6 +1598,47 @@ const skillCoverageQuestions = (roadmap?: InterviewRoadmap): GeneratedQuestion[]
     }
 
     return questions;
+  });
+};
+
+const roleFocusQuestions = (roadmap?: InterviewRoadmap): GeneratedQuestion[] => {
+  if (!roadmap) return [];
+  const technicalRole = isTechnicalInterviewRole(roadmap.roleDomain);
+  const roleTopics = uniqueTopics([
+    ...roleSpecificTopics(roadmap.roleDomain),
+    ...problemSolvingTopicsForRole(roadmap.roleDomain, roadmap.resumeProfile),
+  ]).slice(0, 12);
+
+  return roleTopics.flatMap((topic, index) => {
+    const base: GeneratedQuestion = {
+      question: technicalRole
+        ? `For a ${roadmap.roleDomain} interview, explain how you would use ${topic} in a real project and what trade-offs you would consider.`
+        : `For a ${roadmap.roleDomain} interview, walk me through how you would handle ${topic} in a real business situation and how you would measure success.`,
+      expectedSignals: technicalRole
+        ? ['role relevance', 'practical implementation', 'trade-off reasoning']
+        : ['role relevance', 'practical execution', 'success metrics'],
+      questionType: technicalRole ? 'technical' : 'situational',
+      resumeReference: `Role focus: ${topic}`,
+      difficulty: index < 2 ? 'easy-medium' : 'medium',
+      topic,
+      followUpIntent: 'deepen',
+    };
+
+    const followUp: GeneratedQuestion = {
+      question: technicalRole
+        ? `Staying with ${topic}, what would make your approach fail in production, and how would you debug or prevent that?`
+        : `Staying with ${topic}, what could go wrong during execution, and how would you adjust your plan based on performance data?`,
+      expectedSignals: technicalRole
+        ? ['failure mode', 'debugging approach', 'prevention']
+        : ['risk awareness', 'data-driven adjustment', 'practical judgement'],
+      questionType: 'situational',
+      resumeReference: `Role follow-up: ${topic}`,
+      difficulty: 'scenario',
+      topic,
+      followUpIntent: 'challenge',
+    };
+
+    return index < 4 ? [base, followUp] : [base];
   });
 };
 
@@ -1583,10 +1698,12 @@ export const buildInterviewQuestionSet = ({
   const company = normalizeCompany(targetCompany);
   const companyQuestions = company ? getCompanyBank(company) : [];
   const targetCount = getInterviewQuestionCount(duration);
+  const finalTargetCount = interviewRoadmap?.targetQuestionCount ?? targetCount;
   const generatedWithoutIntro = generatedQuestions.filter((question) => !isIntroQuestion(question));
   const skillQuestions = skillCoverageQuestions(interviewRoadmap);
+  const roleQuestions = roleFocusQuestions(interviewRoadmap);
   const plannedQuestions = roadmapQuestions(interviewRoadmap).filter((question) => !isIntroQuestion(question));
-  const roleAndCodingPrimary = takeFirstBySection(plannedQuestions, ['Role-specific Questions', 'Coding / Problem Solving', 'System Design']);
+  const roleAndCodingPrimary = takeFirstBySection(plannedQuestions, ['Role-specific Questions', 'Coding / Problem Solving', 'Role Scenario / Problem Solving', 'System Design']);
   const resumeAndCompanyPrimary = takeFirstBySection(plannedQuestions, [
     'Projects',
     'Internship / Work Experience',
@@ -1597,11 +1714,15 @@ export const buildInterviewQuestionSet = ({
   ]);
   const primaryQuestions = [...roleAndCodingPrimary, ...resumeAndCompanyPrimary];
   const remainingPlannedQuestions = plannedQuestions.filter((question) => !primaryQuestions.includes(question));
+  const minimumRoleSkillQuestions = Math.ceil(Math.max(1, finalTargetCount - 1) * 0.6);
+  const existingRoleSkillQuestions = skillQuestions.length + roleAndCodingPrimary.length;
+  const leadRoleQuestions = roleQuestions.slice(0, Math.max(0, minimumRoleSkillQuestions - existingRoleSkillQuestions));
+  const remainingRoleQuestions = roleQuestions.filter((question) => !leadRoleQuestions.includes(question));
   const orderedQuestions = prioritizeGenerated
-    ? [INTRO_QUESTION, ...skillQuestions, ...roleAndCodingPrimary, ...resumeAndCompanyPrimary, ...generatedWithoutIntro, ...remainingPlannedQuestions, ...companyQuestions]
-    : [INTRO_QUESTION, ...skillQuestions, ...roleAndCodingPrimary, ...resumeAndCompanyPrimary, ...remainingPlannedQuestions, ...companyQuestions, ...generatedWithoutIntro];
+    ? [INTRO_QUESTION, ...skillQuestions, ...roleAndCodingPrimary, ...leadRoleQuestions, ...resumeAndCompanyPrimary, ...generatedWithoutIntro, ...remainingRoleQuestions, ...remainingPlannedQuestions, ...companyQuestions]
+    : [INTRO_QUESTION, ...skillQuestions, ...roleAndCodingPrimary, ...leadRoleQuestions, ...resumeAndCompanyPrimary, ...remainingRoleQuestions, ...remainingPlannedQuestions, ...companyQuestions, ...generatedWithoutIntro];
 
-  return withQuestionMetadata(uniqueByQuestion(orderedQuestions).slice(0, interviewRoadmap?.targetQuestionCount ?? targetCount));
+  return withQuestionMetadata(uniqueByQuestion(orderedQuestions).slice(0, finalTargetCount));
 };
 
 const topicMatches = (candidate: string | undefined, topic: string) => {
