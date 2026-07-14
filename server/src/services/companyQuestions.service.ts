@@ -562,7 +562,7 @@ const allTechnicalSkillTopics = (profile: ResumeInterviewProfile, jdProfile?: Jo
 const skillQuestionDepth = (duration: number, complexity?: string) => {
   if (duration >= 60) return complexity === 'Beginner' ? 2 : 3;
   if (duration >= 45) return complexity === 'Advanced' ? 3 : 2;
-  if (duration >= 30) return complexity === 'Advanced' ? 2 : 1;
+  if (duration >= 30) return complexity === 'Beginner' ? 1 : 2;
   return 1;
 };
 
@@ -620,7 +620,16 @@ export const buildInterviewRoadmap = ({
   const resumeProfile = analyzeResumeForInterview({ resumeText, resumeSkills, resumeSummary, roleDomain, targetCompany });
   const technicalSkillTopics = allTechnicalSkillTopics(resumeProfile, jdProfile);
   const coverageQuestionCount = technicalSkillTopics.length * skillQuestionDepth(duration, complexity);
-  const coreSectionReserve = 5 + Math.min(4, resumeProfile.projects.length) + Math.min(2, resumeProfile.certifications.length);
+  const systemDesignApplicable = roleLevel === 'Senior' || roleLevel === 'Lead' || /architect|backend|full stack|cloud|devops|engineer/i.test(roleDomain);
+  const coreSectionReserve =
+    1 + // introduction
+    2 + // role-specific and coding/problem-solving
+    (systemDesignApplicable ? 1 : 0) +
+    (targetCompany ? 1 : 0) +
+    Math.min(2, resumeProfile.projects.length) +
+    (resumeProfile.internships.length || resumeProfile.workExperience.length ? 1 : 0) +
+    Math.min(1, resumeProfile.certifications.length) +
+    2; // behavioral and HR
   const targetQuestionCount = Math.max(getInterviewQuestionCount(duration), coverageQuestionCount + coreSectionReserve);
   const limits = getDifficultyLimits(complexity);
   const technicalTopics = technicalSkillTopics.slice(0, 30);
@@ -647,7 +656,7 @@ export const buildInterviewRoadmap = ({
       ? [{ key: 'company_specific' as const, title: 'Company-specific Questions', topics: uniqueTopics([companyGuidance?.company ?? targetCompany, ...(companyGuidance?.preferredTopics ?? [])]) }]
       : []),
     { key: 'coding_problem_solving', title: 'Coding / Problem Solving', topics: uniqueTopics(['Data Structures', 'Algorithms', ...(resumeProfile.skills.programmingLanguages.slice(0, 3))]) },
-    ...(roleLevel === 'Senior' || roleLevel === 'Lead' || /architect|backend|full stack|cloud|devops|engineer/i.test(roleDomain)
+    ...(systemDesignApplicable
       ? [{ key: 'system_design' as const, title: 'System Design', topics: uniqueTopics(['Scalability', 'API design', 'Data storage', ...(companyGuidance?.preferredTopics ?? []).slice(0, 2)]) }]
       : []),
     { key: 'behavioral', title: 'Behavioral Questions', topics: ['Conflict', 'Leadership', 'Failure', 'Teamwork', 'Deadline pressure', 'Adaptability'] },
@@ -1480,8 +1489,8 @@ const skillCoverageQuestions = (roadmap?: InterviewRoadmap): GeneratedQuestion[]
   return skills.flatMap((skill) => {
     const questions: GeneratedQuestion[] = [
       {
-        question: `Now let's evaluate your ${skill} skills. Explain the core concept you have used most, with one concrete project or implementation example.`,
-        expectedSignals: [`${skill} fundamentals`, 'specific example', 'clear practical usage'],
+        question: `For the ${roadmap.roleDomain} role, let's evaluate your ${skill} skills. Explain the core concept you have used most, with one concrete project or implementation example.`,
+        expectedSignals: [`${skill} fundamentals`, `${roadmap.roleDomain} relevance`, 'specific example', 'clear practical usage'],
         questionType: 'technical',
         resumeReference: `Skill coverage: ${skill}`,
         difficulty: 'easy-medium',
@@ -1492,8 +1501,8 @@ const skillCoverageQuestions = (roadmap?: InterviewRoadmap): GeneratedQuestion[]
 
     if (depth >= 2) {
       questions.push({
-        question: `Staying with ${skill}, what is one failure mode, limitation, or common mistake engineers should watch for, and how would you prevent it?`,
-        expectedSignals: [`${skill} pitfalls`, 'prevention strategy', 'testing or validation'],
+        question: `Staying with ${skill} for a ${roadmap.roleDomain} interview, what is one failure mode, limitation, or common mistake engineers should watch for, and how would you prevent it?`,
+        expectedSignals: [`${skill} pitfalls`, `${roadmap.roleDomain} judgement`, 'prevention strategy', 'testing or validation'],
         questionType: 'technical',
         resumeReference: `Skill deep dive: ${skill}`,
         difficulty: 'medium',
@@ -1504,8 +1513,8 @@ const skillCoverageQuestions = (roadmap?: InterviewRoadmap): GeneratedQuestion[]
 
     if (depth >= 3) {
       questions.push({
-        question: `Let's go one level deeper on ${skill}. Design a production-ready use case and explain performance, scalability, security, and trade-offs.`,
-        expectedSignals: [`${skill} architecture`, 'trade-off reasoning', 'production readiness'],
+        question: `Let's go one level deeper on ${skill}. Design a production-ready ${roadmap.roleDomain} use case and explain performance, scalability, security, and trade-offs.`,
+        expectedSignals: [`${skill} architecture`, `${roadmap.roleDomain} system thinking`, 'trade-off reasoning', 'production readiness'],
         questionType: 'situational',
         resumeReference: `Skill production scenario: ${skill}`,
         difficulty: 'scenario',
@@ -1544,6 +1553,20 @@ const withQuestionMetadata = (questions: GeneratedQuestion[]) =>
         : 'deepen'),
   }));
 
+const sectionTitleFromReference = (question: GeneratedQuestion) =>
+  normalizeTopic((question.resumeReference ?? '').split(':')[0] ?? '');
+
+const takeFirstBySection = (questions: GeneratedQuestion[], sectionTitles: string[]) => {
+  const wanted = new Set(sectionTitles);
+  const seen = new Set<string>();
+  return questions.filter((question) => {
+    const title = sectionTitleFromReference(question);
+    if (!wanted.has(title) || seen.has(title)) return false;
+    seen.add(title);
+    return true;
+  });
+};
+
 export const buildInterviewQuestionSet = ({
   generatedQuestions,
   targetCompany,
@@ -1563,9 +1586,20 @@ export const buildInterviewQuestionSet = ({
   const generatedWithoutIntro = generatedQuestions.filter((question) => !isIntroQuestion(question));
   const skillQuestions = skillCoverageQuestions(interviewRoadmap);
   const plannedQuestions = roadmapQuestions(interviewRoadmap).filter((question) => !isIntroQuestion(question));
+  const roleAndCodingPrimary = takeFirstBySection(plannedQuestions, ['Role-specific Questions', 'Coding / Problem Solving', 'System Design']);
+  const resumeAndCompanyPrimary = takeFirstBySection(plannedQuestions, [
+    'Projects',
+    'Internship / Work Experience',
+    'Certifications',
+    'Company-specific Questions',
+    'Behavioral Questions',
+    'HR Questions',
+  ]);
+  const primaryQuestions = [...roleAndCodingPrimary, ...resumeAndCompanyPrimary];
+  const remainingPlannedQuestions = plannedQuestions.filter((question) => !primaryQuestions.includes(question));
   const orderedQuestions = prioritizeGenerated
-    ? [INTRO_QUESTION, ...skillQuestions, ...generatedWithoutIntro, ...plannedQuestions, ...companyQuestions]
-    : [INTRO_QUESTION, ...skillQuestions, ...plannedQuestions, ...companyQuestions, ...generatedWithoutIntro];
+    ? [INTRO_QUESTION, ...skillQuestions, ...roleAndCodingPrimary, ...resumeAndCompanyPrimary, ...generatedWithoutIntro, ...remainingPlannedQuestions, ...companyQuestions]
+    : [INTRO_QUESTION, ...skillQuestions, ...roleAndCodingPrimary, ...resumeAndCompanyPrimary, ...remainingPlannedQuestions, ...companyQuestions, ...generatedWithoutIntro];
 
   return withQuestionMetadata(uniqueByQuestion(orderedQuestions).slice(0, interviewRoadmap?.targetQuestionCount ?? targetCount));
 };

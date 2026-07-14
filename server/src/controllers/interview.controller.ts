@@ -294,7 +294,7 @@ export const startInterview = asyncHandler(async (req, res) => {
     (interview as any).interviewRoadmap?.targetQuestionCount ?? (interview as any).totalPlannedQuestions;
 
   if (interview.questions.length === 0) {
-    const generated = await generateInterviewQuestions(buildContextFromInterview(interview));
+    const generated = await generateInterviewQuestions(buildContextFromInterview(interview)).catch(() => ({ questions: [] }));
 
     interview.questions = buildInterviewQuestionSet({
       generatedQuestions: generated.questions,

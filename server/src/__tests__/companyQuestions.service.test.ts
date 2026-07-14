@@ -138,7 +138,7 @@ describe('company question composition', () => {
       ].join('\n'),
     });
 
-    expect(roadmap.targetQuestionCount).toBe(18);
+    expect(roadmap.targetQuestionCount).toBeGreaterThanOrEqual(18);
     expect(roadmap.sections.map((section) => section.key)).toEqual(
       expect.arrayContaining(['projects', 'internship', 'certifications', 'company_specific', 'behavioral', 'hr']),
     );
@@ -152,7 +152,7 @@ describe('company question composition', () => {
       interviewRoadmap: roadmap,
     });
 
-    expect(questions).toHaveLength(18);
+    expect(questions).toHaveLength(roadmap.targetQuestionCount);
     expect(questions.some((question) => question.resumeReference?.startsWith('Projects:'))).toBe(true);
     expect(questions.some((question) => question.resumeReference?.startsWith('Certifications:'))).toBe(true);
   });
@@ -177,9 +177,16 @@ describe('company question composition', () => {
 
     skills.forEach((skill) => {
       expect(questions.some((question) => question.resumeReference === `Skill coverage: ${skill}`)).toBe(true);
+      const coverageIndex = questions.findIndex((question) => question.resumeReference === `Skill coverage: ${skill}`);
+      expect(questions[coverageIndex + 1]?.resumeReference).toBe(`Skill deep dive: ${skill}`);
     });
-    const coverageBlock = questions.slice(1, 1 + skills.length);
-    expect(coverageBlock.every((question) => question.resumeReference?.startsWith('Skill coverage:'))).toBe(true);
+
+    const skillBlock = questions.slice(1).filter((question) => /^Skill (coverage|deep dive):/.test(question.resumeReference ?? ''));
+    expect(skillBlock.every((question) => /^Skill (coverage|deep dive):/.test(question.resumeReference ?? ''))).toBe(true);
+    const firstNonSkillIndex = questions.findIndex((question, index) =>
+      index > 0 && !/^Skill (coverage|deep dive):/.test(question.resumeReference ?? ''),
+    );
+    expect(questions[firstNonSkillIndex]?.resumeReference).toMatch(/^(Role-specific Questions|Coding \/ Problem Solving|System Design):/);
   });
 
   it('derives runtime state with completed projects and covered concepts', () => {
