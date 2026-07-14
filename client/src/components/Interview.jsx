@@ -165,6 +165,7 @@ const ttsErrorMessage = async (_error, fallback) => fallback;
 function ResumeStep({ onNext }) {
   const [uploading, setUploading] = useState(false);
   const [resume, setResume] = useState(null);
+  const [resumeText, setResumeText] = useState('');
   const [history, setHistory] = useState([]);
   const [error, setError] = useState('');
 
@@ -173,11 +174,16 @@ function ResumeStep({ onNext }) {
   }, []);
 
   const upload = async (file) => {
-    if (!file) return;
+    const pastedText = resumeText.trim();
+    if (!file && pastedText.length < 50) {
+      setError('Upload a resume file or paste at least 50 characters of resume text.');
+      return;
+    }
     try {
       setUploading(true); setError('');
       const fd = new FormData();
-      fd.append('resume', file);
+      if (file) fd.append('resume', file);
+      if (pastedText) fd.append('resumeText', pastedText);
       const res = await resumeAPI.upload(fd);
       setResume(res.data);
       if (res.data?._duplicate) {
@@ -202,9 +208,31 @@ function ResumeStep({ onNext }) {
       >
         {uploading ? <span>Uploading…</span>
           : resume ? <span className="iv-drop-success">✓ {resume.fileName || resume.originalName || 'Resume uploaded'}</span>
-          : <><span className="iv-drop-icon">PDF</span><span>Drag and drop PDF here, or click to browse</span></>}
-        <input id="resume-file-input" type="file" accept=".pdf,.doc,.docx"
+          : <><span className="iv-drop-icon">PDF</span><span>Drag and drop PDF/DOCX/TXT here, or click to browse</span></>}
+        <input id="resume-file-input" type="file" accept=".pdf,.doc,.docx,.txt"
           style={{ display: 'none' }} onChange={e => upload(e.target.files[0])} />
+      </div>
+      <div className="iv-resume-text-block">
+        <label className="iv-label" htmlFor="resume-text-input">Or Paste Resume Text</label>
+        <textarea
+          id="resume-text-input"
+          className="iv-input iv-textarea"
+          value={resumeText}
+          onChange={e => {
+            setResumeText(e.target.value);
+            if (resume?.fileName === 'Pasted Resume Text') setResume(null);
+          }}
+          placeholder="Paste your resume text here. If PDF extraction is messy, pasted text gives cleaner role and skill matching."
+          rows={8}
+        />
+        <button
+          type="button"
+          className="iv-btn iv-btn--ghost"
+          disabled={uploading || resumeText.trim().length < 50}
+          onClick={() => upload()}
+        >
+          {uploading ? 'Analyzing…' : 'Analyze pasted text'}
+        </button>
       </div>
       {error && <p className="iv-error">{error}</p>}
       {resume?._duplicate && (

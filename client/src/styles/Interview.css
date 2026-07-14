@@ -307,6 +307,16 @@
   margin: 0.25rem 0;
 }
 
+.iv-resume-text-block {
+  display: grid;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.iv-resume-text-block .iv-btn {
+  justify-self: start;
+}
+
 .iv-resume-history { margin-bottom: 1rem; }
 .iv-resume-history-label { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem; }
 

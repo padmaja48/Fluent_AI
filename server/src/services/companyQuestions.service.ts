@@ -380,6 +380,8 @@ const TOOL_PATTERNS: Array<[string, RegExp]> = [
   ['VS Code', /\bvs\s*code|visual studio code\b/i],
   ['Jira', /\bjira\b/i],
   ['Figma', /\bfigma\b/i],
+  ['Excel', /\bexcel|ms excel|microsoft excel\b/i],
+  ['Google Sheets', /\bgoogle sheets?\b/i],
   ['Tableau', /\btableau\b/i],
   ['Power BI', /\bpower\s*bi\b/i],
 ];
@@ -401,6 +403,12 @@ const TECHNICAL_SKILL_PATTERNS: Array<[string, RegExp]> = [
   ['Operating Systems', /\boperating systems?\b|\bos\b/i],
   ['Computer Networks', /\bcomputer networks?|networking\b/i],
   ['Cyber Security', /\bcyber ?security|security\b/i],
+  ['Data Analysis', /\bdata analysis|data analytics\b/i],
+  ['Data Cleaning', /\bdata cleaning|clean(?:ed|ing)? data|data preprocessing\b/i],
+  ['Data Visualization', /\bdata visualization|visuali[sz](?:e|ation)|charts?|graphs?\b/i],
+  ['Statistics', /\bstatistics?|statistical analysis\b/i],
+  ['Dashboarding', /\bdashboards?|dashboarding\b/i],
+  ['ETL', /\betl|extract transform load\b/i],
   ['HTML', /\bhtml\b/i],
   ['CSS', /\bcss\b/i],
   ['Digital Marketing', /\bdigital marketing\b/i],
@@ -583,6 +591,10 @@ const isTechnicalInterviewRole = (roleDomain: string) =>
   /\b(?:software|developer|engineer|frontend|backend|full\s*stack|data\s*(?:scientist|analyst|engineer)|ml|machine learning|ai|devops|cloud|cyber|security|qa|test|sdet|database|system|architect|programmer)\b/i.test(roleDomain);
 
 const roleSpecificTopics = (roleDomain: string) => {
+  if (/\bdata\s*analyst|analytics analyst|business intelligence|bi analyst\b/i.test(roleDomain)) {
+    return ['data collection', 'data cleaning', 'SQL querying', 'Excel analysis', 'Power BI dashboards', 'KPI reporting', 'insight communication'];
+  }
+
   if (/\bdigital\s*marketing|marketing\b/i.test(roleDomain)) {
     return [
       'campaign strategy',
@@ -618,15 +630,25 @@ const roleSpecificTopics = (roleDomain: string) => {
   return ['role responsibilities', 'practical workflow', 'tools used', 'success metrics'];
 };
 
-const problemSolvingTopicsForRole = (roleDomain: string, resumeProfile: ResumeInterviewProfile) =>
-  isTechnicalInterviewRole(roleDomain)
-    ? uniqueTopics([
-        ...resumeProfile.skills.programmingLanguages.slice(0, 3),
-        ...resumeProfile.skills.technicalSkills.slice(0, 5),
-        'debugging',
-        'testing',
-      ])
+const resumeSkillTopics = (resumeProfile: ResumeInterviewProfile) =>
+  uniqueTopics([
+    ...resumeProfile.skills.programmingLanguages,
+    ...resumeProfile.skills.databases,
+    ...resumeProfile.skills.developerTools,
+    ...resumeProfile.skills.frameworks,
+    ...resumeProfile.skills.libraries,
+    ...resumeProfile.skills.cloudTechnologies,
+    ...resumeProfile.skills.technicalSkills,
+  ]).filter((skill) => !resumeProfile.skills.softSkills.includes(skill));
+
+const problemSolvingTopicsForRole = (roleDomain: string, resumeProfile: ResumeInterviewProfile) => {
+  const resumeTopics = resumeSkillTopics(resumeProfile);
+  if (resumeTopics.length) return resumeTopics.slice(0, 8);
+
+  return isTechnicalInterviewRole(roleDomain)
+    ? roleSpecificTopics(roleDomain).slice(0, 6)
     : uniqueTopics(['role scenario', 'prioritization', 'metrics analysis', 'execution plan']);
+};
 
 const shouldAskSystemDesign = (
   roleDomain: string,
@@ -1518,7 +1540,7 @@ const questionForRoadmapTopic = (
     case 'coding_problem_solving':
       return {
         question: technicalRole
-          ? `Let's discuss a practical problem involving ${topic}. What would you build or debug, what cases would you check, and how would you know your solution is working?`
+          ? `Let's discuss a practical problem involving ${topic}. What would you build or analyze, what cases would you check, and how would you know your solution is working?`
           : `Let's discuss a practical ${roadmap.roleDomain} scenario around ${topic}. What would you do first, what constraints would you consider, and how would you track success?`,
         expectedSignals: technicalRole
           ? ['practical approach', 'cases checked', 'verification']
@@ -1664,10 +1686,10 @@ const roleFocusQuestions = (roadmap?: InterviewRoadmap): GeneratedQuestion[] => 
 
     const followUp: GeneratedQuestion = {
       question: technicalRole
-        ? `Staying with ${topic}, what mistake or failure could happen while implementing it, and how would you debug or prevent that?`
+        ? `Staying with ${topic}, what mistake or failure could happen while using it, and how would you identify or prevent that?`
         : `Staying with ${topic}, what could go wrong during execution, and how would you adjust your plan based on performance data?`,
       expectedSignals: technicalRole
-        ? ['failure mode', 'debugging approach', 'prevention']
+        ? ['failure mode', 'investigation approach', 'prevention']
         : ['risk awareness', 'data-driven adjustment', 'practical judgement'],
       questionType: 'situational',
       resumeReference: `Role follow-up: ${topic}`,

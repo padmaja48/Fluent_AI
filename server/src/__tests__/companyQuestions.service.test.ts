@@ -246,6 +246,34 @@ describe('company question composition', () => {
     expect(questions.some((question) => question.resumeReference === 'Role focus: Software Engineering')).toBe(false);
   });
 
+  it('uses data analyst resume skills instead of generic debugging prompts', () => {
+    const roadmap = buildInterviewRoadmap({
+      roleDomain: 'Data Analyst',
+      roleLevel: 'Fresher',
+      duration: 15,
+      complexity: 'Beginner',
+      resumeSkills: ['SQL', 'Power BI', 'Excel', 'Python'],
+      resumeText: [
+        'Padmaja',
+        'Internship',
+        'Data Analyst Intern at Telebotics',
+        'Worked with SQL, Power BI, Excel, and Python to clean data and create dashboards.',
+      ].join('\n'),
+    });
+
+    const questions = buildInterviewQuestionSet({
+      duration: 15,
+      generatedQuestions: [],
+      interviewRoadmap: roadmap,
+    });
+
+    const questionText = questions.map((question) => question.question).join(' ');
+    expect(questionText).toMatch(/SQL|Power BI|Excel|Python|dashboard|data cleaning/i);
+    expect(questionText).not.toMatch(/involving debugging|debug them|debug or prevent|role responsibilities/i);
+    expect(questions.some((question) => question.resumeReference === 'Role-specific Questions: role responsibilities')).toBe(false);
+    expect(questions.some((question) => question.resumeReference === 'Role focus: role responsibilities')).toBe(false);
+  });
+
   it('makes selected role and resume skills the majority of interview questions', () => {
     const roadmap = buildInterviewRoadmap({
       roleDomain: 'digital marketing',

@@ -13,16 +13,18 @@ export const resumeParamsSchema = z.object({
 });
 
 export const uploadResume = asyncHandler(async (req, res) => {
-  if (!req.file) {
-    throw new AppError('Resume file is required', 400, 'FILE_REQUIRED');
+  const pastedText = typeof req.body.resumeText === 'string' ? req.body.resumeText.trim() : '';
+
+  if (!req.file && pastedText.length < 50) {
+    throw new AppError('Resume file or pasted resume text is required', 400, 'RESUME_REQUIRED');
   }
 
   // 1. Extract full text from the file (PDF / DOCX / TXT)
   const rawText = await extractResumeText(
-    req.file.buffer,
-    req.file.originalname,
-    req.file.mimetype,
-    req.body.resumeText,
+    req.file?.buffer ?? Buffer.from(pastedText),
+    req.file?.originalname ?? 'pasted-resume.txt',
+    req.file?.mimetype ?? 'text/plain',
+    pastedText,
   );
 
   if (!rawText || rawText.length < 50) {
@@ -42,8 +44,14 @@ export const uploadResume = asyncHandler(async (req, res) => {
     return res.status(200).json({ ...existing.toJSON(), _duplicate: true });
   }
 
-  // 4. Upload file to storage
-  const storedFile = await uploadBuffer(req.file, 'resumes');
+  // 4. Upload original file, or store pasted resume text as a text resume artifact.
+  const storedFile = req.file
+    ? await uploadBuffer(req.file, 'resumes')
+    : await uploadBuffer({
+        buffer: Buffer.from(rawText),
+        originalname: 'pasted-resume.txt',
+        mimetype: 'text/plain',
+      } as Express.Multer.File, 'resumes');
 
   // 5. AI analysis — always run fresh on new unique resumes
   const analysis = await analyzeResume(rawText);
@@ -53,7 +61,7 @@ export const uploadResume = asyncHandler(async (req, res) => {
     userId: req.userId,
     fileUrl: storedFile.url,
     filePublicId: storedFile.publicId,
-    fileName: req.file.originalname,
+    fileName: req.file?.originalname ?? 'Pasted Resume Text',
     rawText,
     contentHash: hash,
     analysis,
