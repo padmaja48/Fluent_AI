@@ -177,16 +177,11 @@ describe('company question composition', () => {
 
     skills.forEach((skill) => {
       expect(questions.some((question) => question.resumeReference === `Skill coverage: ${skill}`)).toBe(true);
-      const coverageIndex = questions.findIndex((question) => question.resumeReference === `Skill coverage: ${skill}`);
-      expect(questions[coverageIndex + 1]?.resumeReference).toBe(`Skill deep dive: ${skill}`);
     });
 
-    const skillBlock = questions.slice(1).filter((question) => /^Skill (coverage|deep dive):/.test(question.resumeReference ?? ''));
-    expect(skillBlock.every((question) => /^Skill (coverage|deep dive):/.test(question.resumeReference ?? ''))).toBe(true);
-    const firstNonSkillIndex = questions.findIndex((question, index) =>
-      index > 0 && !/^Skill (coverage|deep dive):/.test(question.resumeReference ?? ''),
-    );
-    expect(questions[firstNonSkillIndex]?.resumeReference).toMatch(/^(Role-specific Questions|Coding \/ Problem Solving|System Design):/);
+    const firstFourAfterIntro = questions.slice(1, 5).map((question) => question.resumeReference ?? '');
+    expect(firstFourAfterIntro.some((reference) => /^Role-specific Questions|Projects|Internship \/ Work Experience|Certifications/.test(reference))).toBe(true);
+    expect(firstFourAfterIntro.filter((reference) => /^Skill coverage:/.test(reference))).toHaveLength(1);
   });
 
   it('uses role-specific marketing questions instead of coding prompts for digital marketing interviews', () => {
@@ -244,6 +239,27 @@ describe('company question composition', () => {
     expect(questionText).not.toContain('approach Software Engineering from requirements to implementation and testing');
     expect(questions.some((question) => question.resumeReference === 'Role-specific Questions: Software Engineering')).toBe(false);
     expect(questions.some((question) => question.resumeReference === 'Role focus: Software Engineering')).toBe(false);
+  });
+
+  it('does not ask repeated skill-checklist questions back to back', () => {
+    const roadmap = buildInterviewRoadmap({
+      roleDomain: 'Software Engineering',
+      roleLevel: 'Fresher',
+      duration: 15,
+      complexity: 'Beginner',
+      resumeSkills: ['Python', 'TypeScript', 'SQL'],
+      resumeText: ['Projects', 'AI Interview Platform - Python, TypeScript, SQL'].join('\n'),
+    });
+
+    const questions = buildInterviewQuestionSet({
+      duration: 15,
+      generatedQuestions: [],
+      interviewRoadmap: roadmap,
+    });
+
+    const firstThreeAfterIntro = questions.slice(1, 4).map((question) => question.resumeReference ?? '');
+    expect(firstThreeAfterIntro.filter((reference) => /^Skill coverage:/.test(reference)).length).toBeLessThan(3);
+    expect(questions.map((question) => question.question).join(' ')).not.toMatch(/let's evaluate your .* skills/i);
   });
 
   it('uses data analyst resume skills instead of generic debugging prompts', () => {
@@ -322,5 +338,109 @@ describe('company question composition', () => {
     expect(state.skills_completed).toContain('SQL');
     expect(state.questions_asked).toBe(4);
     expect(state.remaining_time).toBeGreaterThan(0);
+  });
+
+  it('extracts coursework and interests into the resume interview profile', () => {
+    const roadmap = buildInterviewRoadmap({
+      roleDomain: 'Software Engineer',
+      roleLevel: 'Fresher',
+      duration: 20,
+      complexity: 'Beginner',
+      resumeSkills: ['Python'],
+      resumeText: [
+        'Education',
+        'B.Tech Computer Science, Example Institute, CGPA: 8.9',
+        'Relevant Coursework',
+        'Data Structures and Algorithms',
+        'Database Management Systems',
+        'Areas of Interest',
+        'AI product development',
+      ].join('\n'),
+    });
+
+    expect(roadmap.resumeProfile.candidateInformation.cgpa).toBe('8.9');
+    expect(roadmap.resumeProfile.coursework).toEqual(expect.arrayContaining(['Data Structures and Algorithms', 'Database Management Systems']));
+    expect(roadmap.resumeProfile.interests).toContain('AI product development');
+    expect(roadmap.sections.some((section) => section.key === 'coursework')).toBe(true);
+  });
+
+  it('starts each important project with an architecture question before deeper project prompts', () => {
+    const roadmap = buildInterviewRoadmap({
+      roleDomain: 'Full Stack Developer',
+      roleLevel: 'Fresher',
+      duration: 30,
+      complexity: 'Intermediate',
+      resumeSkills: ['React', 'Node.js', 'MongoDB'],
+      resumeText: [
+        'Projects',
+        'Blood Donation Platform - React, Node.js, MongoDB',
+        'PDF Knowledge Chatbot - LangChain, Python, Vector Databases',
+      ].join('\n'),
+    });
+
+    const questions = buildInterviewQuestionSet({
+      duration: 30,
+      generatedQuestions: [],
+      interviewRoadmap: roadmap,
+    });
+
+    const bloodQuestion = questions.find((question) => question.resumeReference === 'Projects: Blood Donation Platform');
+    const chatbotQuestion = questions.find((question) => question.resumeReference === 'Projects: PDF Knowledge Chatbot');
+
+    expect(bloodQuestion?.question).toMatch(/complete architecture|user entry point|flow/i);
+    expect(chatbotQuestion?.question).toMatch(/complete architecture|user entry point|flow/i);
+  });
+
+  it('keeps interview order resume-led before role and company sections', () => {
+    const roadmap = buildInterviewRoadmap({
+      roleDomain: 'Software Development',
+      roleLevel: 'Fresher',
+      duration: 30,
+      complexity: 'Intermediate',
+      targetCompany: 'microsoft',
+      resumeSkills: ['React', 'Node.js', 'SQL'],
+      resumeText: [
+        'Education',
+        'B.Tech Computer Science',
+        'Projects',
+        'Interview Intelligence Engine - React, Node.js, SQL',
+        'Internship',
+        'Software Developer Intern at Fluent AI',
+        'Certifications',
+        'HackerRank SQL Basic',
+      ].join('\n'),
+    });
+
+    const questions = buildInterviewQuestionSet({
+      duration: 30,
+      targetCompany: 'microsoft',
+      generatedQuestions: [],
+      interviewRoadmap: roadmap,
+    });
+
+    const references = questions.map((question) => question.resumeReference ?? '');
+    const firstRoleIndex = references.findIndex((reference) => /^(Role-specific Questions|Role Scenario \/ Problem Solving|Coding \/ Problem Solving|Company-specific Questions):/.test(reference));
+    const projectIndex = references.findIndex((reference) => reference.startsWith('Projects:'));
+    const internshipIndex = references.findIndex((reference) => reference.startsWith('Internship / Work Experience:'));
+    const certIndex = references.findIndex((reference) => reference.startsWith('Certifications:'));
+
+    expect(references[0]).toBe('candidate overview');
+    expect(projectIndex).toBeGreaterThan(0);
+    expect(internshipIndex).toBeGreaterThan(projectIndex);
+    expect(certIndex).toBeGreaterThan(internshipIndex);
+    expect(firstRoleIndex).toBeGreaterThan(projectIndex);
+  });
+
+  it('uses practical company fallback wording instead of disconnected definition questions', () => {
+    const questions = buildInterviewQuestionSet({
+      duration: 30,
+      targetCompany: 'tcs',
+      generatedQuestions: [],
+    });
+
+    const questionText = questions.map((question) => question.question).join(' ');
+
+    expect(questionText).not.toMatch(/\bWhat is OOP\b|\bWhat is Python\b|\bWhat is SQL\b|Difference between GET and POST/i);
+    expect(questionText).toMatch(/coursework|projects|TCS-style/i);
   });
 });

@@ -307,8 +307,8 @@ const PROGRAMMING_LANGUAGE_PATTERNS: Array<[string, RegExp]> = [
   ['Java', /\bjava\b/i],
   ['C++', /\bc\+\+\b/i],
   ['C', /\bc programming\b|\blanguage c\b/i],
-  ['JavaScript', /\bjavascript|js\b/i],
-  ['TypeScript', /\btypescript|ts\b/i],
+  ['JavaScript', /\b(?:javascript|js)\b/i],
+  ['TypeScript', /\b(?:typescript|ts)\b/i],
   ['C#', /\bc#\b/i],
   ['Go', /\bgolang\b|\bgo\b/i],
   ['PHP', /\bphp\b/i],
@@ -444,6 +444,7 @@ const SECTION_HEADINGS: Record<string, RegExp> = {
   publications: /\b(publications?)\b/i,
   leadership: /\b(leadership|positions? of responsibility|responsibilities)\b/i,
   areasOfInterest: /\b(areas? of interest|interests?)\b/i,
+  coursework: /\b(coursework|relevant coursework|courses|subjects)\b/i,
   education: /\b(education|academic background|qualification)\b/i,
 };
 
@@ -513,6 +514,8 @@ export const analyzeResumeForInterview = ({
   const internships = extractNamedItems(extractSectionLines(lines, SECTION_HEADINGS.internships), /\b(intern|trainee|apprentice)\b/i, 5);
   const workExperience = extractNamedItems(extractSectionLines(lines, SECTION_HEADINGS.workExperience), /\b(engineer|developer|analyst|consultant|intern|associate)\b/i, 6);
   const certifications = extractNamedItems(extractSectionLines(lines, SECTION_HEADINGS.certifications), /\b(certified|certificate|aws|azure|google|tensorflow|oracle|microsoft)\b/i, 8);
+  const coursework = extractNamedItems(extractSectionLines(lines, SECTION_HEADINGS.coursework), /\b(data structures?|algorithms?|dbms|operating systems?|computer networks?|machine learning|artificial intelligence|cloud|software engineering|statistics|marketing|analytics)\b/i, 10);
+  const interests = extractNamedItems(extractSectionLines(lines, SECTION_HEADINGS.areasOfInterest), /\b(ai|cloud|web|data|security|software|machine learning|marketing|analytics|development)\b/i, 8);
 
   const programmingLanguages = uniqueTopics([...detectTerms(fullText, PROGRAMMING_LANGUAGE_PATTERNS), ...resumeSkills.filter((skill) => detectTerms(skill, PROGRAMMING_LANGUAGE_PATTERNS).length)]);
   const frameworks = uniqueTopics([...detectTerms(fullText, FRAMEWORK_PATTERNS), ...resumeSkills.filter((skill) => detectTerms(skill, FRAMEWORK_PATTERNS).length)]);
@@ -545,6 +548,7 @@ export const analyzeResumeForInterview = ({
     internships,
     workExperience,
     certifications,
+    coursework,
     achievements: extractNamedItems(extractSectionLines(lines, SECTION_HEADINGS.achievements), /\b(winner|award|rank|selected|achieved)\b/i, 6),
     hackathons: extractNamedItems(extractSectionLines(lines, SECTION_HEADINGS.hackathons), /\b(hackathon|competition|challenge)\b/i, 5),
     researchPapers: extractNamedItems(extractSectionLines(lines, SECTION_HEADINGS.researchPapers), /\b(research|paper)\b/i, 4),
@@ -553,9 +557,10 @@ export const analyzeResumeForInterview = ({
     positionsOfResponsibility: extractNamedItems(extractSectionLines(lines, SECTION_HEADINGS.leadership), /\b(lead|coordinator|captain|president|secretary|managed)\b/i, 5),
     strengths: uniqueTopics([...softSkills, ...technicalSkills.slice(0, 4)]).slice(0, 6),
     areasOfInterest: uniqueTopics([
-      ...extractNamedItems(extractSectionLines(lines, SECTION_HEADINGS.areasOfInterest), /\b(ai|cloud|web|data|security|software|machine learning)\b/i, 5),
+      ...interests,
       roleDomain,
     ]).slice(0, 6),
+    interests,
     targetJobRole: roleDomain,
     expectedCompany: targetCompany ? COMPANY_LABELS[normalizeCompany(targetCompany) ?? ''] ?? targetCompany : undefined,
   };
@@ -671,6 +676,7 @@ const distributeBudget = (sections: Omit<InterviewRoadmapSection, 'questionBudge
   const weights: Record<InterviewRoadmapSectionKey, number> = {
     self_introduction: 1,
     resume_overview: 1,
+    coursework: 1,
     programming_languages: 2,
     technical_skills: 4,
     projects: 5,
@@ -728,6 +734,7 @@ export const buildInterviewRoadmap = ({
     2 + // role-specific and coding/problem-solving
     (systemDesignApplicable ? 1 : 0) +
     (targetCompany ? 1 : 0) +
+    Math.min(1, resumeProfile.coursework.length) +
     Math.min(2, resumeProfile.projects.length) +
     (resumeProfile.internships.length || resumeProfile.workExperience.length ? 1 : 0) +
     Math.min(1, resumeProfile.certifications.length) +
@@ -738,6 +745,9 @@ export const buildInterviewRoadmap = ({
   const sections: Omit<InterviewRoadmapSection, 'questionBudget'>[] = [
     { key: 'self_introduction', title: 'Self Introduction', topics: ['Candidate overview'] },
     { key: 'resume_overview', title: 'Resume Overview', topics: uniqueTopics([resumeProfile.candidateInformation.degree ?? '', resumeProfile.candidateInformation.college ?? '', roleDomain]).slice(0, 4) },
+    ...(resumeProfile.coursework.length
+      ? [{ key: 'coursework' as const, title: 'Coursework', topics: resumeProfile.coursework }]
+      : []),
     ...(resumeProfile.skills.programmingLanguages.length
       ? [{ key: 'programming_languages' as const, title: 'Programming Languages', topics: resumeProfile.skills.programmingLanguages }]
       : []),
@@ -807,24 +817,24 @@ const tcsQuestions = (company: string): GeneratedQuestion[] => [
   },
   {
     question:
-      'Explain the four OOP pillars with a small example from Java, Python, or one of your own projects.',
+      'If OOP appears in your coursework or projects, explain one design choice using encapsulation, inheritance, abstraction, or polymorphism.',
     expectedSignals: ['encapsulation', 'inheritance or polymorphism', 'practical example'],
     questionType: 'technical',
-    resumeReference: 'OOP fundamentals',
+    resumeReference: 'coursework or project OOP fundamentals',
   },
   {
     question:
-      'What is the difference between an array and a linked list, and when would you choose one over the other?',
+      'Think of a project, coursework exercise, or coding-round scenario. When would an array be a better choice than a linked list, and when would you avoid it?',
     expectedSignals: ['memory layout', 'access and insertion trade-offs', 'use-case judgment'],
     questionType: 'technical',
-    resumeReference: 'data structures fundamentals',
+    resumeReference: 'coursework or coding-round data structures',
   },
   {
     question:
-      'Explain normalization in DBMS and describe one problem it helps prevent in an enterprise application.',
+      'For a database-backed feature you have built or studied, how would normalization prevent data duplication or update mistakes?',
     expectedSignals: ['normal forms', 'data redundancy', 'update anomalies'],
     questionType: 'technical',
-    resumeReference: 'DBMS fundamentals',
+    resumeReference: 'database project or coursework fundamentals',
   },
   {
     question:
@@ -835,10 +845,10 @@ const tcsQuestions = (company: string): GeneratedQuestion[] => [
   },
   {
     question:
-      'Write or explain the logic for checking whether a string is a palindrome, including edge cases you would test.',
+      'In a TCS-style coding round, explain the logic for checking whether a string is a palindrome, including the edge cases you would test.',
     expectedSignals: ['algorithmic clarity', 'edge cases', 'time complexity'],
     questionType: 'technical',
-    resumeReference: 'basic coding round',
+    resumeReference: 'TCS basic coding round',
   },
 ];
 
@@ -1449,6 +1459,7 @@ const questionForRoadmapTopic = (
     topic,
     resumeReference: `${section.title}: ${topic}`,
   };
+  const topicPass = Math.floor(index / Math.max(1, section.topics.length || 1));
 
   switch (section.key) {
     case 'self_introduction':
@@ -1462,9 +1473,18 @@ const questionForRoadmapTopic = (
         followUpIntent: 'bridge-topic',
         ...common,
       };
+    case 'coursework':
+      return {
+        question: `You listed ${topic} in your coursework. Which concept from it has been most useful in a project, internship, or role-related task, and why?`,
+        expectedSignals: ['course concept', 'practical application', 'role relevance'],
+        questionType: 'technical',
+        difficulty: 'easy-medium',
+        followUpIntent: 'deepen',
+        ...common,
+      };
     case 'programming_languages':
       return {
-        question: `Let's evaluate your ${topic} fundamentals. Which language features or concepts have you used most in real projects, and where did they matter?`,
+        question: `You've listed ${topic}. Which language features or concepts have you used most in real projects, and where did they matter?`,
         expectedSignals: ['hands-on usage', 'core language concepts', 'project example'],
         questionType: 'technical',
         difficulty: index % 2 === 0 ? 'easy-medium' : 'medium',
@@ -1481,30 +1501,110 @@ const questionForRoadmapTopic = (
         ...common,
       };
     case 'projects':
+      if (topicPass === 0) {
+        return {
+          question: `I see ${topic} in your projects. Can you explain the complete architecture from the user entry point through the main backend, data, or model flow?`,
+          expectedSignals: ['end-to-end architecture', 'component boundaries', 'data or request flow'],
+          questionType: 'technical',
+          difficulty: 'medium',
+          followUpIntent: 'deepen',
+          ...common,
+        };
+      }
+      if (topicPass === 1) {
+        return {
+          question: `For ${topic}, walk me through the tech stack you chose, your exact contribution, and why those choices fit the problem.`,
+          expectedSignals: ['technology choices', 'personal contribution', 'trade-off reasoning'],
+          questionType: 'technical',
+          difficulty: 'medium',
+          followUpIntent: 'deepen',
+          ...common,
+        };
+      }
+      if (topicPass === 2) {
+        return {
+          question: `What was the hardest challenge in ${topic}, and how did you debug, redesign, or unblock it?`,
+          expectedSignals: ['specific challenge', 'debugging or redesign steps', 'learning'],
+          questionType: 'technical',
+          difficulty: 'medium-hard',
+          followUpIntent: 'challenge',
+          ...common,
+        };
+      }
+      if (topicPass === 3) {
+        return {
+          question: `If ${topic} had to support more users or data, what would you optimize first and what trade-offs would you consider?`,
+          expectedSignals: ['bottleneck identification', 'optimization plan', 'trade-offs'],
+          questionType: 'situational',
+          difficulty: 'scenario',
+          followUpIntent: 'challenge',
+          ...common,
+        };
+      }
       return {
-        question: `Great. Let's discuss ${topic}. What problem did it solve, what was your exact contribution, and what was the hardest technical or execution challenge?`,
-        expectedSignals: ['problem solved', 'personal contribution', 'technical or execution challenge'],
-        questionType: 'technical',
-        difficulty: 'medium',
-        followUpIntent: 'deepen',
+        question: `How did or would you deploy ${topic}, and what monitoring, security, or failure-handling checks would you add before production use?`,
+        expectedSignals: ['deployment approach', 'production checks', 'reliability or security awareness'],
+        questionType: 'situational',
+        difficulty: 'scenario',
+        followUpIntent: 'challenge',
         ...common,
       };
     case 'internship':
+      if (topicPass === 0) {
+        return {
+          question: `In your internship or work experience at ${topic}, what were your core responsibilities and what business or user problem were you working on?`,
+          expectedSignals: ['responsibilities', 'business or user problem', 'ownership'],
+          questionType: 'behavioural',
+          difficulty: 'easy-medium',
+          followUpIntent: 'clarify',
+          ...common,
+        };
+      }
+      if (topicPass === 1) {
+        return {
+          question: `For ${topic}, which technologies or tools did you actually use, and how did they fit into the workflow?`,
+          expectedSignals: ['tools used', 'workflow context', 'hands-on role'],
+          questionType: 'technical',
+          difficulty: 'easy-medium',
+          followUpIntent: 'deepen',
+          ...common,
+        };
+      }
+      if (topicPass === 2) {
+        return {
+          question: `What was the biggest challenge during ${topic}, and what did you personally do to resolve or escalate it?`,
+          expectedSignals: ['challenge', 'personal action', 'resolution or escalation'],
+          questionType: 'behavioural',
+          difficulty: 'behavioral',
+          followUpIntent: 'clarify',
+          ...common,
+        };
+      }
       return {
-        question: `I'd like to discuss your internship or work experience now. For ${topic}, what were your responsibilities, tools used, and biggest learning?`,
-        expectedSignals: ['responsibilities', 'technologies used', 'learning or impact'],
+        question: `Looking back at ${topic}, what was the measurable impact or strongest learning you would carry into this ${roadmap.roleDomain} role?`,
+        expectedSignals: ['impact or learning', 'role transfer', 'specific reflection'],
         questionType: 'behavioural',
         difficulty: 'easy-medium',
-        followUpIntent: 'clarify',
+        followUpIntent: 'bridge-topic',
         ...common,
       };
     case 'certifications':
+      if (topicPass === 0) {
+        return {
+          question: `I noticed ${topic} on your resume. What did you practically build, query, configure, or analyze for it, and how would you apply that in this role?`,
+          expectedSignals: ['practical certification work', 'hands-on application', 'role relevance'],
+          questionType: 'technical',
+          difficulty: 'easy-medium',
+          followUpIntent: 'deepen',
+          ...common,
+        };
+      }
       return {
-        question: `I noticed ${topic} on your resume. What did you build or practice for it, and how would you apply that knowledge in this role?`,
-        expectedSignals: ['certification scope', 'hands-on application', 'role relevance'],
-        questionType: 'technical',
-        difficulty: 'easy-medium',
-        followUpIntent: 'deepen',
+        question: `Let's make ${topic} practical: describe a small real-world scenario where this certification knowledge would prevent a mistake or improve a solution.`,
+        expectedSignals: ['real-world scenario', 'mistake prevention', 'better solution'],
+        questionType: 'situational',
+        difficulty: 'scenario',
+        followUpIntent: 'challenge',
         ...common,
       };
     case 'role_specific':
@@ -1602,63 +1702,93 @@ const roadmapQuestions = (roadmap?: InterviewRoadmap) => {
   });
 };
 
+const skillCoveragePrompt = (skill: string, roadmap: InterviewRoadmap, technicalRole: boolean) => {
+  const dataRole = /\bdata\s*analyst|analytics analyst|business intelligence|bi analyst\b/i.test(roadmap.roleDomain);
+  if (dataRole) {
+    if (/\bsql\b/i.test(skill)) {
+      return `You mentioned SQL. Tell me about one query or analysis task you worked on, what tables or fields you used, and how you checked the result was correct.`;
+    }
+    if (/\bpower\s*bi|tableau|dashboard/i.test(skill)) {
+      return `You mentioned ${skill}. Walk me through one dashboard or report you created, the metrics you showed, and how it helped someone make a decision.`;
+    }
+    if (/\bexcel|google sheets/i.test(skill)) {
+      return `You mentioned ${skill}. Describe one analysis you did with it, the formulas or features you used, and how you validated the numbers.`;
+    }
+    if (/\bpython\b/i.test(skill)) {
+      return `You mentioned Python. How have you used it for data cleaning, analysis, or automation, and what output did you produce?`;
+    }
+    return `You mentioned ${skill}. Give one data-analysis example where you used it, what insight you found, and how you verified the data.`;
+  }
+
+  if (technicalRole) {
+    return `You mentioned ${skill}. Tell me where you used it in a project or internship, what you built with it, and how you checked that your work was correct.`;
+  }
+
+  return `You mentioned ${skill}. Explain one practical campaign, task, or business example where you used it and what outcome you tracked.`;
+};
+
+const skillDeepDivePrompt = (skill: string, roadmap: InterviewRoadmap, technicalRole: boolean) => {
+  const dataRole = /\bdata\s*analyst|analytics analyst|business intelligence|bi analyst\b/i.test(roadmap.roleDomain);
+  if (dataRole) {
+    return `Staying with ${skill}, what mistake could make the analysis misleading, and how would you catch or prevent it?`;
+  }
+
+  if (technicalRole) {
+    return `Staying with ${skill}, what mistake or limitation have you seen or learned about, and how would you prevent it in a project?`;
+  }
+
+  return `Staying with ${skill}, what is one common mistake, limitation, or campaign risk you would watch for, and how would you prevent it?`;
+};
+
 const skillCoverageQuestions = (roadmap?: InterviewRoadmap): GeneratedQuestion[] => {
   if (!roadmap) return [];
   const technicalRole = isTechnicalInterviewRole(roadmap.roleDomain);
   const skills = allTechnicalSkillTopics(roadmap.resumeProfile).slice(0, 40);
   const depth = skillQuestionDepth(roadmap.duration, roadmap.difficulty === 'Hard' ? 'Advanced' : roadmap.difficulty === 'Easy' ? 'Beginner' : 'Intermediate');
 
-  return skills.flatMap((skill) => {
-    const questions: GeneratedQuestion[] = [
-      {
-        question: technicalRole
-          ? `For the ${roadmap.roleDomain} role, let's evaluate your ${skill} skills. Explain the core concept you have used most, with one concrete project or implementation example.`
-          : `For the ${roadmap.roleDomain} role, let's evaluate your ${skill} skills. Explain one practical campaign, task, or business example where you used it and what outcome you tracked.`,
-        expectedSignals: technicalRole
-          ? [`${skill} fundamentals`, `${roadmap.roleDomain} relevance`, 'specific example', 'clear practical usage']
-          : [`${skill} practical usage`, `${roadmap.roleDomain} relevance`, 'specific example', 'measured outcome'],
-        questionType: technicalRole ? 'technical' : 'situational',
-        resumeReference: `Skill coverage: ${skill}`,
-        difficulty: 'easy-medium',
-        topic: skill,
-        followUpIntent: 'deepen',
-      },
-    ];
+  const coverageQuestions = skills.map((skill) => ({
+    question: skillCoveragePrompt(skill, roadmap, technicalRole),
+    expectedSignals: technicalRole
+      ? [`${skill} practical usage`, `${roadmap.roleDomain} relevance`, 'specific example', 'verification']
+      : [`${skill} practical usage`, `${roadmap.roleDomain} relevance`, 'specific example', 'measured outcome'],
+    questionType: technicalRole ? 'technical' as const : 'situational' as const,
+    resumeReference: `Skill coverage: ${skill}`,
+    difficulty: 'easy-medium' as const,
+    topic: skill,
+    followUpIntent: 'deepen' as const,
+  }));
 
-    if (depth >= 2) {
-      questions.push({
-        question: technicalRole
-          ? `Staying with ${skill} for a ${roadmap.roleDomain} interview, what is one failure mode, limitation, or common mistake engineers should watch for, and how would you prevent it?`
-          : `Staying with ${skill} for a ${roadmap.roleDomain} interview, what is one common mistake, limitation, or campaign risk you would watch for, and how would you prevent it?`,
+  const deepDiveQuestions = depth >= 2
+    ? skills.map((skill) => ({
+        question: skillDeepDivePrompt(skill, roadmap, technicalRole),
         expectedSignals: technicalRole
-          ? [`${skill} pitfalls`, `${roadmap.roleDomain} judgement`, 'prevention strategy', 'testing or validation']
+          ? [`${skill} pitfalls`, `${roadmap.roleDomain} judgement`, 'prevention strategy', 'validation']
           : [`${skill} pitfalls`, `${roadmap.roleDomain} judgement`, 'prevention strategy', 'measurement or review'],
-        questionType: technicalRole ? 'technical' : 'situational',
+        questionType: technicalRole ? 'technical' as const : 'situational' as const,
         resumeReference: `Skill deep dive: ${skill}`,
-        difficulty: 'medium',
+        difficulty: 'medium' as const,
         topic: skill,
-        followUpIntent: 'challenge',
-      });
-    }
+        followUpIntent: 'challenge' as const,
+      }))
+    : [];
 
-    if (depth >= 3) {
-      questions.push({
+  const productionQuestions = depth >= 3
+    ? skills.map((skill) => ({
         question: technicalRole
           ? `Let's go one level deeper on ${skill}. Design a production-ready ${roadmap.roleDomain} use case and explain performance, scalability, security, and trade-offs.`
           : `Let's go one level deeper on ${skill}. Design a ${roadmap.roleDomain} execution plan and explain audience, channels, budget or effort, metrics, and trade-offs.`,
         expectedSignals: technicalRole
           ? [`${skill} architecture`, `${roadmap.roleDomain} system thinking`, 'trade-off reasoning', 'production readiness']
           : [`${skill} strategy`, `${roadmap.roleDomain} execution thinking`, 'trade-off reasoning', 'measurement plan'],
-        questionType: 'situational',
+        questionType: 'situational' as const,
         resumeReference: `Skill production scenario: ${skill}`,
-        difficulty: 'scenario',
+        difficulty: 'scenario' as const,
         topic: skill,
-        followUpIntent: 'challenge',
-      });
-    }
+        followUpIntent: 'challenge' as const,
+      }))
+    : [];
 
-    return questions;
-  });
+  return [...coverageQuestions, ...deepDiveQuestions, ...productionQuestions];
 };
 
 const roleFocusQuestions = (roadmap?: InterviewRoadmap): GeneratedQuestion[] => {
@@ -1742,6 +1872,22 @@ const takeFirstBySection = (questions: GeneratedQuestion[], sectionTitles: strin
   });
 };
 
+const takeBySection = (questions: GeneratedQuestion[], sectionTitles: string[]) => {
+  const wanted = new Set(sectionTitles);
+  return questions.filter((question) => wanted.has(sectionTitleFromReference(question)));
+};
+
+const interleaveQuestionGroups = (...groups: GeneratedQuestion[][]) => {
+  const output: GeneratedQuestion[] = [];
+  const maxLength = Math.max(0, ...groups.map((group) => group.length));
+  for (let index = 0; index < maxLength; index += 1) {
+    groups.forEach((group) => {
+      if (group[index]) output.push(group[index]);
+    });
+  }
+  return output;
+};
+
 export const buildInterviewQuestionSet = ({
   generatedQuestions,
   targetCompany,
@@ -1763,24 +1909,56 @@ export const buildInterviewQuestionSet = ({
   const skillQuestions = skillCoverageQuestions(interviewRoadmap);
   const roleQuestions = roleFocusQuestions(interviewRoadmap);
   const plannedQuestions = roadmapQuestions(interviewRoadmap).filter((question) => !isIntroQuestion(question));
+  const resumeOpeningQuestions = takeBySection(plannedQuestions, ['Resume Overview', 'Coursework']).slice(0, 2);
+  const projectQuestions = takeBySection(plannedQuestions, ['Projects']);
+  const internshipQuestions = takeBySection(plannedQuestions, ['Internship / Work Experience']);
+  const certificationQuestions = takeBySection(plannedQuestions, ['Certifications']);
   const roleAndCodingPrimary = takeFirstBySection(plannedQuestions, ['Role-specific Questions', 'Coding / Problem Solving', 'Role Scenario / Problem Solving', 'System Design']);
-  const resumeAndCompanyPrimary = takeFirstBySection(plannedQuestions, [
-    'Projects',
-    'Internship / Work Experience',
-    'Certifications',
-    'Company-specific Questions',
-    'Behavioral Questions',
-    'HR Questions',
+  const companyPlannedQuestions = takeBySection(plannedQuestions, ['Company-specific Questions']);
+  const behavioralHrQuestions = takeBySection(plannedQuestions, ['Behavioral Questions', 'HR Questions']);
+  const resumePrimaryQuestions = [
+    ...projectQuestions.slice(0, Math.max(1, interviewRoadmap?.resumeProfile.projects.length ?? 0)),
+    ...internshipQuestions.slice(0, 1),
+    ...certificationQuestions.slice(0, 1),
+  ];
+  const usedQuestions = new Set<GeneratedQuestion>([
+    ...resumeOpeningQuestions,
+    ...resumePrimaryQuestions,
+    ...roleAndCodingPrimary,
+    ...companyPlannedQuestions,
+    ...behavioralHrQuestions,
   ]);
-  const primaryQuestions = [...roleAndCodingPrimary, ...resumeAndCompanyPrimary];
-  const remainingPlannedQuestions = plannedQuestions.filter((question) => !primaryQuestions.includes(question));
-  const minimumRoleSkillQuestions = Math.ceil(Math.max(1, finalTargetCount - 1) * 0.6);
-  const existingRoleSkillQuestions = skillQuestions.length + roleAndCodingPrimary.length;
-  const leadRoleQuestions = roleQuestions.slice(0, Math.max(0, minimumRoleSkillQuestions - existingRoleSkillQuestions));
-  const remainingRoleQuestions = roleQuestions.filter((question) => !leadRoleQuestions.includes(question));
+  const remainingResumeQuestions = [
+    ...projectQuestions,
+    ...internshipQuestions,
+    ...certificationQuestions,
+  ].filter((question) => !usedQuestions.has(question));
+  const remainingPlannedQuestions = plannedQuestions.filter((question) => !usedQuestions.has(question) && !remainingResumeQuestions.includes(question));
+  const earlySkillQuestions = skillQuestions.slice(0, skillQuestions.length ? 1 : 0);
+  const remainingSkillQuestions = skillQuestions.slice(earlySkillQuestions.length);
+  const resumeConversation = [
+    ...resumeOpeningQuestions,
+    ...earlySkillQuestions,
+    ...resumePrimaryQuestions,
+  ];
+  const resumeRoleSkillConversation = interleaveQuestionGroups(
+    remainingResumeQuestions,
+    remainingSkillQuestions,
+    roleAndCodingPrimary,
+    companyPlannedQuestions,
+    roleQuestions,
+  );
+
+  if (!interviewRoadmap) {
+    const fallbackOrderedQuestions = prioritizeGenerated
+      ? [INTRO_QUESTION, ...generatedWithoutIntro, ...companyQuestions]
+      : [INTRO_QUESTION, ...companyQuestions, ...generatedWithoutIntro];
+    return withQuestionMetadata(uniqueByQuestion(fallbackOrderedQuestions).slice(0, finalTargetCount));
+  }
+
   const orderedQuestions = prioritizeGenerated
-    ? [INTRO_QUESTION, ...skillQuestions, ...roleAndCodingPrimary, ...leadRoleQuestions, ...resumeAndCompanyPrimary, ...generatedWithoutIntro, ...remainingRoleQuestions, ...remainingPlannedQuestions, ...companyQuestions]
-    : [INTRO_QUESTION, ...skillQuestions, ...roleAndCodingPrimary, ...leadRoleQuestions, ...resumeAndCompanyPrimary, ...remainingRoleQuestions, ...remainingPlannedQuestions, ...companyQuestions, ...generatedWithoutIntro];
+    ? [INTRO_QUESTION, ...resumeConversation, ...generatedWithoutIntro, ...resumeRoleSkillConversation, ...companyQuestions, ...behavioralHrQuestions, ...remainingPlannedQuestions]
+    : [INTRO_QUESTION, ...resumeConversation, ...resumeRoleSkillConversation, ...companyQuestions, ...behavioralHrQuestions, ...remainingPlannedQuestions, ...generatedWithoutIntro];
 
   return withQuestionMetadata(uniqueByQuestion(orderedQuestions).slice(0, finalTargetCount));
 };

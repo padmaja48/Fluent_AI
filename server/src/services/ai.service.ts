@@ -212,6 +212,7 @@ export type ResumeInterviewProfile = {
   internships: string[];
   workExperience: string[];
   certifications: string[];
+  coursework: string[];
   achievements: string[];
   hackathons: string[];
   researchPapers: string[];
@@ -220,6 +221,7 @@ export type ResumeInterviewProfile = {
   positionsOfResponsibility: string[];
   strengths: string[];
   areasOfInterest: string[];
+  interests: string[];
   targetJobRole?: string;
   expectedCompany?: string;
 };
@@ -227,6 +229,7 @@ export type ResumeInterviewProfile = {
 export type InterviewRoadmapSectionKey =
   | 'self_introduction'
   | 'resume_overview'
+  | 'coursework'
   | 'programming_languages'
   | 'technical_skills'
   | 'projects'
@@ -774,7 +777,7 @@ const fallbackInitialQuestions = (
 export const generateInterviewQuestions = (context: InterviewContext) => {
   const questionCount = plannedQuestionCountForDuration(context.duration);
 
-  // Unique session seed — guarantees different questions every call even for the same resume
+  // Unique session seed varies phrasing only; source topics must still come from the resume, JD, role, company, or answers.
   const sessionSeed = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
   const personaBlock = context.personaPersonality
@@ -837,9 +840,11 @@ ${JSON.stringify(jdProfile, null, 2)}
       : 'Intermediate complexity: blend theory with practical real-world examples and moderate system design thinking.';
 
   return generateJson<{ questions: GeneratedQuestion[] }>(
-    `SESSION ID: ${sessionSeed}  ← use this as your random seed; produce a FRESH, UNIQUE set of questions different from any previous session.
+    `SESSION ID: ${sessionSeed}  ← use this only to vary wording; do not invent random topics.
 
 You are generating ${questionCount} interview questions for a LIVE interview session. These questions will be asked aloud to the candidate.
+
+You are the Interview Intelligence Engine of Fluent_AI. Behave like an experienced software engineering interviewer who has carefully read the candidate's resume before Question 1.
 
 ${personaBlock}
 ${resumeBlock}
@@ -852,6 +857,10 @@ COMPANY RULE: If a target company is provided, align follow-up questions with th
 JD RULE: If a job description is provided, the JD is the primary source. Use the JD SKILL GRAPH to cover required skills, responsibilities, seniority, domain knowledge, tools, soft skills, and keywords before generic role topics.
 JD TECHNOLOGY RULE: If DETECTED JD TECHNOLOGIES is present, at least ${jdTechnologyTargetCount || 'most'} non-introduction questions MUST directly test those technologies. Name the technology in the question or resumeReference. If the resume does not mention a JD technology, ask a fundamentals, project-transfer, or scenario question for that JD technology instead of ignoring it.
 DIFFICULTY RULE: Stage the interview naturally: easy warm-up, easy-medium, medium, medium-hard, scenario, problem-solving, behavioral. Early questions build confidence; later questions probe depth.
+RESUME ANALYSIS RULE: Before forming questions, extract education, CGPA, branch, projects, internship/work experience, languages, frameworks, libraries, databases, cloud, AI/ML, certifications, achievements, developer tools, coursework, soft skills, and interests when present. Only ask from extracted evidence, selected role, selected company, JD, or prior candidate answers.
+FLOW RULE: Follow this arc unless the JD requires a stronger emphasis: self introduction, resume overview, technical skills, projects, internship/work experience, certifications, role-based questions, company-specific questions, behavioral, HR.
+PROJECT RULE: For every important project, start with architecture and end-to-end flow before asking about individual technologies, challenges, optimizations, scalability, or deployment.
+FOLLOW-UP RULE: A follow-up may only come from the candidate's previous answer or a topic already present in the resume/JD/roadmap.
 
 ABSOLUTE RULES — violating any rule makes the output unusable:
 1. Generate EXACTLY ${questionCount} questions — no more, no fewer
@@ -859,9 +868,9 @@ ABSOLUTE RULES — violating any rule makes the output unusable:
 3. NO two questions may be semantically similar or ask about the same topic
 4. Questions MUST be varied — different skills, different question types, different depths
 5. Do NOT copy the suggested question angles verbatim — rephrase and combine them creatively
-6. Order: question 1 = warm-up/opener → middle = core depth → final = most challenging
+6. Never ask standalone definition questions like "What is OOP?", "What is Python?", "What is SQL?", or "Difference between GET and POST?". Connect fundamentals to a resume project, coursework, role scenario, or JD responsibility.
 7. Scale difficulty appropriately to ${context.roleLevel} level
-8. Use the SESSION ID above to randomize phrasing — every session must produce a different set
+8. Use the SESSION ID above only for wording variety. Question reasons must come from the resume, JD, role, company, or prior answer context.
 
 Each question object MUST have ALL these fields:
 - question: string (the exact question text, ready to speak aloud)
@@ -1273,7 +1282,7 @@ const fallbackAdaptiveQuestion = (context: AdaptiveQuestionContext): GeneratedQu
     ? "Let's move to some company-specific questions."
     : sectionForTopic(context, coverageTopic)?.key === 'behavioral'
     ? "Now I'd like to ask a behavioral question."
-    : `Now let's evaluate your ${coverageTopic} skills.`;
+    : `I see ${coverageTopic} in your profile or target role.`;
   const transition = action === 'move_topic' ? projectTransition : transitionForAction(action, context.lastEvaluation.score);
   const questionType: GeneratedQuestion['questionType'] =
     difficulty === 'behavioral'
