@@ -260,7 +260,8 @@ export const isKnownCompany = (company?: string) =>
   Boolean(company && Object.prototype.hasOwnProperty.call(COMPANY_LABELS, company));
 
 const INTRO_QUESTION: GeneratedQuestion = {
-  question: 'Introduce yourself.',
+  question:
+    'Tell me about yourself. Walk me through your education, internship, technical skills, projects, and why you are interested in this role.',
   expectedSignals: [
     'clear career summary',
     'relevant skills and projects',
@@ -434,18 +435,22 @@ const SOFT_SKILL_PATTERNS: Array<[string, RegExp]> = [
 ];
 
 const SECTION_HEADINGS: Record<string, RegExp> = {
-  projects: /\b(projects?|academic projects?|personal projects?)\b/i,
-  internships: /\b(internships?|internship experience|training)\b/i,
-  workExperience: /\b(work experience|professional experience|employment|experience)\b/i,
-  certifications: /\b(certifications?|certificates?|licenses?)\b/i,
-  achievements: /\b(achievements?|awards?|honou?rs?)\b/i,
-  hackathons: /\b(hackathons?|coding competitions?)\b/i,
-  researchPapers: /\b(research papers?|research work)\b/i,
-  publications: /\b(publications?)\b/i,
-  leadership: /\b(leadership|positions? of responsibility|responsibilities)\b/i,
-  areasOfInterest: /\b(areas? of interest|interests?)\b/i,
-  coursework: /\b(coursework|relevant coursework|courses|subjects)\b/i,
-  education: /\b(education|academic background|qualification)\b/i,
+  careerObjective: /^(career objective|objective|profile summary|summary)$/i,
+  projects: /^(projects?|academic projects?|personal projects?)$/i,
+  internships: /^(internships?|internship experience|training)$/i,
+  workExperience: /^(work experience|professional experience|employment|experience)$/i,
+  technicalSkills: /^(technical skills?|skills|technical summary)$/i,
+  certifications: /^(certifications?(?:\s*&\s*training)?|certificates?|licenses?|technical certifications)$/i,
+  achievements: /^(achievements?|awards?|honou?rs?)$/i,
+  hackathons: /^(hackathons?|coding competitions?)$/i,
+  researchPapers: /^(research papers?|research work)$/i,
+  publications: /^(publications?)$/i,
+  leadership: /^(leadership|positions? of responsibility|responsibilities)$/i,
+  areasOfInterest: /^(areas? of interest|interests?)$/i,
+  coursework: /^(coursework|relevant coursework|courses|subjects)$/i,
+  education: /^(education|academic background|qualification)$/i,
+  languageProficiency: /^(language proficiency|languages)$/i,
+  additionalInformation: /^(additional information|core competencies)$/i,
 };
 
 const splitResumeLines = (resumeText?: string) =>
@@ -474,17 +479,67 @@ const extractNamedItems = (lines: string[], fallbackPattern: RegExp, maxItems = 
   uniqueTopics(
     lines
       .filter((line) => line.length >= 4)
-      .map((line) => line.replace(/\s+\|\s+.*$/, '').replace(/\s+-\s+.*$/, '').trim())
+      .map((line) => cleanBullet(line).replace(/\s+\|\s+.*$/, '').replace(/\s+-\s+.*$/, '').trim())
       .filter((line) => fallbackPattern.test(line) || line.split(/\s+/).length <= 12),
+  ).slice(0, maxItems);
+
+const cleanBullet = (line: string) =>
+  line
+    .replace(/^[•\-\u2022\s]+/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const cleanProjectName = (line: string) =>
+  cleanBullet(line)
+    .replace(/\s+(?:ChatBot|LifeConnect)?\/Live Demo.*$/i, '')
+    .replace(/\s+[–-]\s+.*$/, '')
+    .trim();
+
+const extractProjectItems = (lines: string[], maxItems = 8) =>
+  uniqueTopics(
+    lines
+      .map(cleanProjectName)
+      .filter((line) => line.length >= 4)
+      .filter((line) => !/^(?:\d+\s+of\s+\d+|developed|built|implemented|deployed|integrated|designed)\b/i.test(line))
+      .filter((line) => /\b(project|app|system|platform|model|dashboard|website|portal|engine|chatbot|tracker|finder)\b/i.test(line) || line.split(/\s+/).length <= 6),
+  ).slice(0, maxItems);
+
+const cleanExperienceName = (line: string) =>
+  cleanBullet(line)
+    .replace(/\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+\d{4}\s+[–-]\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+\d{4}.*$/i, '')
+    .trim();
+
+const extractExperienceItems = (lines: string[], maxItems = 6) =>
+  uniqueTopics(
+    lines
+      .map(cleanExperienceName)
+      .filter((line) => /\b(intern|engineer|developer|analyst|consultant|associate)\b/i.test(line))
+      .filter((line) => line.split(/\s+/).length <= 12),
+  ).slice(0, maxItems);
+
+const extractCertificationItems = (lines: string[], maxItems = 8) =>
+  uniqueTopics(
+    lines
+      .map(cleanBullet)
+      .filter((line) => line.length >= 4)
+      .filter((line) => !/^(technical certifications|professional development)$/i.test(line))
+      .map((line) => line.replace(/\s+[–-]\s+.*$/, '').trim())
+      .filter((line) => /\b(certification|certified|sql|python|mern|aws|azure|google|tensorflow|oracle|microsoft|nptel|zoho|cambridge|pet)\b/i.test(line)),
   ).slice(0, maxItems);
 
 const extractEducation = (lines: string[]) => {
   const educationLines = extractSectionLines(lines, SECTION_HEADINGS.education);
   const allText = lines.join('\n');
   const educationText = educationLines.join('\n') || allText;
+  const degree =
+    educationText.match(/\bB\.?\s?Tech\b|\bBTech\b/i)?.[0] ??
+    educationText.match(/\bM\.?\s?Tech\b|\bMTech\b/i)?.[0] ??
+    educationText.match(/\bB\.E\.?\b|\bBE\b/)?.[0] ??
+    educationText.match(/\bM\.E\.?\b|\bME\b/)?.[0] ??
+    educationText.match(/\b(BSc|MSc|BCA|MCA|MBA|PhD)\b/i)?.[0];
   return {
     education: educationLines.slice(0, 5),
-    degree: educationText.match(/\b(B\.?Tech|BTech|BE|B\.?E\.?|M\.?Tech|MTech|ME|M\.?E\.?|BSc|MSc|BCA|MCA|MBA|PhD)\b/i)?.[0],
+    degree,
     branch: educationText.match(/\b(?:Computer Science|Information Technology|Electronics|Electrical|Mechanical|Civil|AI|Data Science|Cyber Security)[^,\n]*/i)?.[0],
     cgpa: educationText.match(/\b(?:CGPA|GPA)\s*[:\-]?\s*([0-9.]+\/?[0-9.]*)/i)?.[1],
     college:
@@ -510,10 +565,14 @@ export const analyzeResumeForInterview = ({
   const fullText = `${resumeText ?? ''}\n${resumeSummary ?? ''}\n${resumeSkills.join(' ')}`;
   const education = extractEducation(lines);
   const firstContentLine = lines.find((line) => !isLikelyHeading(line) && !/@|http|www\.|linkedin|github/i.test(line));
-  const projects = extractNamedItems(extractSectionLines(lines, SECTION_HEADINGS.projects), /\b(project|app|system|platform|model|dashboard|website|portal|engine)\b/i, 8);
-  const internships = extractNamedItems(extractSectionLines(lines, SECTION_HEADINGS.internships), /\b(intern|trainee|apprentice)\b/i, 5);
-  const workExperience = extractNamedItems(extractSectionLines(lines, SECTION_HEADINGS.workExperience), /\b(engineer|developer|analyst|consultant|intern|associate)\b/i, 6);
-  const certifications = extractNamedItems(extractSectionLines(lines, SECTION_HEADINGS.certifications), /\b(certified|certificate|aws|azure|google|tensorflow|oracle|microsoft)\b/i, 8);
+  const experienceItems = extractExperienceItems(extractSectionLines(lines, SECTION_HEADINGS.workExperience), 6);
+  const projects = extractProjectItems(extractSectionLines(lines, SECTION_HEADINGS.projects), 8);
+  const internships = uniqueTopics([
+    ...extractExperienceItems(extractSectionLines(lines, SECTION_HEADINGS.internships), 5),
+    ...experienceItems.filter((item) => /\bintern\b/i.test(item)),
+  ]).slice(0, 5);
+  const workExperience = experienceItems;
+  const certifications = extractCertificationItems(extractSectionLines(lines, SECTION_HEADINGS.certifications), 8);
   const coursework = extractNamedItems(extractSectionLines(lines, SECTION_HEADINGS.coursework), /\b(data structures?|algorithms?|dbms|operating systems?|computer networks?|machine learning|artificial intelligence|cloud|software engineering|statistics|marketing|analytics)\b/i, 10);
   const interests = extractNamedItems(extractSectionLines(lines, SECTION_HEADINGS.areasOfInterest), /\b(ai|cloud|web|data|security|software|machine learning|marketing|analytics|development)\b/i, 8);
 
@@ -593,9 +652,54 @@ const skillQuestionDepth = (duration: number, complexity?: string) => {
 };
 
 const isTechnicalInterviewRole = (roleDomain: string) =>
-  /\b(?:software|developer|engineer|frontend|backend|full\s*stack|data\s*(?:scientist|analyst|engineer)|ml|machine learning|ai|devops|cloud|cyber|security|qa|test|sdet|database|system|architect|programmer)\b/i.test(roleDomain);
+  /\b(?:sde|software\s+development\s+engineer|software|developer|engineer|frontend|backend|full\s*stack|data\s*(?:scientist|analyst|engineer)|ml|machine learning|ai|devops|cloud|cyber|security|qa|test|sdet|database|system|architect|programmer)\b/i.test(roleDomain);
 
-const roleSpecificTopics = (roleDomain: string) => {
+const profileTopicText = (profile?: ResumeInterviewProfile, jdProfile?: JobDescriptionProfile) =>
+  uniqueTopics([
+    ...(profile?.skills.programmingLanguages ?? []),
+    ...(profile?.skills.frameworks ?? []),
+    ...(profile?.skills.libraries ?? []),
+    ...(profile?.skills.databases ?? []),
+    ...(profile?.skills.cloudTechnologies ?? []),
+    ...(profile?.skills.developerTools ?? []),
+    ...(profile?.skills.technicalSkills ?? []),
+    ...(profile?.projects ?? []),
+    ...(profile?.internships ?? []),
+    ...(profile?.workExperience ?? []),
+    ...(profile?.certifications ?? []),
+    ...(profile?.coursework ?? []),
+    ...(profile?.areasOfInterest ?? []),
+    ...(jdProfile?.requiredSkills ?? []),
+    ...(jdProfile?.toolsTechnologies ?? []),
+    ...(jdProfile?.responsibilities ?? []),
+  ]).join(' ');
+
+const profileHas = (profile: ResumeInterviewProfile | undefined, pattern: RegExp, jdProfile?: JobDescriptionProfile) =>
+  pattern.test(profileTopicText(profile, jdProfile));
+
+const firstMatchingTopic = (topics: string[], pattern: RegExp) =>
+  topics.find((topic) => pattern.test(topic));
+
+const profileSkills = (profile?: ResumeInterviewProfile, jdProfile?: JobDescriptionProfile) =>
+  uniqueTopics([
+    ...(jdProfile?.requiredSkills ?? []),
+    ...(jdProfile?.toolsTechnologies ?? []),
+    ...(profile?.skills.programmingLanguages ?? []),
+    ...(profile?.skills.frameworks ?? []),
+    ...(profile?.skills.libraries ?? []),
+    ...(profile?.skills.databases ?? []),
+    ...(profile?.skills.cloudTechnologies ?? []),
+    ...(profile?.skills.developerTools ?? []),
+    ...(profile?.skills.technicalSkills ?? []),
+  ]);
+
+const primaryProject = (profile?: ResumeInterviewProfile) =>
+  profile?.projects[0];
+
+const projectReference = (profile?: ResumeInterviewProfile) =>
+  primaryProject(profile) ? `your ${primaryProject(profile)} project` : 'one of your projects';
+
+const roleSpecificTopics = (roleDomain: string, resumeProfile?: ResumeInterviewProfile, jdProfile?: JobDescriptionProfile) => {
   if (/\bdata\s*analyst|analytics analyst|business intelligence|bi analyst\b/i.test(roleDomain)) {
     return ['data collection', 'data cleaning', 'SQL querying', 'Excel analysis', 'Power BI dashboards', 'KPI reporting', 'insight communication'];
   }
@@ -616,8 +720,24 @@ const roleSpecificTopics = (roleDomain: string) => {
     return ['model selection', 'data preprocessing', 'feature evaluation', 'model validation', 'AI product integration', 'responsible AI checks'];
   }
 
-  if (/\bsoftware|developer|programmer\b/i.test(roleDomain)) {
-    return ['feature requirements breakdown', 'technology selection', 'implementation workflow', 'testing strategy', 'debugging approach', 'code quality'];
+  if (/\bsde|software\s+development\s+engineer|software|developer|programmer\b/i.test(roleDomain)) {
+    const skills = profileSkills(resumeProfile, jdProfile);
+    const backendRuntime =
+      firstMatchingTopic(skills, /\bnode(?:\.js)?\b/i) ??
+      firstMatchingTopic(skills, /\bexpress(?:\.js)?\b/i) ??
+      firstMatchingTopic(skills, /\bjava\b|\bspring\b/i) ??
+      firstMatchingTopic(skills, /\bpython\b|\bdjango\b|\bflask\b|\bfastapi\b/i);
+    const frontendFramework = firstMatchingTopic(skills, /\breact(?:\.js)?\b|\bangular\b|\bvue(?:\.js)?\b|\bnext(?:\.js)?\b/i);
+    const apiTopic = firstMatchingTopic(skills, /\brest(?:ful)?\s+api?s?\b|\bgraphql\b|\bapi\b/i);
+
+    return uniqueTopics([
+      'software development career choice',
+      backendRuntime ? `${backendRuntime} request handling and concurrency` : 'backend request handling and concurrency',
+      frontendFramework ? `${frontendFramework} performance optimization` : undefined,
+      'processes and threads',
+      apiTopic ? `${apiTopic} production debugging` : 'production service debugging',
+      primaryProject(resumeProfile) ? `scalable secure architecture for ${primaryProject(resumeProfile)}` : 'scalable secure architecture',
+    ].filter(Boolean) as string[]);
   }
 
   if (/\bfrontend\b/i.test(roleDomain)) {
@@ -651,8 +771,21 @@ const problemSolvingTopicsForRole = (roleDomain: string, resumeProfile: ResumeIn
   if (resumeTopics.length) return resumeTopics.slice(0, 8);
 
   return isTechnicalInterviewRole(roleDomain)
-    ? roleSpecificTopics(roleDomain).slice(0, 6)
+    ? roleSpecificTopics(roleDomain, resumeProfile).slice(0, 6)
     : uniqueTopics(['role scenario', 'prioritization', 'metrics analysis', 'execution plan']);
+};
+
+const prioritizeCertificationTopics = (certifications: string[], roleDomain: string) => {
+  const technicalRole = isTechnicalInterviewRole(roleDomain);
+  if (!technicalRole) return certifications;
+
+  return [...certifications].sort((left, right) => {
+    const score = (value: string) =>
+      (/\bsql\b|hackerrank/i.test(value) ? 0 : 10) +
+      (/\bpython\b/i.test(value) ? 1 : 0) +
+      (/\bmern|full\s*stack|web development/i.test(value) ? 2 : 0);
+    return score(left) - score(right);
+  });
 };
 
 const shouldAskSystemDesign = (
@@ -727,19 +860,8 @@ export const buildInterviewRoadmap = ({
   const resumeProfile = analyzeResumeForInterview({ resumeText, resumeSkills, resumeSummary, roleDomain, targetCompany });
   const technicalRole = isTechnicalInterviewRole(roleDomain);
   const technicalSkillTopics = allTechnicalSkillTopics(resumeProfile, jdProfile);
-  const coverageQuestionCount = technicalSkillTopics.length * skillQuestionDepth(duration, complexity);
   const systemDesignApplicable = shouldAskSystemDesign(roleDomain, roleLevel, technicalSkillTopics, jdProfile);
-  const coreSectionReserve =
-    1 + // introduction
-    2 + // role-specific and coding/problem-solving
-    (systemDesignApplicable ? 1 : 0) +
-    (targetCompany ? 1 : 0) +
-    Math.min(1, resumeProfile.coursework.length) +
-    Math.min(2, resumeProfile.projects.length) +
-    (resumeProfile.internships.length || resumeProfile.workExperience.length ? 1 : 0) +
-    Math.min(1, resumeProfile.certifications.length) +
-    2; // behavioral and HR
-  const targetQuestionCount = Math.max(getInterviewQuestionCount(duration), coverageQuestionCount + coreSectionReserve);
+  const targetQuestionCount = getInterviewQuestionCount(duration);
   const limits = getDifficultyLimits(complexity);
   const technicalTopics = technicalSkillTopics.slice(0, 30);
   const sections: Omit<InterviewRoadmapSection, 'questionBudget'>[] = [
@@ -761,9 +883,9 @@ export const buildInterviewRoadmap = ({
       ? [{ key: 'internship' as const, title: 'Internship / Work Experience', topics: uniqueTopics([...resumeProfile.internships, ...resumeProfile.workExperience]) }]
       : []),
     ...(resumeProfile.certifications.length
-      ? [{ key: 'certifications' as const, title: 'Certifications', topics: resumeProfile.certifications }]
+      ? [{ key: 'certifications' as const, title: 'Certifications', topics: prioritizeCertificationTopics(resumeProfile.certifications, roleDomain) }]
       : []),
-    { key: 'role_specific', title: 'Role-specific Questions', topics: uniqueTopics([...roleSpecificTopics(roleDomain), ...(jdProfile?.responsibilities ?? []).slice(0, 4)]) },
+    { key: 'role_specific', title: 'Role-specific Questions', topics: uniqueTopics([...roleSpecificTopics(roleDomain, resumeProfile, jdProfile), ...(jdProfile?.responsibilities ?? []).slice(0, 4)]) },
     ...(targetCompany
       ? [{ key: 'company_specific' as const, title: 'Company-specific Questions', topics: uniqueTopics([companyGuidance?.company ?? targetCompany, ...(companyGuidance?.preferredTopics ?? [])]) }]
       : []),
@@ -1435,7 +1557,7 @@ export const getCompanyInterviewGuidance = (targetCompany?: string): CompanyInte
 };
 
 const isIntroQuestion = (question: GeneratedQuestion) =>
-  question.question.trim().toLowerCase().replace(/[?.!]+$/, '') === 'introduce yourself';
+  /^(introduce yourself|tell me about yourself)\b/i.test(question.question.trim());
 
 const uniqueByQuestion = (questions: GeneratedQuestion[]) => {
   const seen = new Set<string>();
@@ -1445,6 +1567,134 @@ const uniqueByQuestion = (questions: GeneratedQuestion[]) => {
     seen.add(key);
     return true;
   });
+};
+
+const roleMotivationQuestion = (roadmap: InterviewRoadmap) => {
+  const profile = roadmap.resumeProfile;
+  const hasFullStack = profileHas(profile, /\bfull\s*stack|mern|frontend|backend|react|node|express|rest(?:ful)?\s+api/i);
+  const hasAiMl = profileHas(profile, /\bai\/?ml|artificial intelligence|machine learning|ml|langchain|rag|embedding|nlp|generative ai/i);
+  const hasData = profileHas(profile, /\bdata analyst|analytics|business intelligence|bi analyst|power\s*bi|tableau|pandas|numpy/i);
+  const highlighted = profileSkills(profile).slice(0, 5).join(', ');
+
+  if (hasFullStack && hasAiMl && /\bsde|software\s+development\s+engineer|software|developer/i.test(roadmap.roleDomain)) {
+    return 'I noticed your resume includes full-stack development as well as AI/ML. Why did you decide to pursue a Software Development Engineering role, and how do those interests connect?';
+  }
+
+  if (hasData && /\bsde|software\s+development\s+engineer|software|developer/i.test(roadmap.roleDomain)) {
+    return `Your resume has data or analytics signals${highlighted ? ` like ${highlighted}` : ''}. Why are you targeting ${roadmap.roleDomain}, and how would that background help you as a software engineer?`;
+  }
+
+  return `Your resume highlights ${highlighted || projectReference(profile)}. Why are you interested in this ${roadmap.roleDomain} role, and what evidence from your work makes you ready for it?`;
+};
+
+const projectArchitectureQuestion = (topic: string, roadmap: InterviewRoadmap) => {
+  if (/pdf|document|chatbot|rag|knowledge/i.test(topic)) {
+    return {
+      question: `Explain the architecture of your ${topic}. How does the application process a document or PDF from upload to generating the final response?`,
+      expectedSignals: ['input flow', 'preprocessing or chunking', 'retrieval or model step', 'response generation'],
+    };
+  }
+
+  if (/chatbot|assistant|llm|generative|nlp/i.test(topic)) {
+    return {
+      question: `Explain the architecture of your ${topic}. How does a user message move through the application before the final AI response is returned?`,
+      expectedSignals: ['message flow', 'context handling', 'model or retrieval step', 'response generation'],
+    };
+  }
+
+  if (/platform|portal|system|app|website|full\s*stack|mern|backend|api/i.test(`${topic} ${profileTopicText(roadmap.resumeProfile)}`)) {
+    return {
+      question: `Explain the architecture of your ${topic}. Walk me through the user flow, frontend or client layer, APIs, data model, and any authentication or authorization decisions.`,
+      expectedSignals: ['user flow', 'client and API boundaries', 'data model', 'authentication or authorization'],
+    };
+  }
+
+  return {
+    question: `I see ${topic} in your projects. Can you explain the complete architecture from the user entry point through the main backend, data, or model flow?`,
+    expectedSignals: ['end-to-end architecture', 'component boundaries', 'data or request flow'],
+  };
+};
+
+const projectTechnologyQuestion = (topic: string, roadmap: InterviewRoadmap) => {
+  const profileText = profileTopicText(roadmap.resumeProfile);
+  if (/pdf|document|chatbot|rag|knowledge|llm|nlp/i.test(topic) && /\blangchain|embedding|vector|rag|llm|nlp/i.test(profileText)) {
+    const aiTools = uniqueTopics([
+      firstMatchingTopic(profileSkills(roadmap.resumeProfile), /\blangchain\b/i),
+      firstMatchingTopic(profileSkills(roadmap.resumeProfile), /\bvector\b|\bembedding/i),
+      firstMatchingTopic(profileSkills(roadmap.resumeProfile), /\bllm|rag|nlp\b/i),
+    ].filter(Boolean) as string[]).join(' and ') || 'the AI/ML tools';
+    return {
+      question: `You used ${aiTools} in ${topic}. Why did you choose that approach, and how does it improve retrieval, context quality, or response accuracy?`,
+      expectedSignals: ['tool choice', 'retrieval or context quality', 'accuracy trade-offs', 'limitations'],
+    };
+  }
+
+  if (/platform|portal|system|app|website|full\s*stack|mern|backend|api/i.test(`${topic} ${profileText}`)) {
+    return {
+      question: `For ${topic}, walk me through the tech stack you chose, your exact contribution, and how the API, database, and security pieces fit together.`,
+      expectedSignals: ['technology choices', 'personal contribution', 'API and data flow', 'security awareness'],
+    };
+  }
+
+  return {
+    question: `For ${topic}, walk me through the tech stack you chose, your exact contribution, and why those choices fit the problem.`,
+    expectedSignals: ['technology choices', 'personal contribution', 'trade-off reasoning'],
+  };
+};
+
+const roleRuntimeQuestion = (topic: string, roadmap: InterviewRoadmap) => {
+  if (/\bnode(?:\.js)?\b|\bexpress(?:\.js)?\b|event loop/i.test(topic)) {
+    return {
+      question: 'Explain how Node.js handles multiple client requests even though it runs on a single thread. What is the role of the Event Loop?',
+      expectedSignals: ['event loop', 'non-blocking I/O', 'callbacks or promises', 'thread pool awareness'],
+    };
+  }
+
+  if (/\bjava\b|\bspring\b/i.test(topic)) {
+    return {
+      question: `Explain how a ${topic.replace(/\s+request handling.*$/i, '')} backend handles multiple client requests. Where do threads, request pools, and blocking operations matter?`,
+      expectedSignals: ['request thread model', 'blocking operations', 'thread pool limits', 'scalability trade-offs'],
+    };
+  }
+
+  if (/\bpython\b|\bdjango\b|\bflask\b|\bfastapi\b/i.test(topic)) {
+    return {
+      question: `Explain how a Python web service handles multiple client requests. What should you consider around workers, async I/O, blocking code, and database calls?`,
+      expectedSignals: ['workers or async model', 'blocking code', 'database calls', 'scalability trade-offs'],
+    };
+  }
+
+  return {
+    question: `Explain how a backend service handles multiple client requests. What concurrency, I/O, database, and failure-handling concerns would you watch for in ${projectReference(roadmap.resumeProfile)}?`,
+    expectedSignals: ['request lifecycle', 'concurrency or I/O model', 'database bottlenecks', 'failure handling'],
+  };
+};
+
+const roleFrontendPerformanceQuestion = (topic: string) => {
+  const framework = topic.replace(/\s+performance optimization.*$/i, '').trim() || 'frontend';
+  return {
+    question: `Suppose your ${framework} application becomes slow after adding several new features. How would you identify the bottleneck and improve its performance?`,
+    expectedSignals: ['profiling', 'render optimization', 'state or memoization strategy', 'network or bundle checks'],
+  };
+};
+
+const roleProductionDebugQuestion = (topic: string) => {
+  const target = /\bapi|rest|graphql/i.test(topic) ? 'API' : 'service or API';
+  return {
+    question: `Imagine a ${target} you deployed suddenly starts returning HTTP 500 errors in production. How would you debug the issue and restore the service?`,
+    expectedSignals: ['logs and reproduction', 'recent changes', 'database or dependency checks', 'rollback or hotfix'],
+  };
+};
+
+const roleScalabilityQuestion = (topic: string, roadmap: InterviewRoadmap) => {
+  const topicProject = topic.match(/\bfor\s+(.+)$/i)?.[1]?.trim();
+  const project = topicProject || primaryProject(roadmap.resumeProfile);
+  return {
+    question: project
+      ? `If your ${project} had to support one million users or much larger data volume, what architectural changes would you make to keep it scalable, secure, and highly available?`
+      : `If one of your applications had to support one million users or much larger data volume, what architectural changes would you make to keep it scalable, secure, and highly available?`,
+    expectedSignals: ['scaling strategy', 'database optimization', 'security controls', 'availability and monitoring'],
+  };
 };
 
 const questionForRoadmapTopic = (
@@ -1502,9 +1752,10 @@ const questionForRoadmapTopic = (
       };
     case 'projects':
       if (topicPass === 0) {
+        const projectQuestion = projectArchitectureQuestion(topic, roadmap);
         return {
-          question: `I see ${topic} in your projects. Can you explain the complete architecture from the user entry point through the main backend, data, or model flow?`,
-          expectedSignals: ['end-to-end architecture', 'component boundaries', 'data or request flow'],
+          question: projectQuestion.question,
+          expectedSignals: projectQuestion.expectedSignals,
           questionType: 'technical',
           difficulty: 'medium',
           followUpIntent: 'deepen',
@@ -1512,9 +1763,10 @@ const questionForRoadmapTopic = (
         };
       }
       if (topicPass === 1) {
+        const projectQuestion = projectTechnologyQuestion(topic, roadmap);
         return {
-          question: `For ${topic}, walk me through the tech stack you chose, your exact contribution, and why those choices fit the problem.`,
-          expectedSignals: ['technology choices', 'personal contribution', 'trade-off reasoning'],
+          question: projectQuestion.question,
+          expectedSignals: projectQuestion.expectedSignals,
           questionType: 'technical',
           difficulty: 'medium',
           followUpIntent: 'deepen',
@@ -1551,6 +1803,20 @@ const questionForRoadmapTopic = (
       };
     case 'internship':
       if (topicPass === 0) {
+        if (/\bdata analyst|analytics|business intelligence|bi\b/i.test(topic) && profileHas(roadmap.resumeProfile, /\bsql\b|\bpython\b|pandas|numpy/i)) {
+          const tools = uniqueTopics([
+            firstMatchingTopic(profileSkills(roadmap.resumeProfile), /\bsql\b/i),
+            firstMatchingTopic(profileSkills(roadmap.resumeProfile), /\bpython\b|pandas|numpy/i),
+          ].filter(Boolean) as string[]).join(' and ') || 'your data tools';
+          return {
+            question: `During your internship at ${topic}, describe a real business problem you solved using ${tools}. What was your approach, and what impact did your solution have?`,
+            expectedSignals: ['business problem', `${tools} usage`, 'analysis approach', 'impact'],
+            questionType: 'behavioural',
+            difficulty: 'easy-medium',
+            followUpIntent: 'clarify',
+            ...common,
+          };
+        }
         return {
           question: `In your internship or work experience at ${topic}, what were your core responsibilities and what business or user problem were you working on?`,
           expectedSignals: ['responsibilities', 'business or user problem', 'ownership'],
@@ -1590,6 +1856,16 @@ const questionForRoadmapTopic = (
       };
     case 'certifications':
       if (topicPass === 0) {
+        if (/\bsql\b|hackerrank/i.test(topic)) {
+          return {
+            question: `Since you have a ${topic} certification, write or explain an SQL query to find the second highest salary in each department. How would you optimize it for a large database?`,
+            expectedSignals: ['window function or subquery', 'partition by department', 'indexing or query plan', 'large-data optimization'],
+            questionType: 'technical',
+            difficulty: 'medium',
+            followUpIntent: 'challenge',
+            ...common,
+          };
+        }
         return {
           question: `I noticed ${topic} on your resume. What did you practically build, query, configure, or analyze for it, and how would you apply that in this role?`,
           expectedSignals: ['practical certification work', 'hands-on application', 'role relevance'],
@@ -1608,6 +1884,70 @@ const questionForRoadmapTopic = (
         ...common,
       };
     case 'role_specific':
+      if (/software development career choice/i.test(topic)) {
+        return {
+          question: roleMotivationQuestion(roadmap),
+          expectedSignals: ['career motivation', 'resume-backed reasoning', 'role clarity'],
+          questionType: 'behavioural',
+          difficulty: 'easy',
+          followUpIntent: 'bridge-topic',
+          ...common,
+        };
+      }
+      if (/request handling|event loop|backend request|node|express|java|spring|python|django|flask|fastapi/i.test(topic)) {
+        const runtimeQuestion = roleRuntimeQuestion(topic, roadmap);
+        return {
+          question: runtimeQuestion.question,
+          expectedSignals: runtimeQuestion.expectedSignals,
+          questionType: 'technical',
+          difficulty: 'medium',
+          followUpIntent: 'deepen',
+          ...common,
+        };
+      }
+      if (/performance.*(?:react|angular|vue|next|frontend)|(?:react|angular|vue|next|frontend).*performance/i.test(topic)) {
+        const performanceQuestion = roleFrontendPerformanceQuestion(topic);
+        return {
+          question: performanceQuestion.question,
+          expectedSignals: performanceQuestion.expectedSignals,
+          questionType: 'situational',
+          difficulty: 'scenario',
+          followUpIntent: 'challenge',
+          ...common,
+        };
+      }
+      if (/\bprocess(?:es)?\b|\bthread/i.test(topic)) {
+        return {
+          question: `Explain the difference between a process and a thread. In what situations would you prefer multithreading over multiprocessing?`,
+          expectedSignals: ['memory isolation', 'shared memory', 'context switching', 'use-case judgment'],
+          questionType: 'technical',
+          difficulty: 'medium',
+          followUpIntent: 'deepen',
+          ...common,
+        };
+      }
+      if (/production api|api debugging|production service|debugging/i.test(topic)) {
+        const debugQuestion = roleProductionDebugQuestion(topic);
+        return {
+          question: debugQuestion.question,
+          expectedSignals: debugQuestion.expectedSignals,
+          questionType: 'situational',
+          difficulty: 'scenario',
+          followUpIntent: 'challenge',
+          ...common,
+        };
+      }
+      if (/scalable secure architecture|scal/i.test(topic)) {
+        const scalingQuestion = roleScalabilityQuestion(topic, roadmap);
+        return {
+          question: scalingQuestion.question,
+          expectedSignals: scalingQuestion.expectedSignals,
+          questionType: 'situational',
+          difficulty: 'scenario',
+          followUpIntent: 'challenge',
+          ...common,
+        };
+      }
       return {
         question: technicalRole
           ? `For a ${roadmap.roleDomain} role, how would you handle ${topic} in a project? Mention the steps you would take, the resume skills you would use, and how you would verify the result.`
@@ -1621,14 +1961,28 @@ const questionForRoadmapTopic = (
         ...common,
       };
     case 'company_specific':
+      if (company && /^(tcs|tata consultancy services)$/i.test(company)) {
+        return {
+          question: `TCS often values fundamentals, client delivery, adaptability, and clear communication. Which project or internship experience from your resume best demonstrates those qualities?`,
+          expectedSignals: ['TCS awareness', 'resume-backed example', 'delivery mindset', 'communication'],
+          questionType: 'behavioural',
+          difficulty: 'behavioral',
+          followUpIntent: 'clarify',
+          ...common,
+        };
+      }
+      const companyTopic = COMPANY_LABELS[normalizeCompany(topic) ?? ''] ?? topic;
+      const expectationTopic = company && normalizeCompany(companyTopic) === normalizeCompany(company)
+        ? `${company}'s interview expectations`
+        : companyTopic;
       return {
         question: technicalRole
           ? company
-            ? `Let's move to some ${company}-style expectations. How would you demonstrate ${topic} in a technical interview or project discussion?`
-            : `Let's move to company-specific expectations. How would you demonstrate ${topic} in a technical interview or project discussion?`
+            ? `Let's move to some ${company}-style expectations. How would you demonstrate ${expectationTopic} in a technical interview or project discussion?`
+            : `Let's move to company-specific expectations. How would you demonstrate ${expectationTopic} in a technical interview or project discussion?`
           : company
-          ? `Let's move to some ${company}-style expectations. How would you connect ${topic} to the ${roadmap.roleDomain} role with a practical example?`
-          : `Let's move to company-specific expectations. How would you connect ${topic} to the ${roadmap.roleDomain} role with a practical example?`,
+          ? `Let's move to some ${company}-style expectations. How would you connect ${expectationTopic} to the ${roadmap.roleDomain} role with a practical example?`
+          : `Let's move to company-specific expectations. How would you connect ${expectationTopic} to the ${roadmap.roleDomain} role with a practical example?`,
         expectedSignals: technicalRole
           ? ['company awareness', 'specific example', 'interview readiness']
           : ['company awareness', 'role alignment', 'specific example'],
@@ -1721,6 +2075,14 @@ const skillCoveragePrompt = (skill: string, roadmap: InterviewRoadmap, technical
   }
 
   if (technicalRole) {
+    if (/\bpython\b/i.test(skill) && /\bsde|software\s+development\s+engineer|software|developer/i.test(roadmap.roleDomain)) {
+      const highlightedSkills = uniqueTopics([
+        ...roadmap.resumeProfile.skills.programmingLanguages,
+        ...roadmap.resumeProfile.skills.frameworks.slice(0, 2),
+        ...roadmap.resumeProfile.skills.databases.slice(0, 1),
+      ]).slice(0, 6);
+      return `You've listed ${highlightedSkills.join(', ') || skill}. Which technology are you most confident with, and what is the most challenging problem you've solved using it?`;
+    }
     return `You mentioned ${skill}. Tell me where you used it in a project or internship, what you built with it, and how you checked that your work was correct.`;
   }
 
@@ -1795,21 +2157,48 @@ const roleFocusQuestions = (roadmap?: InterviewRoadmap): GeneratedQuestion[] => 
   if (!roadmap) return [];
   const technicalRole = isTechnicalInterviewRole(roadmap.roleDomain);
   const roleTopics = uniqueTopics([
-    ...roleSpecificTopics(roadmap.roleDomain),
+    ...roleSpecificTopics(roadmap.roleDomain, roadmap.resumeProfile),
     ...problemSolvingTopicsForRole(roadmap.roleDomain, roadmap.resumeProfile),
-  ]).slice(0, 12);
+  ]).filter((topic) => !/software development career choice/i.test(topic)).slice(0, 12);
 
   return roleTopics.flatMap((topic, index) => {
+    const runtimeQuestion = /request handling|event loop|backend request|node|express|java|spring|python|django|flask|fastapi/i.test(topic)
+      ? roleRuntimeQuestion(topic, roadmap)
+      : undefined;
+    const performanceQuestion = /performance.*(?:react|angular|vue|next|frontend)|(?:react|angular|vue|next|frontend).*performance/i.test(topic)
+      ? roleFrontendPerformanceQuestion(topic)
+      : undefined;
+    const debugQuestion = /production api|api debugging|production service|debugging/i.test(topic)
+      ? roleProductionDebugQuestion(topic)
+      : undefined;
+    const scalingQuestion = /scalable secure architecture|scal/i.test(topic)
+      ? roleScalabilityQuestion(topic, roadmap)
+      : undefined;
+    const focusedQuestion =
+      runtimeQuestion?.question ??
+      performanceQuestion?.question ??
+      debugQuestion?.question ??
+      scalingQuestion?.question ??
+      (/\bprocess(?:es)?\b|\bthread/i.test(topic)
+        ? 'Explain the difference between a process and a thread. In what situations would you prefer multithreading over multiprocessing?'
+        : undefined);
+    const focusedSignals =
+      runtimeQuestion?.expectedSignals ??
+      performanceQuestion?.expectedSignals ??
+      debugQuestion?.expectedSignals ??
+      scalingQuestion?.expectedSignals;
     const base: GeneratedQuestion = {
-      question: technicalRole
+      question: focusedQuestion ?? (technicalRole
         ? `For a ${roadmap.roleDomain} interview, explain how you would apply ${topic} in one of your projects or internship tasks, and how you would check that it worked.`
-        : `For a ${roadmap.roleDomain} interview, walk me through how you would handle ${topic} in a real business situation and how you would measure success.`,
-      expectedSignals: technicalRole
+        : `For a ${roadmap.roleDomain} interview, walk me through how you would handle ${topic} in a real business situation and how you would measure success.`),
+      expectedSignals: focusedQuestion
+        ? focusedSignals ?? ['technical concept', 'practical diagnosis or trade-off', 'project or role relevance']
+        : technicalRole
         ? ['role relevance', 'project connection', 'verification']
         : ['role relevance', 'practical execution', 'success metrics'],
-      questionType: technicalRole ? 'technical' : 'situational',
+      questionType: focusedQuestion && /slow|HTTP 500|one million/i.test(focusedQuestion) ? 'situational' : technicalRole ? 'technical' : 'situational',
       resumeReference: `Role focus: ${topic}`,
-      difficulty: index < 2 ? 'easy-medium' : 'medium',
+      difficulty: focusedQuestion && /slow|HTTP 500|one million/i.test(focusedQuestion) ? 'scenario' : index < 2 ? 'easy-medium' : 'medium',
       topic,
       followUpIntent: 'deepen',
     };
@@ -1828,6 +2217,7 @@ const roleFocusQuestions = (roadmap?: InterviewRoadmap): GeneratedQuestion[] => 
       followUpIntent: 'challenge',
     };
 
+    if (focusedQuestion) return [base];
     return index < 4 ? [base, followUp] : [base];
   });
 };
@@ -1888,6 +2278,36 @@ const interleaveQuestionGroups = (...groups: GeneratedQuestion[][]) => {
   return output;
 };
 
+const topicOverlaps = (left?: string, right?: string) => {
+  const a = normalizeTopic(left ?? '').toLowerCase();
+  const b = normalizeTopic(right ?? '').toLowerCase();
+  if (!a || !b) return false;
+
+  const compact = (value: string) => value.replace(/[^a-z0-9]+/g, '');
+  const ca = compact(a);
+  const cb = compact(b);
+  return a === b || a.includes(b) || b.includes(a) || ca.includes(cb) || cb.includes(ca);
+};
+
+const removeRepeatedSkillCoverage = (questions: GeneratedQuestion[]) => {
+  let nonSkillContext = '';
+  return questions.filter((question) => {
+    const topic = question.topic ?? '';
+    const isSkillCoverage = /^Skill coverage:/i.test(question.resumeReference ?? '');
+    const compactTopic = topic.replace(/[^a-z0-9]+/gi, '').toLowerCase();
+    const alreadyCovered =
+      isSkillCoverage &&
+      compactTopic.length >= 3 &&
+      nonSkillContext.replace(/[^a-z0-9]+/gi, '').toLowerCase().includes(compactTopic);
+
+    if (!isSkillCoverage) {
+      nonSkillContext += ` ${question.question} ${question.topic ?? ''} ${question.resumeReference ?? ''}`;
+    }
+
+    return !alreadyCovered;
+  });
+};
+
 export const buildInterviewQuestionSet = ({
   generatedQuestions,
   targetCompany,
@@ -1909,11 +2329,14 @@ export const buildInterviewQuestionSet = ({
   const skillQuestions = skillCoverageQuestions(interviewRoadmap);
   const roleQuestions = roleFocusQuestions(interviewRoadmap);
   const plannedQuestions = roadmapQuestions(interviewRoadmap).filter((question) => !isIntroQuestion(question));
-  const resumeOpeningQuestions = takeBySection(plannedQuestions, ['Resume Overview', 'Coursework']).slice(0, 2);
+  const resumeOverviewQuestions = takeBySection(plannedQuestions, ['Resume Overview']).slice(0, 1);
+  const courseworkOpeningQuestions = takeBySection(plannedQuestions, ['Coursework']).slice(0, 1);
   const projectQuestions = takeBySection(plannedQuestions, ['Projects']);
   const internshipQuestions = takeBySection(plannedQuestions, ['Internship / Work Experience']);
   const certificationQuestions = takeBySection(plannedQuestions, ['Certifications']);
-  const roleAndCodingPrimary = takeFirstBySection(plannedQuestions, ['Role-specific Questions', 'Coding / Problem Solving', 'Role Scenario / Problem Solving', 'System Design']);
+  const roleAndCodingPrimary = takeBySection(plannedQuestions, ['Role-specific Questions', 'Coding / Problem Solving', 'Role Scenario / Problem Solving', 'System Design']).slice(0, 6);
+  const careerBridgeQuestions = roleAndCodingPrimary.filter((question) => /software development career choice/i.test(question.topic ?? question.resumeReference ?? '')).slice(0, 1);
+  const remainingRoleAndCodingPrimary = roleAndCodingPrimary.filter((question) => !careerBridgeQuestions.includes(question));
   const companyPlannedQuestions = takeBySection(plannedQuestions, ['Company-specific Questions']);
   const behavioralHrQuestions = takeBySection(plannedQuestions, ['Behavioral Questions', 'HR Questions']);
   const resumePrimaryQuestions = [
@@ -1922,7 +2345,8 @@ export const buildInterviewQuestionSet = ({
     ...certificationQuestions.slice(0, 1),
   ];
   const usedQuestions = new Set<GeneratedQuestion>([
-    ...resumeOpeningQuestions,
+    ...resumeOverviewQuestions,
+    ...courseworkOpeningQuestions,
     ...resumePrimaryQuestions,
     ...roleAndCodingPrimary,
     ...companyPlannedQuestions,
@@ -1935,18 +2359,28 @@ export const buildInterviewQuestionSet = ({
   ].filter((question) => !usedQuestions.has(question));
   const remainingPlannedQuestions = plannedQuestions.filter((question) => !usedQuestions.has(question) && !remainingResumeQuestions.includes(question));
   const earlySkillQuestions = skillQuestions.slice(0, skillQuestions.length ? 1 : 0);
-  const remainingSkillQuestions = skillQuestions.slice(earlySkillQuestions.length);
+  const roleAndCodingTopics = remainingRoleAndCodingPrimary.map((question) => question.topic ?? question.resumeReference ?? '');
+  const roleCoverageTopics = [
+    ...roleAndCodingTopics,
+    ...roleQuestions.map((question) => question.topic ?? question.resumeReference ?? ''),
+  ];
+  const remainingSkillQuestions = skillQuestions
+    .slice(earlySkillQuestions.length)
+    .filter((question) => !roleCoverageTopics.some((topic) => topicOverlaps(topic, question.topic ?? question.resumeReference)));
+  const remainingRoleQuestions = roleQuestions.filter((question) => !roleAndCodingTopics.some((topic) => topicOverlaps(topic, question.topic ?? question.resumeReference)));
   const resumeConversation = [
-    ...resumeOpeningQuestions,
+    ...resumeOverviewQuestions,
+    ...careerBridgeQuestions,
     ...earlySkillQuestions,
+    ...courseworkOpeningQuestions,
     ...resumePrimaryQuestions,
   ];
   const resumeRoleSkillConversation = interleaveQuestionGroups(
     remainingResumeQuestions,
-    remainingSkillQuestions,
-    roleAndCodingPrimary,
+    remainingRoleAndCodingPrimary,
     companyPlannedQuestions,
-    roleQuestions,
+    remainingRoleQuestions,
+    remainingSkillQuestions,
   );
 
   if (!interviewRoadmap) {
@@ -1960,7 +2394,7 @@ export const buildInterviewQuestionSet = ({
     ? [INTRO_QUESTION, ...resumeConversation, ...generatedWithoutIntro, ...resumeRoleSkillConversation, ...companyQuestions, ...behavioralHrQuestions, ...remainingPlannedQuestions]
     : [INTRO_QUESTION, ...resumeConversation, ...resumeRoleSkillConversation, ...companyQuestions, ...behavioralHrQuestions, ...remainingPlannedQuestions, ...generatedWithoutIntro];
 
-  return withQuestionMetadata(uniqueByQuestion(orderedQuestions).slice(0, finalTargetCount));
+  return withQuestionMetadata(removeRepeatedSkillCoverage(uniqueByQuestion(orderedQuestions)).slice(0, finalTargetCount));
 };
 
 const topicMatches = (candidate: string | undefined, topic: string) => {

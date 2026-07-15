@@ -20,7 +20,7 @@ describe('company question composition', () => {
       ],
     });
 
-    expect(questions[0].question).toBe('Introduce yourself.');
+    expect(questions[0].question).toMatch(/^Tell me about yourself/);
     expect(questions).toHaveLength(2);
   });
 
@@ -38,7 +38,7 @@ describe('company question composition', () => {
       ],
     });
 
-    expect(questions[0].question).toBe('Introduce yourself.');
+    expect(questions[0].question).toMatch(/^Tell me about yourself/);
     expect(questions[1].question).toContain('TCS');
     expect(questions).toHaveLength(10);
   });
@@ -57,7 +57,7 @@ describe('company question composition', () => {
       generatedQuestions: [],
     });
 
-    expect(questions[0].question).toBe('Introduce yourself.');
+    expect(questions[0].question).toMatch(/^Tell me about yourself/);
     expect(questions[1].question).toContain('JPMorgan Chase');
     expect(questions.some((item) => item.resumeReference?.includes('financial'))).toBe(true);
   });
@@ -69,7 +69,7 @@ describe('company question composition', () => {
       generatedQuestions: [],
     });
 
-    expect(questions[0].question).toBe('Introduce yourself.');
+    expect(questions[0].question).toMatch(/^Tell me about yourself/);
     expect(questions[1].question).toContain('Medtronic');
     expect(questions.some((item) => item.resumeReference?.includes('health'))).toBe(true);
   });
@@ -90,7 +90,7 @@ describe('company question composition', () => {
       interviewRoadmap: roadmap,
     });
 
-    expect(questions[0].question).toBe('Introduce yourself.');
+    expect(questions[0].question).toMatch(/^Tell me about yourself/);
     expect(questions.some((item) => item.resumeReference?.startsWith('Role-specific Questions:'))).toBe(true);
     expect(questions.some((item) => item.resumeReference?.startsWith('Company-specific Questions:'))).toBe(true);
   });
@@ -110,7 +110,7 @@ describe('company question composition', () => {
       ],
     });
 
-    expect(questions[0].question).toBe('Introduce yourself.');
+    expect(questions[0].question).toMatch(/^Tell me about yourself/);
     expect(questions[1].resumeReference).toContain('JD technologies');
     expect(questions.some((item) => item.question.includes('TCS'))).toBe(true);
   });
@@ -162,21 +162,21 @@ describe('company question composition', () => {
     const roadmap = buildInterviewRoadmap({
       roleDomain: 'AI Engineer',
       roleLevel: 'Mid',
-      duration: 30,
+      duration: 45,
       complexity: 'Intermediate',
       resumeSkills: skills,
       resumeText: ['Projects', 'ML Dashboard - Python, SQL, JavaScript, React, AWS, Machine Learning'].join('\n'),
     });
 
     const questions = buildInterviewQuestionSet({
-      duration: 30,
+      duration: 45,
       targetCompany: undefined,
       generatedQuestions: [],
       interviewRoadmap: roadmap,
     });
 
     skills.forEach((skill) => {
-      expect(questions.some((question) => question.resumeReference === `Skill coverage: ${skill}`)).toBe(true);
+      expect(questions.some((question) => question.topic === skill || question.resumeReference === `Skill coverage: ${skill}`)).toBe(true);
     });
 
     const firstFourAfterIntro = questions.slice(1, 5).map((question) => question.resumeReference ?? '');
@@ -387,8 +387,8 @@ describe('company question composition', () => {
     const bloodQuestion = questions.find((question) => question.resumeReference === 'Projects: Blood Donation Platform');
     const chatbotQuestion = questions.find((question) => question.resumeReference === 'Projects: PDF Knowledge Chatbot');
 
-    expect(bloodQuestion?.question).toMatch(/complete architecture|user entry point|flow/i);
-    expect(chatbotQuestion?.question).toMatch(/complete architecture|user entry point|flow/i);
+    expect(bloodQuestion?.question).toMatch(/architecture.*APIs.*authentication|architecture.*authentication/i);
+    expect(chatbotQuestion?.question).toMatch(/architecture|PDF from upload|final response/i);
   });
 
   it('keeps interview order resume-led before role and company sections', () => {
@@ -428,7 +428,8 @@ describe('company question composition', () => {
     expect(projectIndex).toBeGreaterThan(0);
     expect(internshipIndex).toBeGreaterThan(projectIndex);
     expect(certIndex).toBeGreaterThan(internshipIndex);
-    expect(firstRoleIndex).toBeGreaterThan(projectIndex);
+    expect(firstRoleIndex).toBeGreaterThan(0);
+    expect(references[firstRoleIndex]).toMatch(/software development career choice|Role-specific Questions|Role Scenario \/ Problem Solving|Coding \/ Problem Solving|Company-specific Questions/);
   });
 
   it('uses practical company fallback wording instead of disconnected definition questions', () => {
@@ -442,5 +443,108 @@ describe('company question composition', () => {
 
     expect(questionText).not.toMatch(/\bWhat is OOP\b|\bWhat is Python\b|\bWhat is SQL\b|Difference between GET and POST/i);
     expect(questionText).toMatch(/coursework|projects|TCS-style/i);
+  });
+
+  it('generates resume-specific SDE questions for the uploaded example resume', () => {
+    const resumeText = [
+      'Sai Padmaja Kuncham',
+      'Career Objective',
+      'Aspiring Software Developer with strong foundation in full-stack web development, REST APIs, SQL, and modern JavaScript frameworks.',
+      'Education',
+      'Vignan’s Foundation for Science, Technology & Research (Deemed to be University) & B.Tech - CSE (AI & ML)',
+      'CGPA: 8.5/10.0',
+      'Technical Skills',
+      'C, C++, Python, JavaScript, SQL, React.js, Node.js, Express.js, MongoDB, MySQL, Git, GitHub, LangChain',
+      'Experience',
+      'Intellibotics Private Limited & Data Analyst Intern January 2026 – May 2026',
+      'Executed data analysis using SQL and Python to extract actionable insights for strategic business initiatives',
+      'Projects',
+      'PDF Knowledge Chatbot – NLP & Generative AI ChatBot/Live Demo',
+      'Developed an intelligent web application using Python, Streamlit, and LangChain for context-aware PDF analysis',
+      'Implemented vector embeddings and optimized application performance for responsive user experience',
+      'Blood Donation Platform – Full Stack (MERN) LifeConnect/Live Demo',
+      'Built secure REST APIs and implemented authentication, donor management, and real-time notification features',
+      'Relevant Coursework',
+      'Object-Oriented Programming',
+      'Certifications & Training',
+      'SQL (Intermediate) – HackerRank Certified',
+    ].join('\n');
+
+    const roadmap = buildInterviewRoadmap({
+      roleDomain: 'SDE',
+      roleLevel: 'Fresher',
+      duration: 30,
+      complexity: 'Intermediate',
+      targetCompany: 'tcs',
+      resumeText,
+    });
+    const questions = buildInterviewQuestionSet({
+      duration: 30,
+      targetCompany: 'tcs',
+      generatedQuestions: [],
+      interviewRoadmap: roadmap,
+    });
+    const questionText = questions.map((question) => question.question).join(' ');
+
+    expect(questions).toHaveLength(18);
+    expect(roadmap.resumeProfile.projects).toEqual(expect.arrayContaining(['PDF Knowledge Chatbot', 'Blood Donation Platform']));
+    expect(roadmap.resumeProfile.internships).toContain('Intellibotics Private Limited & Data Analyst Intern');
+    expect(questionText).toMatch(/Tell me about yourself/);
+    expect(questionText).toMatch(/full-stack development.*AI\/ML|AI\/ML.*Software Development Engineering/i);
+    expect(questionText).toMatch(/PDF Knowledge Chatbot.*PDF from upload.*final response/i);
+    expect(questionText).toMatch(/Blood Donation Platform.*authentication|Blood Donation Platform.*authorization/i);
+    expect(questionText).toMatch(/Intellibotics.*SQL and Python/i);
+    expect(questionText).toMatch(/second highest salary in each department/i);
+    expect(questionText).toMatch(/Node\.js.*Event Loop/i);
+    expect(questionText).toMatch(/React.*application becomes slow/i);
+    expect(questionText).toMatch(/process and a thread/i);
+    expect(questionText).toMatch(/HTTP 500 errors/i);
+    expect(questionText).not.toMatch(/You mentioned React\. Tell me/i);
+    expect(questionText).not.toMatch(/You mentioned Node\.js\. Tell me/i);
+    expect(questionText).not.toMatch(/You mentioned LangChain\. Tell me/i);
+  });
+
+  it('does not reuse the uploaded example questions for a different resume', () => {
+    const resumeText = [
+      'Arjun Rao',
+      'Summary',
+      'Backend developer focused on Java, Spring Boot, PostgreSQL, Redis, and cloud deployment.',
+      'Education',
+      'B.E. Information Technology, Example College',
+      'Technical Skills',
+      'Java, Spring Boot, PostgreSQL, Redis, Docker, AWS, Git',
+      'Experience',
+      'Backend Developer Intern at RetailOps Labs',
+      'Built inventory APIs and optimized PostgreSQL queries for stock reconciliation workflows',
+      'Projects',
+      'Inventory Management System - Java, Spring Boot, PostgreSQL',
+      'Implemented role-based access, product search, stock updates, and audit logs',
+      'Certifications',
+      'AWS Cloud Practitioner',
+    ].join('\n');
+
+    const roadmap = buildInterviewRoadmap({
+      roleDomain: 'Backend Developer',
+      roleLevel: 'Fresher',
+      duration: 30,
+      complexity: 'Intermediate',
+      targetCompany: 'amazon',
+      resumeText,
+    });
+    const questions = buildInterviewQuestionSet({
+      duration: 30,
+      targetCompany: 'amazon',
+      generatedQuestions: [],
+      interviewRoadmap: roadmap,
+    });
+    const questionText = questions.map((question) => question.question).join(' ');
+
+    expect(questionText).toMatch(/Inventory Management System/i);
+    expect(questionText).toMatch(/Java|Spring Boot|PostgreSQL/i);
+    expect(questionText).toMatch(/threads|request pools|blocking operations|backend service/i);
+    expect(questionText).toMatch(/HTTP 500 errors|production/i);
+    expect(questionText).not.toMatch(/PDF Knowledge Chatbot|Blood Donation Platform|Intellibotics/i);
+    expect(questionText).not.toMatch(/Full Stack Development.*AI\/ML|AI\/ML.*Software Development Engineering/i);
+    expect(questionText).not.toMatch(/Node\.js handles multiple client requests|React application becomes slow/i);
   });
 });

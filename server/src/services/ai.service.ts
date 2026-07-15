@@ -858,6 +858,7 @@ JD RULE: If a job description is provided, the JD is the primary source. Use the
 JD TECHNOLOGY RULE: If DETECTED JD TECHNOLOGIES is present, at least ${jdTechnologyTargetCount || 'most'} non-introduction questions MUST directly test those technologies. Name the technology in the question or resumeReference. If the resume does not mention a JD technology, ask a fundamentals, project-transfer, or scenario question for that JD technology instead of ignoring it.
 DIFFICULTY RULE: Stage the interview naturally: easy warm-up, easy-medium, medium, medium-hard, scenario, problem-solving, behavioral. Early questions build confidence; later questions probe depth.
 RESUME ANALYSIS RULE: Before forming questions, extract education, CGPA, branch, projects, internship/work experience, languages, frameworks, libraries, databases, cloud, AI/ML, certifications, achievements, developer tools, coursework, soft skills, and interests when present. Only ask from extracted evidence, selected role, selected company, JD, or prior candidate answers.
+QUESTION SOURCE RULE: Use public interview patterns only as formats, such as architecture walkthroughs, coding reasoning, debugging, scalability, performance, SQL, OS fundamentals, and STAR behavior. Do not reuse another candidate's project names, internships, or example questions unless they are explicitly present in this candidate's resume/JD.
 FLOW RULE: Follow this arc unless the JD requires a stronger emphasis: self introduction, resume overview, technical skills, projects, internship/work experience, certifications, role-based questions, company-specific questions, behavioral, HR.
 PROJECT RULE: For every important project, start with architecture and end-to-end flow before asking about individual technologies, challenges, optimizations, scalability, or deployment.
 FOLLOW-UP RULE: A follow-up may only come from the candidate's previous answer or a topic already present in the resume/JD/roadmap.
@@ -871,6 +872,7 @@ ABSOLUTE RULES — violating any rule makes the output unusable:
 6. Never ask standalone definition questions like "What is OOP?", "What is Python?", "What is SQL?", or "Difference between GET and POST?". Connect fundamentals to a resume project, coursework, role scenario, or JD responsibility.
 7. Scale difficulty appropriately to ${context.roleLevel} level
 8. Use the SESSION ID above only for wording variety. Question reasons must come from the resume, JD, role, company, or prior answer context.
+9. If an example question list exists in resumeSuggestedQuestions, use it only to infer interview style. Never treat it as a universal script for future candidates.
 
 Each question object MUST have ALL these fields:
 - question: string (the exact question text, ready to speak aloud)

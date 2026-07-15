@@ -161,6 +161,46 @@ const toGeneratedQuestion = (item: any) => ({
   followUpIntent: item.followUpIntent,
 });
 
+const hasInterviewerBridge = (question?: string) =>
+  /^(You mentioned|You touched on|I want to clarify|Let's make that more concrete|Good, let's connect|Thanks, let's connect|Since your last answer)/i.test(question ?? '');
+
+const conciseTopic = (value?: string) => {
+  const clean = (value ?? '').replace(/^(Skill coverage|Role focus|Role-specific Questions|Projects|Certifications|Internship \/ Work Experience):\s*/i, '').trim();
+  return clean || 'that point';
+};
+
+const bridgeQuestionAfterAnswer = ({
+  nextQuestion,
+  previousQuestion,
+  answer,
+  evaluation,
+}: {
+  nextQuestion: ReturnType<typeof toGeneratedQuestion>;
+  previousQuestion?: ReturnType<typeof toGeneratedQuestion>;
+  answer: string;
+  evaluation: Awaited<ReturnType<typeof evaluateAnswer>>;
+}) => {
+  if (!nextQuestion?.question || hasInterviewerBridge(nextQuestion.question)) return nextQuestion;
+
+  const previousTopic = conciseTopic(previousQuestion?.topic ?? previousQuestion?.resumeReference);
+  const nextTopic = conciseTopic(nextQuestion.topic ?? nextQuestion.resumeReference);
+  const answeredSubstantively = answer.trim().length >= 20 && !/^\(?\s*(skipped|no answer)\s*\)?$/i.test(answer.trim());
+  const mentioned = evaluation.conceptsCovered?.[0] ?? previousTopic;
+  const bridge =
+    !answeredSubstantively || evaluation.score < 40
+      ? `Let's make that more concrete. Staying connected to ${nextTopic}, `
+      : evaluation.nextAction === 'clarify' || evaluation.score < 60
+      ? `I want to clarify one part of your answer about ${previousTopic}. Now, `
+      : evaluation.nextAction === 'ask_deeper' || evaluation.nextAction === 'challenge' || evaluation.score >= 70
+      ? `You touched on ${mentioned}; let's connect that to ${nextTopic}. `
+      : `Good, let's connect your previous answer to ${nextTopic}. `;
+
+  return {
+    ...nextQuestion,
+    question: `${bridge}${nextQuestion.question.charAt(0).toLowerCase()}${nextQuestion.question.slice(1)}`,
+  };
+};
+
 export const logViolationSchema = z.object({
   body: z.object({
     type: z.string().min(1),
@@ -417,7 +457,12 @@ export const submitAnswer = asyncHandler(async (req, res) => {
   if (nextIndex < targetQuestionCount) {
     const plannedNextQuestion = interview.questions[nextIndex];
     if (plannedNextQuestion) {
-      interview.questions[nextIndex] = toGeneratedQuestion(plannedNextQuestion);
+      interview.questions[nextIndex] = bridgeQuestionAfterAnswer({
+        nextQuestion: toGeneratedQuestion(plannedNextQuestion),
+        previousQuestion: activeQuestion ? toGeneratedQuestion(activeQuestion) : undefined,
+        answer: req.body.answer,
+        evaluation,
+      });
     }
     interview.markModified('questions');
   }
