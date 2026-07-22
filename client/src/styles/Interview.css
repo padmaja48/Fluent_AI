@@ -1762,3 +1762,69 @@
     max-height: 260px;
   }
 }
+
+.iv-check-note--warn {
+  color: #d97706;
+  font-weight: 600;
+}
+
+.iv-violation-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.iv-violation-modal {
+  width: min(100%, 28rem);
+  padding: 1.75rem 1.5rem;
+  border-radius: 1rem;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, #ef4444 35%, var(--border));
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  text-align: center;
+}
+
+.iv-violation-modal-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: 0.75rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, #ef4444 16%, transparent);
+  color: #ef4444;
+  font-size: 1.75rem;
+  font-weight: 800;
+}
+
+.iv-violation-modal h3 {
+  margin: 0 0 0.75rem;
+  color: var(--text);
+  font-size: 1.15rem;
+}
+
+.iv-violation-modal p {
+  margin: 0 0 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.iv-violation-modal-note {
+  font-size: 0.88rem;
+}
+
+.iv-violation-modal-final {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.iv-violation-modal .iv-btn {
+  margin-top: 0.5rem;
+}

@@ -106,15 +106,38 @@ const getVideoFrameStats = (video, canvas) => {
 
 const detectPersonPresence = async (video, canvas) => {
   if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
-    return { detected: false, method: 'camera', reason: 'Camera feed is not ready.' };
+    return {
+      detected: false,
+      faceCount: 0,
+      multiplePeople: false,
+      method: 'camera',
+      reason: 'Camera feed is not ready.',
+    };
   }
 
   if ('FaceDetector' in window) {
     try {
-      const detector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
+      const detector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 5 });
       const faces = await detector.detect(video);
-      if (faces.length > 0) return { detected: true, method: 'face' };
-      return { detected: false, method: 'face', reason: 'No face detected in camera view.' };
+      if (faces.length > 1) {
+        return {
+          detected: true,
+          faceCount: faces.length,
+          multiplePeople: true,
+          method: 'face',
+          reason: `${faces.length} people detected. Only the candidate should be visible on camera.`,
+        };
+      }
+      if (faces.length === 1) {
+        return { detected: true, faceCount: 1, multiplePeople: false, method: 'face' };
+      }
+      return {
+        detected: false,
+        faceCount: 0,
+        multiplePeople: false,
+        method: 'face',
+        reason: 'No face detected in camera view.',
+      };
     } catch {
       // Fall through to frame analysis when native detection is unavailable at runtime.
     }
@@ -122,8 +145,14 @@ const detectPersonPresence = async (video, canvas) => {
 
   const frame = getVideoFrameStats(video, canvas);
   return frame.visible
-    ? { detected: true, method: 'camera' }
-    : { detected: false, method: 'camera', reason: 'Camera view is blocked or too dark.' };
+    ? { detected: true, faceCount: 1, multiplePeople: false, method: 'camera' }
+    : {
+        detected: false,
+        faceCount: 0,
+        multiplePeople: false,
+        method: 'camera',
+        reason: 'Camera view is blocked or too dark.',
+      };
 };
 
 /* ─────────────────────────────────────────────────────────────────
@@ -134,6 +163,32 @@ function InterviewLoader({ title = 'Preparing interview', message = 'Please wait
     <div className="iv-loading-card" role="status" aria-live="polite">
       <div className="iv-loader-orbit" aria-hidden="true"><span /><span /><span /></div>
       <div><h3>{title}</h3><p>{message}</p></div>
+    </div>
+  );
+}
+
+function ViolationWarningModal({ message, warningCount, maxWarnings, onDismiss, terminating }) {
+  return (
+    <div className="iv-violation-modal-backdrop" role="alertdialog" aria-modal="true" aria-labelledby="iv-violation-modal-title">
+      <div className="iv-violation-modal">
+        <span className="iv-violation-modal-icon" aria-hidden="true">!</span>
+        <h3 id="iv-violation-modal-title">Proctoring Warning {warningCount} of {maxWarnings}</h3>
+        <p>{message}</p>
+        {terminating ? (
+          <p className="iv-violation-modal-final">
+            Maximum warnings reached. This interview will end now.
+          </p>
+        ) : (
+          <>
+            <p className="iv-violation-modal-note">
+              Only you should be visible on camera. After {maxWarnings} warnings, the interview ends automatically.
+            </p>
+            <button type="button" className="iv-btn iv-btn--primary" onClick={onDismiss}>
+              I understand
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -645,8 +700,15 @@ function SystemCheckStep({ onStart, onBack, loading }) {
         setCamOk(true); setMicOk(true);
         const checkPerson = async () => {
           const result = await detectPersonPresence(videoRef.current, personCanvasRef.current);
-          setPersonOk(result.detected);
-          setPersonMessage(result.detected ? 'Person detected' : result.reason || 'No person detected');
+          const singleCandidate = result.detected && !result.multiplePeople;
+          setPersonOk(singleCandidate);
+          setPersonMessage(
+            result.multiplePeople
+              ? result.reason || 'Multiple people detected'
+              : result.detected
+                ? 'One person detected'
+                : result.reason || 'No person detected',
+          );
         };
         personCheck = setInterval(checkPerson, PERSON_CHECK_INTERVAL_MS);
         await checkPerson();
@@ -699,8 +761,12 @@ function SystemCheckStep({ onStart, onBack, loading }) {
           <div className={`iv-check-item${personOk ? ' iv-check-item--ok' : ''}`}>
             <span className="iv-check-icon">{personOk ? '✓' : '○'}</span> Person detected
           </div>
-          {!personOk && camOk && mobileCheck && <p className="iv-check-note">Camera is available. You can continue on mobile if your face is visible.</p>}
-          {!personOk && camOk && !mobileCheck && <p className="iv-check-note">{personMessage}</p>}
+          {!personOk && camOk && <p className="iv-check-note">{personMessage}</p>}
+          {mobileCheck && camOk && (
+            <p className="iv-check-note iv-check-note--warn">
+              Mobile device detected. Starting on mobile will count as a proctoring warning.
+            </p>
+          )}
           <div className={`iv-check-item${micOk ? ' iv-check-item--ok' : ''}`}>
             <span className="iv-check-icon">{micOk ? '✓' : '○'}</span> Microphone
           </div>
@@ -715,8 +781,9 @@ function SystemCheckStep({ onStart, onBack, loading }) {
           <li><strong>Tab switching:</strong> Do not leave this window during the interview.</li>
           <li><strong>Copy/paste:</strong> Clipboard actions are disabled.</li>
           <li><strong>Right-click:</strong> Context menus are disabled.</li>
-          <li><strong>Camera:</strong> Keep your face visible at all times.</li>
-          <li><strong>Warnings:</strong> Fullscreen, camera, and focus issues are recorded for review, but the interview will not auto-end.</li>
+          <li><strong>Camera:</strong> Only you should be visible. Multiple people trigger a warning.</li>
+          <li><strong>Device:</strong> Use a laptop or desktop. Mobile devices trigger a warning.</li>
+          <li><strong>Warnings:</strong> After {REVIEW_WARNING_THRESHOLD} proctoring warnings, the interview ends automatically.</li>
         </ul>
       </div>
 
@@ -727,7 +794,7 @@ function SystemCheckStep({ onStart, onBack, loading }) {
 
       <div className="iv-step-actions">
         <button className="iv-btn iv-btn--ghost" onClick={onBack}>← Back</button>
-        <button className="iv-btn iv-btn--primary" disabled={!camOk || (!personOk && !mobileCheck) || !micOk || !agreed || loading} onClick={onStart}>
+        <button className="iv-btn iv-btn--primary" disabled={!camOk || !personOk || !micOk || !agreed || loading} onClick={onStart}>
           {loading
             ? <span className="iv-btn-loading"><span className="iv-btn-spinner" />Creating interview</span>
             : 'Start Interview'}
@@ -751,6 +818,7 @@ function LiveSession({ interview, persona, onComplete }) {
   const [audioLevel, setAudioLevel]   = useState(0);
   const [violations, setViolations]   = useState(0);
   const [violationMsg, setViolationMsg] = useState('');
+  const [violationPopup, setViolationPopup] = useState(null);
   const [violationFlash, setViolationFlash] = useState(false);
   const [terminated, setTerminated]   = useState(false);
   const [timer, setTimer]             = useState(interview.duration * 60 || 1800);
@@ -892,12 +960,21 @@ function LiveSession({ interview, persona, onComplete }) {
     violationCountRef.current += 1;
     const count = violationCountRef.current;
     setViolations(count);
-    setViolationMsg(`Warning ${count}: ${description}`);
+    setViolationMsg(`Warning ${count}/${REVIEW_WARNING_THRESHOLD}: ${description}`);
+    setViolationPopup({ message: description, count });
     setViolationFlash(true);
     setTimeout(() => setViolationFlash(false), 800);
     try { await interviewAPI.logViolation(interview._id, type, description); } catch {}
-    setTimeout(() => setViolationMsg(''), 5000);
-  }, [interview._id]);
+    setTimeout(() => setViolationMsg(''), 8000);
+
+    if (count >= REVIEW_WARNING_THRESHOLD) {
+      setTimeout(() => {
+        if (!finishingRef.current && !sessionClosedRef.current) {
+          finishSession({ terminatedBySystem: true });
+        }
+      }, 3500);
+    }
+  }, [finishSession, interview._id]);
 
   /* ── STRICT PROCTORING ──────────────────────────── */
   useEffect(() => {
@@ -1000,12 +1077,21 @@ function LiveSession({ interview, persona, onComplete }) {
     };
   }, [logViolation]);
 
+  useEffect(() => {
+    if (sessionClosedRef.current || autoSubmittedRef.current) return;
+    if (isLikelyMobileDevice()) {
+      logViolation(
+        'mobile_device',
+        'A mobile device was detected. Proctored interviews require a laptop or desktop, and only you should be on camera.',
+      );
+    }
+  }, [logViolation]);
+
   /* ── Camera PiP + mic analyser ──────────────────── */
   useEffect(() => {
     let stream;
     let personCheck;
     let audioContext;
-    const mobileSession = isLikelyMobileDevice();
     const reportCameraViolation = (type, description) => {
       const now = Date.now();
       if (now - lastCameraViolationAtRef.current < PERSON_MISSING_GRACE_MS) return;
@@ -1048,7 +1134,17 @@ function LiveSession({ interview, persona, onComplete }) {
           }
 
           const result = await detectPersonPresence(videoRef.current, personCanvasRef.current);
-          const detected = result.detected || mobileSession;
+
+          if (result.multiplePeople) {
+            setPersonDetected(false);
+            reportCameraViolation(
+              'multiple_people',
+              result.reason || 'Multiple people detected in camera view. Only the candidate should be visible.',
+            );
+            return;
+          }
+
+          const detected = result.detected;
           setPersonDetected(detected);
           if (detected) {
             personMissingSinceRef.current = null;
@@ -1501,8 +1597,8 @@ function LiveSession({ interview, persona, onComplete }) {
       <div className="iv-terminated">
         <div className="iv-terminated-icon">!</div>
         <h2>Interview Terminated</h2>
-        <p>The interview was ended by the system.</p>
-        <p>Your session has been submitted and flagged for review.</p>
+        <p>You received {REVIEW_WARNING_THRESHOLD} proctoring warnings.</p>
+        <p>The interview was ended automatically and flagged for review.</p>
         <button className="iv-btn iv-btn--primary" onClick={() => onComplete(interview._id)}>
           View Results
         </button>
@@ -1512,6 +1608,15 @@ function LiveSession({ interview, persona, onComplete }) {
 
   return (
     <div className={`iv-live${ending ? ' iv-live--ending' : ''}${violationFlash ? ' iv-live--flash' : ''}`}>
+      {violationPopup && (
+        <ViolationWarningModal
+          message={violationPopup.message}
+          warningCount={violationPopup.count}
+          maxWarnings={REVIEW_WARNING_THRESHOLD}
+          terminating={violationPopup.count >= REVIEW_WARNING_THRESHOLD}
+          onDismiss={() => setViolationPopup(null)}
+        />
+      )}
       {ending && (
         <div className="iv-ending-overlay">
           <InterviewLoader title="Ending interview" message="Saving your responses and preparing your results." />
@@ -1526,7 +1631,7 @@ function LiveSession({ interview, persona, onComplete }) {
         <span className="iv-q-counter">Q {Math.min(currentIdx + 1, totalQuestions || questions.length)} / {totalQuestions || questions.length}</span>
         <span className="iv-rec-dot">● REC</span>
         <span className={`iv-camera-status${cameraReady && personDetected ? ' iv-camera-status--ok' : ''}`}>
-          {cameraReady && personDetected ? 'PERSON OK' : cameraReady ? 'PERSON CHECK' : 'CAMERA OFF'}
+          {cameraReady && personDetected ? 'ONE PERSON OK' : cameraReady ? 'PERSON CHECK' : 'CAMERA OFF'}
         </span>
         {violations > 0 && (
           <span className="iv-violation-count" style={{ color: violationColor }}>
@@ -1642,10 +1747,6 @@ export const Interview = ({ setCurrentView }) => {
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
   const persona = data.persona;
-
-  if (isLikelyMobileDevice()) {
-    return <MobileBlockedInterview onBack={setCurrentView} />;
-  }
 
   const next = partial => { setData(prev => ({ ...prev, ...partial })); setStep(s => s + 1); };
   const back = () => setStep(s => s - 1);
