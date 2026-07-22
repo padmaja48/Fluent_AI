@@ -3,6 +3,9 @@ const mongoose = require('mongoose');
 
 dotenv.config();
 
+require('ts-node/register/transpile-only');
+const { buildReadingItemContent } = require('../src/services/readingPassageGenerator.service');
+
 const QUESTIONS_PER_SKILL_LEVEL = 1000;
 const MODULES_PER_SKILL_LEVEL = 5;
 const QUESTIONS_PER_MODULE = QUESTIONS_PER_SKILL_LEVEL / MODULES_PER_SKILL_LEVEL;
@@ -215,7 +218,7 @@ const buildQuestion = (skill, level, index) => {
   }
 
   if (skill.id === 'Reading') {
-    const readingItem = buildReadingItem({ level, context, competency, index, module });
+    const readingItem = buildReadingItemContent({ level, context, competency, index, module });
     question.stem = readingItem.stem;
     question.passageText = readingItem.passageText;
     question.audioPrompt = readingItem.title;
@@ -756,169 +759,6 @@ const buildWritingItem = ({ level, context, competency, index, module }) => {
     ],
     minWords: minWordsByLevel[level.id],
     evaluationCriteria: criteriaByLevel[level.id],
-  };
-};
-
-const buildReadingItem = ({ level, context, competency, index, module }) => {
-  const names = [
-    ['Sarah', 'a project manager'], ['David', 'a teacher'], ['Maria', 'a nurse'], ['James', 'an engineer'],
-    ['Priya', 'a student'], ['Tom', 'a shopkeeper'], ['Aisha', 'a journalist'], ['Carlos', 'a chef'],
-    ['Nina', 'a researcher'], ['Leo', 'a trainer'], ['Zara', 'a doctor'], ['Ben', 'a librarian'],
-    ['Fatima', 'a social worker'], ['Omar', 'a designer'], ['Grace', 'a scientist'], ['Arjun', 'a manager'],
-    ['Elena', 'a volunteer'], ['Kai', 'a writer'], ['Mei', 'an analyst'], ['Sam', 'a coach'],
-  ];
-  const places = [
-    'a small town', 'a busy city', 'a university campus', 'a village', 'a coastal town',
-    'a mountain community', 'a suburb', 'an industrial area', 'a rural district', 'a city neighbourhood',
-  ];
-  const organisations = [
-    'a local school', 'a community centre', 'a hospital', 'a technology company', 'a library',
-    'a government office', 'a non-profit organisation', 'a restaurant', 'a research institute', 'a sports club',
-  ];
-  const problems = [
-    'a lack of resources', 'communication difficulties', 'a shortage of volunteers', 'rising costs',
-    'outdated equipment', 'staff turnover', 'limited funding', 'low participation rates',
-    'unclear procedures', 'resistance to change',
-  ];
-  const solutions = [
-    'introducing a new system', 'partnering with another organisation', 'applying for a grant',
-    'training staff members', 'launching a community campaign', 'redesigning the programme',
-    'hiring additional support', 'collecting feedback from users', 'updating the guidelines',
-    'creating a pilot project',
-  ];
-  const outcomes = [
-    'improved results within three months', 'increased participation by forty percent',
-    'significant cost savings', 'better communication across teams', 'higher satisfaction scores',
-    'a reduction in errors', 'stronger community involvement', 'more efficient processes',
-    'wider access to services', 'a successful first trial',
-  ];
-  const words = [
-    { term: 'tentative', meaning: 'not certain or final', wrong: ['completely decided', 'very confident', 'officially approved'] },
-    { term: 'concise', meaning: 'short and clear', wrong: ['very long and detailed', 'confusing and complicated', 'written informally'] },
-    { term: 'initiative', meaning: 'a new plan or action to achieve something', wrong: ['a problem that cannot be solved', 'a type of financial penalty', 'a formal complaint'] },
-    { term: 'assess', meaning: 'to evaluate or judge the quality of something', wrong: ['to ignore completely', 'to celebrate publicly', 'to replace immediately'] },
-    { term: 'collaborate', meaning: 'to work together with others', wrong: ['to compete against others', 'to work completely alone', 'to give up on a task'] },
-    { term: 'sustainable', meaning: 'able to continue for a long time without causing harm', wrong: ['very expensive to maintain', 'impossible to repeat', 'only useful in the short term'] },
-    { term: 'implement', meaning: 'to put a plan or decision into action', wrong: ['to cancel a scheduled event', 'to study a problem in theory', 'to delay until further notice'] },
-    { term: 'transparent', meaning: 'open and easy to understand', wrong: ['secret and difficult to access', 'physically see-through', 'very complicated to explain'] },
-    { term: 'diverse', meaning: 'including many different types of people or things', wrong: ['limited to one group only', 'identical in every way', 'recently changed'] },
-    { term: 'facilitate', meaning: 'to make a process easier or help it happen', wrong: ['to stop a process from starting', 'to take complete control', 'to formally object to a plan'] },
-  ];
-
-  const itemNumber = (level.order - 1) * QUESTIONS_PER_SKILL_LEVEL + index;
-  const pick = (items, multiplier, offset = 0) => items[(itemNumber * multiplier + level.order + offset) % items.length];
-  const [personName, personRole] = pick(names, 3, index);
-  const place = pick(places, 7, index);
-  const org = pick(organisations, 11, level.order);
-  const problem = pick(problems, 13, index * 2);
-  const solution = pick(solutions, 17, level.order + index);
-  const outcome = pick(outcomes, 19, index);
-  const word = pick(words, 23, level.order);
-  const title = `${personName} and the Challenge of ${context.charAt(0).toUpperCase() + context.slice(1)}`;
-
-  const passages = {
-    A1: [
-      `My name is ${personName}. I am ${personRole} in ${place}.`,
-      `I work at ${org}. Every day I help people with ${context}.`,
-      `One day, there was ${problem}. It was a big problem for everyone.`,
-      `I decided to help. I started ${solution}.`,
-      `Now things are better. We have ${outcome}.`,
-      `I am very happy with my work. I love helping people in ${place}.`,
-    ].join('\n\n'),
-
-    A2: [
-      `${personName} is ${personRole} who works at ${org} in ${place}. Every day, ${personName} helps people with ${context}.`,
-      `Last month, ${personName} noticed a serious problem: ${problem}. This was making life difficult for many people. ${personName} spoke to colleagues and they all agreed that something needed to change.`,
-      `${personName} decided to take action. The plan was to start ${solution}. This was not easy, but ${personName} worked hard every day to make it happen.`,
-      `After a few weeks, the results were clear. The organisation achieved ${outcome}. Everyone was pleased with the progress and thanked ${personName} for the effort.`,
-    ].join('\n\n'),
-
-    B1: [
-      `${personName} has worked as ${personRole} at ${org} in ${place} for several years. The organisation focuses on ${context}, which is important for the local community.`,
-      `Recently, the team identified a significant challenge: ${problem}. This issue was affecting the quality of their work and making it harder to serve the people who depended on them. After a series of meetings, the team agreed that the situation required a clear and practical response.`,
-      `${personName} led the effort to find a solution. The team decided to begin ${solution}, carefully considering the needs of all the people involved. They collected feedback, made adjustments, and kept everyone informed throughout the process.`,
-      `The results were encouraging. Within a short period, the organisation achieved ${outcome}. This success showed that with careful planning and teamwork, it is possible to overcome even difficult problems. The experience also taught ${personName} the value of listening carefully to others before making decisions.`,
-    ].join('\n\n'),
-
-    B2: [
-      `${personName}, ${personRole} at ${org} in ${place}, has spent much of the past year tackling one of the organisation's most pressing concerns: the impact of ${context} on day-to-day operations.`,
-      `The root of the difficulty was ${problem}. While the organisation had previously attempted to address the issue, earlier efforts had produced limited results, largely because they failed to account for the needs of all stakeholders. ${personName} recognised that a more structured and inclusive approach was needed.`,
-      `Following an extensive review, the team proposed ${solution}. The plan involved multiple stages, each designed to build on the last, and required close cooperation between departments that had rarely worked together before. Despite initial resistance, ${personName} maintained a steady and transparent approach, holding regular briefings and welcoming feedback at every stage.`,
-      `The outcome was striking: the organisation achieved ${outcome}. More importantly, the process itself changed the way the team approached problems. Colleagues who had once been sceptical became advocates for the new methods, and the organisation began to develop a stronger culture of collaboration and evidence-based decision-making.`,
-    ].join('\n\n'),
-
-    C1: [
-      `The story of ${personName}'s leadership at ${org} in ${place} offers a compelling case study in how institutions can respond to the complex challenges of ${context} without sacrificing either effectiveness or accountability.`,
-      `When ${personName} first identified ${problem} as a structural concern, the prevailing view within the organisation was that incremental adjustments would be sufficient. ${personName} disagreed. Drawing on both internal data and wider research, the case was made that the problem was systemic rather than superficial, and that a more ${word.term} response — one that resisted the temptation of quick fixes — was essential.`,
-      `The decision to pursue ${solution} was therefore deliberate and carefully defended. Stakeholders who raised objections were not dismissed; instead, their concerns were incorporated into a revised framework that retained the initiative's core goals while acknowledging practical constraints. This consultative process, though time-consuming, proved critical to building the broad support needed for implementation.`,
-      `The results ultimately vindicated the approach. The organisation achieved ${outcome}, and the methodology developed by ${personName}'s team has since been adopted as a model by similar institutions in the region. What the case demonstrates, above all, is that sustainable change requires not just a good plan but the institutional patience to see it through.`,
-    ].join('\n\n'),
-
-    C2: [
-      `Few challenges in contemporary institutional life are more instructive than the one confronted by ${personName} at ${org} in ${place}: how to respond to the deep structural pressures of ${context} without either capitulating to short-term thinking or losing sight of the human costs involved.`,
-      `The problem ${personName} inherited — ${problem} — was not, in itself, novel. What distinguished the situation was the extent to which previous responses had been shaped by institutional inertia rather than evidence. Successive efforts to address the issue had treated its symptoms rather than its causes, producing modest, ${word.term} improvements that dissolved under pressure. ${personName} was determined to break this pattern.`,
-      `The strategy that emerged — centred on ${solution} — was remarkable less for its technical complexity than for the sophistication of its political management. ${personName} understood that the principal obstacle was not operational but cultural: long-established habits of working, embedded assumptions about risk, and a default preference for the familiar over the effective. Navigating this required not authority but persuasion; not directives but a slow, painstaking reconstruction of shared purpose.`,
-      `The outcome — ${outcome} — has been widely cited, and rightly so. But the more durable legacy may be the set of practices and habits of mind that the initiative left behind. Institutions rarely transform themselves, and when they do, the process is seldom as linear as retrospective accounts suggest. What ${personName}'s experience demonstrates is that change at this depth demands not just a compelling vision but an equally compelling account of the costs of not changing — one patient and rigorous enough to displace the comfortable fictions that organisations construct to justify remaining still.`,
-    ].join('\n\n'),
-  };
-
-  const passageText = passages[level.id];
-  const commonWrong = [
-    `${personName} decided to leave ${org} after the problem became too difficult.`,
-    `The organisation chose to ignore ${problem} and focus on other priorities.`,
-    `The solution failed to produce any measurable results.`,
-  ];
-
-  const questionByCompetency = {
-    'skim reading': {
-      stem: `What is the main idea of the passage?`,
-      correctAnswer: `${personName} identified ${problem} and successfully addressed it by ${solution}, leading to ${outcome}.`,
-      distractors: commonWrong,
-      explanation: `The passage describes how ${personName} recognised a problem, took action, and achieved a positive result.`,
-    },
-    'specific detail': {
-      stem: `According to the passage, what problem did ${personName} face?`,
-      correctAnswer: `${personName} faced ${problem} at ${org}.`,
-      distractors: [
-        `${personName} faced a disagreement with a senior colleague over personal matters.`,
-        `${personName} faced a sudden closure of the organisation due to financial reasons.`,
-        `${personName} faced difficulty finding a job in ${place}.`,
-      ],
-      explanation: `The passage directly states that ${problem} was the key challenge that ${personName} needed to address.`,
-    },
-    'vocabulary in context': {
-      stem: `In the passage, the word "${word.term}" most nearly means:`,
-      correctAnswer: word.meaning,
-      distractors: word.wrong,
-      explanation: `In context, "${word.term}" is used to describe the nature of the approach or situation described in the passage.`,
-    },
-    'author purpose': {
-      stem: `Why does the writer describe the outcome achieved by ${personName}?`,
-      correctAnswer: `To show that the solution of ${solution} was effective and produced real improvements.`,
-      distractors: [
-        `To suggest that ${personName} was lucky rather than skilled.`,
-        `To argue that ${org} should have solved the problem much earlier.`,
-        `To introduce a new problem that the organisation still needs to address.`,
-      ],
-      explanation: `The outcome is described to demonstrate that the approach taken by ${personName} worked and had a meaningful impact.`,
-    },
-    'logical connection': {
-      stem: `How does the final paragraph connect to the rest of the passage?`,
-      correctAnswer: `It shows the result of the actions described earlier and confirms that the approach was successful.`,
-      distractors: [
-        `It introduces a completely different topic unrelated to the earlier paragraphs.`,
-        `It contradicts the information given in the opening paragraph.`,
-        `It repeats the same information as the first paragraph without adding anything new.`,
-      ],
-      explanation: `The final paragraph provides the conclusion to the story, confirming that the steps taken by ${personName} led to the stated outcome.`,
-    },
-  };
-
-  return {
-    title,
-    passageText,
-    ...questionByCompetency[competency],
-    stem: questionByCompetency[competency].stem,
   };
 };
 
