@@ -210,7 +210,10 @@ const downloadInterviewPdf = ({ selectedInterview, report, candidate, qa, sectio
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.text(`${candidate.name} - ${candidate.role} - ${candidate.date}`, page.margin, 62);
-  y = 118;
+  if (candidate.subtitle) {
+    doc.text(candidate.subtitle, page.margin, 76);
+  }
+  y = candidate.subtitle ? 132 : 118;
 
   addHeading('Overview');
   addText(`Overall Score: ${report.overallScore != null ? Number(report.overallScore).toFixed(1) : '-'} / 100`);
@@ -579,40 +582,6 @@ export const InterviewReportPanel = ({ interviews, selectedInterview, report, on
                             <p>{feedbackParts.improved}</p>
                           </div>
                         </div>
-
-                        {(item.feedback || item.dynamicFeedback) && (
-                          <details className="report-ai-feedback">
-                            <summary>Additional evaluator notes</summary>
-                            {item.feedback && <p>{item.feedback}</p>}
-                            {item.dynamicFeedback?.communication && (
-                              <p><strong>Communication:</strong> {item.dynamicFeedback.communication}</p>
-                            )}
-                            {item.dynamicFeedback?.confidence && (
-                              <p><strong>Confidence:</strong> {item.dynamicFeedback.confidence}</p>
-                            )}
-                            {(item.conceptsCovered || []).length > 0 && (
-                              <p><strong>Concepts covered:</strong> {(item.conceptsCovered || []).join(', ')}</p>
-                            )}
-                            {(item.missingConcepts || []).length > 0 && (
-                              <p><strong>Missing concepts:</strong> {(item.missingConcepts || []).join(', ')}</p>
-                            )}
-                            {(item.technicalMistakes || []).length > 0 && (
-                              <p><strong>Technical mistakes:</strong> {(item.technicalMistakes || []).join(', ')}</p>
-                            )}
-                            {(item.wrongTerminology || []).length > 0 && (
-                              <p><strong>Terminology issues:</strong> {(item.wrongTerminology || []).join(', ')}</p>
-                            )}
-                            {item.dynamicFeedback?.practicalUnderstanding && (
-                              <p><strong>Practical understanding:</strong> {item.dynamicFeedback.practicalUnderstanding}</p>
-                            )}
-                            {item.dynamicFeedback?.interviewReadiness && (
-                              <p><strong>Interview readiness:</strong> {item.dynamicFeedback.interviewReadiness}</p>
-                            )}
-                            {(item.dynamicFeedback?.nextLearningSuggestions || []).length > 0 && (
-                              <p><strong>Learning suggestions:</strong> {item.dynamicFeedback.nextLearningSuggestions.join(' ')}</p>
-                            )}
-                          </details>
-                        )}
                       </div>
                     );
                   })}

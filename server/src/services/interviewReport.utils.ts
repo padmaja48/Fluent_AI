@@ -112,11 +112,8 @@ export const inferQuestionTypeFromContent = (
   return 'behavioural';
 };
 
-export const truncateSpokenAnswer = (text: string, maxWords = 110) => {
-  const words = String(text || '').trim().split(/\s+/).filter(Boolean);
-  if (words.length <= maxWords) return words.join(' ');
-  return `${words.slice(0, maxWords).join(' ')}...`;
-};
+export const buildClarificationIdealAnswer = (question: string, coreIdeal: string) =>
+  `When a question is unclear, briefly restate what you understood and ask which part needs clarification. After the interviewer clarifies "${question}", answer directly: ${coreIdeal}`;
 
 export const buildDifficultyProgressionSummary = (
   transcript: Array<{ difficulty?: string; score?: number }>,
@@ -201,9 +198,3 @@ export const aggregateSessionStrengths = (
 
   return [...new Set(strengths)].slice(0, 4);
 };
-
-export const buildClarificationIdealAnswer = (question: string, coreIdeal: string) =>
-  truncateSpokenAnswer(
-    `When a question is unclear, briefly restate what you understood and ask which part needs clarification. After the interviewer clarifies, answer directly: ${coreIdeal}`,
-    110,
-  );

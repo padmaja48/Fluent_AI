@@ -18,7 +18,6 @@ import {
   computeCompanyReadinessScore,
   inferQuestionTypeFromContent,
   isNearDuplicateQuestion,
-  truncateSpokenAnswer,
 } from './interviewReport.utils';
 
 const openai = env.OPENAI_API_KEY
@@ -1073,10 +1072,9 @@ const buildIdealAnswerFallback = (question: string, context?: AnswerEvaluationCo
     ? context.expectedSignals
     : ['the core concept', 'a practical example', 'trade-offs or edge cases'];
   const signalSentences = signals.map((signal) => sentenceFromSignal(signal, topic)).filter(Boolean).join(' ');
-  const companyContext = context?.targetCompany ? ` For ${context.targetCompany}, connect the answer to practical judgement and role expectations.` : '';
-  return truncateSpokenAnswer(
-    `A strong answer to "${question}" should explain ${topic} directly, support it with one concrete example, ${signalSentences} Mention one trade-off or validation step and the impact.${companyContext}`,
-    110,
+  const companyContext = context?.targetCompany ? ` For ${context.targetCompany}, it should connect the answer to practical judgement and role expectations.` : '';
+  return canonicalize(
+    `A strong interview answer to "${question}" should start with a direct explanation of ${topic}, then support it with a concrete example. ${signalSentences} It should mention relevant trade-offs, validation or testing, and the impact of the decision. The answer should be structured, technically accurate, and confident.${companyContext}`,
   );
 };
 
@@ -1237,7 +1235,7 @@ IDEAL ANSWER REQUIREMENTS:
 - First classify the turn: answered_well, answered_weakly, clarification_request, or deflected.
 - If clarification_request: the ideal answer must model asking for clarification briefly AND then answering once clarified. Do not ignore the confusion.
 - If deflected: the ideal answer should acknowledge the gap honestly and outline what a prepared answer would cover.
-- idealAnswer and samplePerfectAnswer must sound like 30-60 seconds of spoken speech (60-120 words max).
+- Keep idealAnswer and samplePerfectAnswer as detailed, paragraph-length responses tailored to this specific question. Do not shorten them into brief snippets.
 - Avoid generic filler such as "fast-paced environment", "aligns with my career goals", or "eager to apply my skills" unless the question is explicitly about motivation.
 - The samplePerfectAnswer must NOT personalize to the candidate and must NOT copy candidate wording.
 - Compare ideal answer vs candidate answer.
@@ -1310,14 +1308,7 @@ Return ONLY a JSON object:
   "missingSignals": string[]
 }`,
     fallbackComparisonEvaluation(question, answer, context),
-  ).then((evaluation) => ({
-    ...evaluation,
-    idealAnswer: truncateSpokenAnswer(evaluation.idealAnswer || '', 110),
-    samplePerfectAnswer: truncateSpokenAnswer(
-      evaluation.samplePerfectAnswer || evaluation.idealAnswer || '',
-      110,
-    ),
-  }));
+  );
 };
 
 const DIFFICULTY_ORDER: NonNullable<GeneratedQuestion['difficulty']>[] = [
@@ -1873,8 +1864,9 @@ STRICT EVALUATION RULES:
 8. Reference actual answer content in all feedback — do NOT fabricate content the candidate did not say
 9. Preserve each transcript item's idealAnswer, samplePerfectAnswer, conceptsCovered, missingConcepts, incorrectStatements, wrongTerminology, technicalMistakes, and dynamicFeedback when present
 10. Question-level feedback must be dynamic and based on the answer comparison, not a repeated template
-11. idealAnswer and samplePerfectAnswer must stay within 60-120 spoken words and must match whether the candidate answered, asked for clarification, or deflected
+11. idealAnswer and samplePerfectAnswer must stay detailed and paragraph-length, tailored to the specific question, and must match whether the candidate answered, asked for clarification, or deflected
 12. difficultyProgression must contain one entry per transcript question (${totalCount} entries), not a fixed 3-item template
+13. Do not add extra per-question fields such as additionalEvaluatorNotes
 
 Return ONLY this exact JSON structure (no markdown):
 {
@@ -1993,11 +1985,8 @@ Return ONLY this exact JSON structure (no markdown):
           questionType: item.questionType ?? 'general',
           resumeReference: item.resumeReference ?? 'general',
         }),
-        idealAnswer: truncateSpokenAnswer(item.idealAnswer ?? analysis[index]?.idealAnswer ?? '', 110),
-        samplePerfectAnswer: truncateSpokenAnswer(
-          item.samplePerfectAnswer ?? analysis[index]?.samplePerfectAnswer ?? item.idealAnswer ?? '',
-          110,
-        ),
+        idealAnswer: item.idealAnswer ?? analysis[index]?.idealAnswer,
+        samplePerfectAnswer: item.samplePerfectAnswer ?? analysis[index]?.samplePerfectAnswer ?? item.idealAnswer,
         conceptsCovered: item.conceptsCovered ?? analysis[index]?.conceptsCovered ?? [],
         missingConcepts: item.missingConcepts ?? analysis[index]?.missingConcepts ?? [],
         incorrectStatements: item.incorrectStatements ?? analysis[index]?.incorrectStatements ?? [],
@@ -2024,6 +2013,16 @@ Return ONLY this exact JSON structure (no markdown):
       targetCompany: reportContext.targetCompany,
       overallScore: Math.round(precomputedAvg),
     });
+    if (
+      process.env.NODE_ENV !== 'production' &&
+      reportContext.targetCompany &&
+      companyReadinessScore === Math.round(precomputedAvg)
+    ) {
+      console.warn(
+        '[report] companyReadinessScore equals overallScore — verify company-specific evidence was captured.',
+        { overallScore: Math.round(precomputedAvg), companyReadinessScore, targetCompany: reportContext.targetCompany },
+      );
+    }
 
     return {
       ...report,
