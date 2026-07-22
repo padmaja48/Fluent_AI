@@ -444,6 +444,47 @@
   resize: vertical;
 }
 
+.iv-live-coding {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 12px;
+  background: #fafbff;
+}
+
+.iv-live-coding-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+}
+
+.iv-live-coding-head h3 {
+  margin: 0.35rem 0 0;
+  font-size: 1rem;
+}
+
+.iv-live-coding-lang {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.iv-live-coding-lang select {
+  min-width: 140px;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border, #d1d5db);
+}
+
+.iv-live-coding-prompt {
+  margin: 0 0 0.75rem;
+  color: #475569;
+  font-size: 0.92rem;
+}
+
 .iv-practice-editor--code {
   font-family: Consolas, 'Courier New', monospace;
   font-size: 0.86rem;
