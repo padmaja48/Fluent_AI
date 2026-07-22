@@ -824,12 +824,12 @@ function LiveSession({ interview, persona, onComplete }) {
 
   useEffect(() => {
     const currentQuestion = questions[currentIdx];
-    const answerText = getAnswerSinceLastQuestion() || interimText;
+    const answerText = getAnswerSinceLastQuestionFromRefs() || interimText;
     const shouldShow =
       isCodingQuestion(currentQuestion) || Boolean(detectMentionedLanguage(answerText));
     if (!shouldShow) return;
     setCodingSource(prev => (prev.trim() ? prev : languageStarter(codingLanguage)));
-  }, [currentIdx, questions, interimText, codingLanguage, getAnswerSinceLastQuestion]);
+  }, [currentIdx, questions, interimText, codingLanguage, getAnswerSinceLastQuestionFromRefs]);
 
   /* ── Stop listening ─────────────────────────────── */
   const stopListening = useCallback(() => {
