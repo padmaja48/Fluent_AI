@@ -10,6 +10,16 @@ import {
   type CompanyQuestionEntry,
   type ConversationTurn,
 } from './promptBuilder';
+import {
+  aggregateSessionStrengths,
+  buildClarificationIdealAnswer,
+  buildDifficultyProgressionSummary,
+  classifyAnswerTurn,
+  computeCompanyReadinessScore,
+  inferQuestionTypeFromContent,
+  isNearDuplicateQuestion,
+  truncateSpokenAnswer,
+} from './interviewReport.utils';
 
 const openai = env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: env.OPENAI_API_KEY, baseURL: env.OPENAI_BASE_URL })
@@ -227,6 +237,16 @@ export type InterviewReport = {
   followUpQuality?: string;
   hiringRecommendation?: 'Strong Hire' | 'Hire' | 'Borderline' | 'No Hire';
   hiringRecommendationReason?: string;
+  speakerName?: string;
+  accountOwnerName?: string;
+  companyReadinessScore?: number;
+};
+
+export type ReportGenerationContext = {
+  speakerName?: string;
+  accountOwnerName?: string;
+  targetCompany?: string;
+  interviewMode?: InterviewMode;
 };
 
 export type AdaptiveTurnResponse = {
@@ -1053,9 +1073,10 @@ const buildIdealAnswerFallback = (question: string, context?: AnswerEvaluationCo
     ? context.expectedSignals
     : ['the core concept', 'a practical example', 'trade-offs or edge cases'];
   const signalSentences = signals.map((signal) => sentenceFromSignal(signal, topic)).filter(Boolean).join(' ');
-  const companyContext = context?.targetCompany ? ` For ${context.targetCompany}, it should connect the answer to practical engineering judgement and role expectations.` : '';
-  return canonicalize(
-    `A strong interview answer to "${question}" should start with a direct explanation of ${topic}, then support it with a concrete example. ${signalSentences} It should mention relevant trade-offs, validation or testing, and the impact of the decision. The answer should be structured, technically accurate, concise, and confident.${companyContext}`,
+  const companyContext = context?.targetCompany ? ` For ${context.targetCompany}, connect the answer to practical judgement and role expectations.` : '';
+  return truncateSpokenAnswer(
+    `A strong answer to "${question}" should explain ${topic} directly, support it with one concrete example, ${signalSentences} Mention one trade-off or validation step and the impact.${companyContext}`,
+    110,
   );
 };
 
@@ -1076,7 +1097,12 @@ const fallbackComparisonEvaluation = (
   answer: string,
   context?: AnswerEvaluationContext,
 ): AnswerEvaluation => {
-  const idealAnswer = buildIdealAnswerFallback(question, context);
+  const turnType = classifyAnswerTurn(answer);
+  const idealAnswerBase = buildIdealAnswerFallback(question, context);
+  const idealAnswer =
+    turnType === 'clarification_request'
+      ? buildClarificationIdealAnswer(question, idealAnswerBase)
+      : idealAnswerBase;
   const expectedSignals = context?.expectedSignals ?? [];
   const answerTokens = tokenizeConcepts(answer);
   const signalCoverage = expectedSignals.filter((signal) =>
@@ -1205,10 +1231,14 @@ EXPECTED SIGNALS:
 ${JSON.stringify(context?.expectedSignals ?? [], null, 2)}
 
 CANDIDATE ANSWER: ${answer}
+DETECTED ANSWER TURN TYPE: ${classifyAnswerTurn(answer)}
 
 IDEAL ANSWER REQUIREMENTS:
-- Generate an ideal answer internally before scoring.
-- The ideal answer must be professional, interview quality, easy to understand, and cover all expected concepts.
+- First classify the turn: answered_well, answered_weakly, clarification_request, or deflected.
+- If clarification_request: the ideal answer must model asking for clarification briefly AND then answering once clarified. Do not ignore the confusion.
+- If deflected: the ideal answer should acknowledge the gap honestly and outline what a prepared answer would cover.
+- idealAnswer and samplePerfectAnswer must sound like 30-60 seconds of spoken speech (60-120 words max).
+- Avoid generic filler such as "fast-paced environment", "aligns with my career goals", or "eager to apply my skills" unless the question is explicitly about motivation.
 - The samplePerfectAnswer must NOT personalize to the candidate and must NOT copy candidate wording.
 - Compare ideal answer vs candidate answer.
 - Feedback must clearly state: what was correct, what was missing, which concept to improve, and what an ideal answer should include.
@@ -1280,7 +1310,14 @@ Return ONLY a JSON object:
   "missingSignals": string[]
 }`,
     fallbackComparisonEvaluation(question, answer, context),
-  );
+  ).then((evaluation) => ({
+    ...evaluation,
+    idealAnswer: truncateSpokenAnswer(evaluation.idealAnswer || '', 110),
+    samplePerfectAnswer: truncateSpokenAnswer(
+      evaluation.samplePerfectAnswer || evaluation.idealAnswer || '',
+      110,
+    ),
+  }));
 };
 
 const DIFFICULTY_ORDER: NonNullable<GeneratedQuestion['difficulty']>[] = [
@@ -1487,8 +1524,9 @@ const buildNaturalFallbackQuestion = (
 ): GeneratedQuestion => {
   const modeGuidance = getInterviewModeGuidance(context.interviewMode);
   const projectName = context.resumeProfile?.projects?.[0] ?? 'one of your projects';
+  const isHrMode = context.interviewMode === 'hr_behavioral';
   const questionType: GeneratedQuestion['questionType'] =
-    difficulty === 'behavioral'
+    isHrMode || difficulty === 'behavioral'
       ? 'behavioural'
       : difficulty === 'scenario' || difficulty === 'problem-solving'
       ? 'situational'
@@ -1503,9 +1541,9 @@ const buildNaturalFallbackQuestion = (
       ? `Suppose ${topic} fails under load in production. How would you diagnose it, and what trade-offs would you weigh?`
       : difficulty === 'problem-solving'
       ? `For a ${modeGuidance.label} scenario involving ${topic}, outline your approach, edge cases, and complexity.`
-      : difficulty === 'behavioral'
+      : difficulty === 'behavioral' || isHrMode
       ? `Tell me about a time you had to make a tough call related to ${topic}. What was the situation, your action, and the result?`
-      : `In your work on ${projectName}, how did ${topic} factor in, and what would you do differently today?`;
+      : `Walk me through how you applied ${focus} while working on ${projectName}. What problem were you solving, what did you do, and what was the outcome?`;
 
   return {
     question,
@@ -1636,12 +1674,35 @@ export const generateAdaptiveInterviewQuestion = async (
       const exhaustedTopic = candidate.question.topic !== fallbackQuestion.topic && isTopicExhausted(context, candidate.question.topic);
 
       if (repeatedQuestion || exhaustedTopic) {
-        return fallbackTurn;
+        const alternate = fallbackAdaptiveQuestion({
+          ...context,
+          followUpDecision: {
+            ...(context.followUpDecision ?? decideAdaptiveFollowUp({
+              evaluation: context.lastEvaluation,
+              lastQuestion: context.lastQuestion,
+              position: context.currentQuestionIndex + 1,
+              total: context.targetQuestionCount,
+            })),
+            action: 'move_topic',
+          },
+        });
+        const alternateRepeated = context.previousQuestions.some((item) =>
+          isNearDuplicateQuestion(item.question, alternate.question),
+        );
+        return alternateRepeated ? fallbackTurn : { ...fallbackTurn, question: alternate };
       }
 
+      const mergedQuestion = mergeInterviewerReply(candidate);
       return {
         ...candidate,
-        question: mergeInterviewerReply(candidate),
+        question: {
+          ...mergedQuestion,
+          questionType: inferQuestionTypeFromContent(
+            mergedQuestion.question,
+            context.interviewMode,
+            mergedQuestion.questionType,
+          ),
+        },
       };
     });
 };
@@ -1707,7 +1768,8 @@ export const generateReport = (
     wrongTerminology?: string[];
     technicalMistakes?: string[];
     dynamicFeedback?: AnswerEvaluation['dynamicFeedback'];
-  }>
+  }>,
+  reportContext: ReportGenerationContext = {},
 ) => {
   // Pre-compute honest per-question scores for skipped/empty answers
   const answeredCount = transcript.filter(t => {
@@ -1781,16 +1843,21 @@ export const generateReport = (
 
   // For the per-question scores already computed by evaluateAnswer, use them as ground truth
   const precomputedAvg = transcript.reduce((sum, t) => sum + (t.score ?? 0), 0) / Math.max(1, totalCount);
-  const difficultyProgression = transcript.map((t) => t.difficulty ?? 'unknown');
+  const difficultyProgression = buildDifficultyProgressionSummary(transcript);
   const questionTimeline = transcript.map((t) => ({
     question: t.question,
     topic: t.topic ?? t.resumeReference ?? 'general',
     difficulty: t.difficulty ?? 'unknown',
     score: t.score ?? 0,
   }));
+  const speakerLabel = reportContext.speakerName || reportContext.accountOwnerName || 'The candidate';
 
   return generateJson<InterviewReport>(
     `You are a strict, professional interview panel evaluator. Generate an honest performance report from this Q&A transcript.
+
+CANDIDATE FOR FEEDBACK: ${speakerLabel}
+ACCOUNT OWNER (login profile): ${reportContext.accountOwnerName ?? 'Not specified'}
+Use the candidate name above in summary/feedback when referring to the person who spoke. Do not substitute the account owner name if a distinct candidate name is provided.
 
 TRANSCRIPT:
 ${JSON.stringify(transcript, null, 2)}
@@ -1802,10 +1869,12 @@ STRICT EVALUATION RULES:
 4. ${answeredCount} out of ${totalCount} questions were answered. This participation rate (${Math.round(participationRatio * 100)}%) must factor into all scores
 5. If fewer than half the questions were answered, no score category should exceed 50
 6. Pre-computed average per-question score: ${Math.round(precomputedAvg)} — your overallScore should be close to this
-7. Strengths array must be EMPTY [] if the candidate gave no meaningful answers
+7. Strengths must NEVER be empty or a placeholder. Even for low scores, include at least 2 honest positives (effort, partial correctness, clarification requests, persistence).
 8. Reference actual answer content in all feedback — do NOT fabricate content the candidate did not say
 9. Preserve each transcript item's idealAnswer, samplePerfectAnswer, conceptsCovered, missingConcepts, incorrectStatements, wrongTerminology, technicalMistakes, and dynamicFeedback when present
 10. Question-level feedback must be dynamic and based on the answer comparison, not a repeated template
+11. idealAnswer and samplePerfectAnswer must stay within 60-120 spoken words and must match whether the candidate answered, asked for clarification, or deflected
+12. difficultyProgression must contain one entry per transcript question (${totalCount} entries), not a fixed 3-item template
 
 Return ONLY this exact JSON structure (no markdown):
 {
@@ -1912,29 +1981,61 @@ Return ONLY this exact JSON structure (no markdown):
     },
   ).then((report) => {
     const analysis = report.questionAnalysis?.length ? report.questionAnalysis : [];
-    const questionAnalysis = transcript.map((item, index) => ({
-      ...(analysis[index] ?? {
-        question: item.question,
-        answer: item.answer ?? '(no answer)',
-        score: item.score ?? 0,
-        feedback: item.feedback ?? 'No answer was provided.',
-        whatWorked: item.dynamicFeedback?.strengths?.[0] ?? 'No specific strength recorded.',
-        whatToImprove: item.dynamicFeedback?.areasToImprove?.[0] ?? 'Provide a complete, structured answer with specific examples.',
-        questionType: item.questionType ?? 'general',
-        resumeReference: item.resumeReference ?? 'general',
-      }),
-      idealAnswer: item.idealAnswer ?? analysis[index]?.idealAnswer,
-      samplePerfectAnswer: item.samplePerfectAnswer ?? analysis[index]?.samplePerfectAnswer,
-      conceptsCovered: item.conceptsCovered ?? analysis[index]?.conceptsCovered ?? [],
-      missingConcepts: item.missingConcepts ?? analysis[index]?.missingConcepts ?? [],
-      incorrectStatements: item.incorrectStatements ?? analysis[index]?.incorrectStatements ?? [],
-      wrongTerminology: item.wrongTerminology ?? analysis[index]?.wrongTerminology ?? [],
-      technicalMistakes: item.technicalMistakes ?? analysis[index]?.technicalMistakes ?? [],
-      dynamicFeedback: item.dynamicFeedback ?? analysis[index]?.dynamicFeedback,
-    }));
+    const questionAnalysis = transcript.map((item, index) => {
+      const merged = {
+        ...(analysis[index] ?? {
+          question: item.question,
+          answer: item.answer ?? '(no answer)',
+          score: item.score ?? 0,
+          feedback: item.feedback ?? 'No answer was provided.',
+          whatWorked: item.dynamicFeedback?.strengths?.[0] ?? 'No specific strength recorded.',
+          whatToImprove: item.dynamicFeedback?.areasToImprove?.[0] ?? 'Provide a complete, structured answer with specific examples.',
+          questionType: item.questionType ?? 'general',
+          resumeReference: item.resumeReference ?? 'general',
+        }),
+        idealAnswer: truncateSpokenAnswer(item.idealAnswer ?? analysis[index]?.idealAnswer ?? '', 110),
+        samplePerfectAnswer: truncateSpokenAnswer(
+          item.samplePerfectAnswer ?? analysis[index]?.samplePerfectAnswer ?? item.idealAnswer ?? '',
+          110,
+        ),
+        conceptsCovered: item.conceptsCovered ?? analysis[index]?.conceptsCovered ?? [],
+        missingConcepts: item.missingConcepts ?? analysis[index]?.missingConcepts ?? [],
+        incorrectStatements: item.incorrectStatements ?? analysis[index]?.incorrectStatements ?? [],
+        wrongTerminology: item.wrongTerminology ?? analysis[index]?.wrongTerminology ?? [],
+        technicalMistakes: item.technicalMistakes ?? analysis[index]?.technicalMistakes ?? [],
+        dynamicFeedback: item.dynamicFeedback ?? analysis[index]?.dynamicFeedback,
+      };
+
+      return {
+        ...merged,
+        questionType: inferQuestionTypeFromContent(
+          item.question,
+          reportContext.interviewMode,
+          merged.questionType,
+        ),
+      };
+    });
+
+    const strengths = aggregateSessionStrengths(
+      transcript,
+      questionAnalysis.map((item) => item.whatWorked),
+    );
+    const companyReadinessScore = computeCompanyReadinessScore(transcript, {
+      targetCompany: reportContext.targetCompany,
+      overallScore: Math.round(precomputedAvg),
+    });
 
     return {
       ...report,
+      overallScore: Math.round(precomputedAvg),
+      strengths: report.strengths?.length
+        ? [...new Set([...report.strengths, ...strengths])].slice(0, 4)
+        : strengths,
+      difficultyProgression,
+      questionTimeline,
+      companyReadinessScore,
+      speakerName: reportContext.speakerName,
+      accountOwnerName: reportContext.accountOwnerName,
       questionAnalysis,
     };
   });

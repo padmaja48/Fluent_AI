@@ -26,6 +26,9 @@ export interface IReport extends Document {
   followUpQuality?: string;
   hiringRecommendation?: string;
   hiringRecommendationReason?: string;
+  speakerName?: string;
+  accountOwnerName?: string;
+  companyReadinessScore?: number;
 }
 
 const reportSchema = new Schema<IReport>(
@@ -55,6 +58,9 @@ const reportSchema = new Schema<IReport>(
     followUpQuality: String,
     hiringRecommendation: String,
     hiringRecommendationReason: String,
+    speakerName: String,
+    accountOwnerName: String,
+    companyReadinessScore: Number,
   },
   { timestamps: true },
 );

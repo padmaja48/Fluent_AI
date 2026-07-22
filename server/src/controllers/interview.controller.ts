@@ -31,6 +31,13 @@ import {
 } from '../services/companyQuestionResearch.service';
 import { mapExperienceLevel } from '../services/promptBuilder';
 import { slugifyCompanyName } from '../services/companyQuestionBank';
+import {
+  dedupeTranscriptItems,
+  extractSpeakerNameFromAnswer,
+  inferQuestionTypeFromContent,
+  isNearDuplicateQuestion,
+  isSelfIntroductionQuestion,
+} from '../services/interviewReport.utils';
 
 const idParams = z.object({
   params: z.object({
@@ -421,6 +428,11 @@ export const submitAnswer = asyncHandler(async (req, res) => {
     interview.questions[questionIndex].wrongTerminology = evaluation.wrongTerminology;
     interview.questions[questionIndex].technicalMistakes = evaluation.technicalMistakes;
     interview.questions[questionIndex].dynamicFeedback = evaluation.dynamicFeedback;
+    interview.questions[questionIndex].questionType = inferQuestionTypeFromContent(
+      currentQuestion,
+      interview.interviewMode,
+      interview.questions[questionIndex].questionType,
+    );
   } else {
     interview.questions.push({
       question: currentQuestion,
@@ -436,6 +448,14 @@ export const submitAnswer = asyncHandler(async (req, res) => {
       technicalMistakes: evaluation.technicalMistakes,
       dynamicFeedback: evaluation.dynamicFeedback,
     });
+  }
+
+  if (!(interview as any).speakerName && isSelfIntroductionQuestion(currentQuestion)) {
+    const extracted = extractSpeakerNameFromAnswer(req.body.answer, currentQuestion);
+    if (extracted.name && extracted.confidence !== 'low') {
+      (interview as any).speakerName = extracted.name;
+      (interview as any).speakerNameConfidence = extracted.confidence;
+    }
   }
 
   const answeredCount = interview.questions.filter((item) => typeof item.score === 'number').length;
@@ -501,7 +521,19 @@ export const submitAnswer = asyncHandler(async (req, res) => {
         interviewState: (interview as any).interviewState,
       }).catch(() => undefined);
 
-      interview.questions[nextIndex] = adaptiveTurn?.question ?? toGeneratedQuestion(plannedNextQuestion);
+      const nextQuestion = adaptiveTurn?.question ?? toGeneratedQuestion(plannedNextQuestion);
+      const isDuplicate = interview.questions
+        .slice(0, nextIndex)
+        .some((item) => isNearDuplicateQuestion(item.question, nextQuestion.question));
+
+      if (!isDuplicate) {
+        nextQuestion.questionType = inferQuestionTypeFromContent(
+          nextQuestion.question,
+          interview.interviewMode,
+          nextQuestion.questionType,
+        );
+        interview.questions[nextIndex] = nextQuestion;
+      }
     }
     interview.markModified('questions');
   }
@@ -523,33 +555,47 @@ export const completeInterview = asyncHandler(async (req, res) => {
   }
 
   const interview = await getInterviewForUser(interviewId, req.userId);
+  await interview.populate('userId', 'name email');
+  const accountOwnerName =
+    (interview as any).accountOwnerName ||
+    (typeof interview.userId === 'object' && interview.userId !== null ? (interview.userId as any).name : undefined);
+  if (!(interview as any).accountOwnerName && accountOwnerName) {
+    (interview as any).accountOwnerName = accountOwnerName;
+  }
+
   if (interview.status === 'Completed') {
     const report = await Report.findOne({ interviewId: interview._id }).sort({ createdAt: -1 });
-    await interview.populate('userId', 'name email');
     await deleteInterviewState(String(interview._id));
     res.json({ interview, report });
     return;
   }
 
-  const transcript = interview.questions.map((item) => ({
-    question: item.question,
-    answer: item.userAnswer,
-    feedback: item.feedback,
-    score: item.score,
-    questionType: (item as any).questionType,
-    resumeReference: (item as any).resumeReference,
-    difficulty: (item as any).difficulty,
-    topic: (item as any).topic,
-    idealAnswer: (item as any).idealAnswer,
-    samplePerfectAnswer: (item as any).samplePerfectAnswer,
-    conceptsCovered: (item as any).conceptsCovered,
-    missingConcepts: (item as any).missingConcepts,
-    incorrectStatements: (item as any).incorrectStatements,
-    wrongTerminology: (item as any).wrongTerminology,
-    technicalMistakes: (item as any).technicalMistakes,
-    dynamicFeedback: (item as any).dynamicFeedback,
-  }));
-  const aiReport = await generateReport(transcript);
+  const transcript = dedupeTranscriptItems(
+    interview.questions.map((item) => ({
+      question: item.question,
+      answer: item.userAnswer,
+      feedback: item.feedback,
+      score: item.score,
+      questionType: (item as any).questionType,
+      resumeReference: (item as any).resumeReference,
+      difficulty: (item as any).difficulty,
+      topic: (item as any).topic,
+      idealAnswer: (item as any).idealAnswer,
+      samplePerfectAnswer: (item as any).samplePerfectAnswer,
+      conceptsCovered: (item as any).conceptsCovered,
+      missingConcepts: (item as any).missingConcepts,
+      incorrectStatements: (item as any).incorrectStatements,
+      wrongTerminology: (item as any).wrongTerminology,
+      technicalMistakes: (item as any).technicalMistakes,
+      dynamicFeedback: (item as any).dynamicFeedback,
+    })),
+  );
+  const aiReport = await generateReport(transcript, {
+    speakerName: (interview as any).speakerName,
+    accountOwnerName,
+    targetCompany: (interview as any).targetCompany,
+    interviewMode: interview.interviewMode,
+  });
   const storedReport = await uploadText(JSON.stringify(aiReport, null, 2), `interview-${interview._id}.json`, 'reports');
 
   const report = await Report.create({
@@ -575,7 +621,6 @@ export const completeInterview = asyncHandler(async (req, res) => {
   };
   interview.reportUrl = storedReport.url;
   await interview.save();
-  await interview.populate('userId', 'name email');
 
   await deleteInterviewState(String(interview._id));
   res.json({ interview, report });

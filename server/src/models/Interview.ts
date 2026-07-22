@@ -83,6 +83,9 @@ export interface IInterview extends Document {
     domain?: number;
   };
   totalPlannedQuestions?: number;
+  speakerName?: string;
+  speakerNameConfidence?: 'high' | 'medium' | 'low';
+  accountOwnerName?: string;
 }
 
 const interviewQuestionSchema = new Schema<IInterviewQuestion>(
@@ -174,6 +177,9 @@ const interviewSchema = new Schema<IInterview>(
       domain: Number,
     },
     totalPlannedQuestions: Number,
+    speakerName: { type: String, trim: true },
+    speakerNameConfidence: { type: String, enum: ['high', 'medium', 'low'] },
+    accountOwnerName: { type: String, trim: true },
   },
   { timestamps: true },
 );

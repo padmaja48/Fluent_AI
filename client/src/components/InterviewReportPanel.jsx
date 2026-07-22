@@ -33,10 +33,23 @@ const titleFromSlug = (value) =>
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
 
-const getCandidateInfo = (interview = {}) => {
+const getCandidateInfo = (interview = {}, report = {}) => {
   const user = typeof interview.userId === 'object' && interview.userId !== null ? interview.userId : {};
+  const accountOwner = cleanText(
+    interview.accountOwnerName || report.accountOwnerName || user.name,
+  );
+  const speaker = cleanText(interview.speakerName || report.speakerName);
+  const displayName = speaker || accountOwner || 'Candidate';
+  const subtitle =
+    speaker && accountOwner && speaker.toLowerCase() !== accountOwner.toLowerCase()
+      ? `Report for ${speaker}, practiced on ${accountOwner}'s account`
+      : undefined;
+
   return {
-    name: cleanText(interview.candidateName || user.name) || 'Candidate',
+    name: displayName,
+    subtitle,
+    accountOwner,
+    speaker,
     email: cleanText(interview.candidateEmail || user.email),
     role: cleanText(interview.roleDomain) || 'Role Not Selected',
     company: cleanText(companyLabelByValue.get(interview.targetCompany) || titleFromSlug(interview.targetCompany)) || 'General Interview',
@@ -80,7 +93,9 @@ const deriveSectionScores = ({ report, qa, selectedInterview }) => {
   const problemItems = qa.filter((item) => sectionMatches(item, /scenario|problem|debug|scale|complexity|design|trade-off|production/i));
   const companyItems = qa.filter((item) => sectionMatches(item, /company|readiness|tcs|amazon|microsoft|google|accenture|deloitte|infosys|jpmorgan/i));
   const hrItems = qa.filter((item) => sectionMatches(item, /behavio|hr|star|conflict|team|communication|motivation|strength/i));
-  const companyFallback = selectedInterview?.targetCompany ? report.overallScore : report.communicationScore;
+  const companyFallback = selectedInterview?.targetCompany
+    ? report.companyReadinessScore
+    : report.communicationScore;
 
   return [
     { key: 'resume', label: 'Resume Explanation', value: clampScore(averageScore(resumeItems), report.overallScore), note: 'Project and background clarity' },
@@ -88,7 +103,7 @@ const deriveSectionScores = ({ report, qa, selectedInterview }) => {
     { key: 'communication', label: 'Communication', value: clampScore(report.communicationScore, report.overallScore), note: 'Clarity, structure, grammar' },
     { key: 'confidence', label: 'Confidence', value: clampScore(report.confidenceScore, report.communicationScore), note: 'Answer control and certainty' },
     { key: 'problem', label: 'Problem Solving', value: clampScore(averageScore(problemItems), report.technicalScore), note: 'Debugging and trade-offs' },
-    { key: 'company', label: 'Company Readiness', value: clampScore(averageScore(companyItems), companyFallback), note: 'Company fit and preparation' },
+    { key: 'company', label: 'Company Readiness', value: clampScore(report.companyReadinessScore ?? averageScore(companyItems), companyFallback ?? report.behavioralScore), note: 'Company fit and preparation' },
     { key: 'hr', label: 'HR Readiness', value: clampScore(averageScore(hrItems), report.behavioralScore), note: 'STAR stories and maturity' },
   ];
 };
@@ -313,7 +328,7 @@ export const InterviewReportPanel = ({ interviews, selectedInterview, report, on
         )}
 
         {!loading && report && selectedInterview && (() => {
-          const candidate = getCandidateInfo(selectedInterview);
+          const candidate = getCandidateInfo(selectedInterview, report);
           const qa = report.questionAnalysis?.length
             ? report.questionAnalysis
             : (selectedInterview.questions || []);
@@ -335,6 +350,7 @@ export const InterviewReportPanel = ({ interviews, selectedInterview, report, on
                 <div className="results-info">
                   <div className="report-candidate-heading">
                     <h3>{candidate.name}</h3>
+                    {candidate.subtitle && <p>{candidate.subtitle}</p>}
                     <p>{candidate.role} Candidate</p>
                     {candidate.email && <span>{candidate.email}</span>}
                   </div>
@@ -399,7 +415,10 @@ export const InterviewReportPanel = ({ interviews, selectedInterview, report, on
                   <ul>
                     {(report.strengths || []).length > 0
                       ? (report.strengths || []).map((s, i) => <li key={i}>{s}</li>)
-                      : <li>No specific strengths recorded for this session.</li>
+                      : qa.flatMap((item) => {
+                          if (item.dynamicFeedback?.strengths?.length) return item.dynamicFeedback.strengths.slice(0, 1);
+                          return item.whatWorked ? [item.whatWorked] : [];
+                        }).slice(0, 3).map((s, i) => <li key={i}>{s}</li>)
                     }
                   </ul>
                 </div>
