@@ -1112,6 +1112,18 @@
   border-color: rgba(16, 185, 129, 0.35);
 }
 
+.iv-camera-status--warn {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.2);
+  border-color: rgba(245, 158, 11, 0.45);
+  animation: iv-camera-warn-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes iv-camera-warn-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.72; }
+}
+
 .iv-violation-count { margin-left: auto; color: #fbbf24; }
 
 .iv-violation-banner {
