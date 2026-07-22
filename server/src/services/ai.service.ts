@@ -1,5 +1,15 @@
 import OpenAI, { toFile } from 'openai';
 import { env } from '../config/env';
+import { getCompanyQuestions } from './companyQuestionBank';
+import {
+  buildAdaptiveTurnUserPrompt,
+  buildInitialQuestionsUserPrompt,
+  buildInterviewSystemPrompt,
+  mapExperienceLevel,
+  mapInterviewPromptType,
+  type CompanyQuestionEntry,
+  type ConversationTurn,
+} from './promptBuilder';
 
 const openai = env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: env.OPENAI_API_KEY, baseURL: env.OPENAI_BASE_URL })
@@ -7,6 +17,14 @@ const openai = env.OPENAI_API_KEY
 const groq = env.GROQ_API_KEY
   ? new OpenAI({ apiKey: env.GROQ_API_KEY, baseURL: env.GROQ_BASE_URL })
   : null;
+
+export type InterviewMode = 'sde' | 'frontend' | 'backend' | 'data_analyst' | 'ai_ml' | 'qa' | 'hr_behavioral';
+
+type InterviewModeGuidance = {
+  label: string;
+  questionTemplate: string;
+  questionAngles: string[];
+};
 
 type InterviewContext = {
   roleLevel: string;
@@ -18,12 +36,14 @@ type InterviewContext = {
   personaId?: string;
   personaPersonality?: string;
   interviewType?: string;
+  interviewMode?: InterviewMode;
   complexity?: string;
   targetCompany?: string;
   resumeSkills?: string[];
   resumeExperienceLevel?: string;
   resumeSuggestedQuestions?: string[];
   resumeSummary?: string;
+  resumeProfile?: ResumeInterviewProfile;
 };
 
 type TranscriptionContext = {
@@ -31,7 +51,55 @@ type TranscriptionContext = {
   currentQuestion?: string;
   jobDescription?: string;
   resumeSkills?: string[];
+  resumeText?: string;
+  resumeProjects?: string[];
+  resumeSummary?: string;
+  targetCompany?: string;
 };
+
+const INTERVIEW_MODE_GUIDANCE: Record<InterviewMode, InterviewModeGuidance> = {
+  sde: {
+    label: 'Software Development Engineer',
+    questionTemplate: 'Use a balanced SDE loop: fundamentals, coding reasoning, OOP/DBMS/OS, API design, debugging, project architecture, scalability, and ownership.',
+    questionAngles: ['data structures and algorithms', 'OOP and design principles', 'DBMS and SQL', 'operating systems basics', 'API design', 'debugging', 'scalability trade-offs'],
+  },
+  frontend: {
+    label: 'Frontend Developer',
+    questionTemplate: 'Use a frontend loop: UI architecture, React or framework state, component design, browser behavior, accessibility, performance, API integration, testing, and responsive UX.',
+    questionAngles: ['React/component architecture', 'state management', 'browser rendering', 'accessibility', 'frontend performance', 'API integration', 'UI testing'],
+  },
+  backend: {
+    label: 'Backend Developer',
+    questionTemplate: 'Use a backend loop: API design, authentication, databases, concurrency, caching, reliability, observability, production debugging, and scaling.',
+    questionAngles: ['REST/API design', 'database schema and queries', 'authentication and authorization', 'concurrency', 'caching', 'observability', 'production incidents'],
+  },
+  data_analyst: {
+    label: 'Data Analyst',
+    questionTemplate: 'Use a data analyst loop: SQL, data cleaning, metrics, dashboards, statistics, business interpretation, data quality, and stakeholder communication.',
+    questionAngles: ['SQL queries', 'data cleaning', 'dashboard design', 'business metrics', 'statistics basics', 'data quality checks', 'insight communication'],
+  },
+  ai_ml: {
+    label: 'AI/ML Engineer',
+    questionTemplate: 'Use an AI/ML loop: data preprocessing, feature engineering, model selection, evaluation metrics, embeddings/RAG when relevant, deployment, monitoring, and responsible AI.',
+    questionAngles: ['data preprocessing', 'model selection', 'evaluation metrics', 'feature engineering', 'embeddings and retrieval', 'model deployment', 'monitoring and bias'],
+  },
+  qa: {
+    label: 'QA Engineer',
+    questionTemplate: 'Use a QA loop: test planning, test case design, defect reporting, API testing, automation, regression strategy, edge cases, and release risk.',
+    questionAngles: ['test case design', 'bug reporting', 'API testing', 'automation strategy', 'regression testing', 'edge cases', 'release readiness'],
+  },
+  hr_behavioral: {
+    label: 'HR / Behavioral',
+    questionTemplate: 'Use an HR loop: introduction, motivation, strengths, conflict, teamwork, learning agility, communication, career goals, company fit, and STAR examples.',
+    questionAngles: ['self introduction', 'motivation', 'teamwork', 'conflict handling', 'strengths and weaknesses', 'learning agility', 'career goals'],
+  },
+};
+
+const isInterviewMode = (mode?: string): mode is InterviewMode =>
+  Boolean(mode && Object.prototype.hasOwnProperty.call(INTERVIEW_MODE_GUIDANCE, mode));
+
+export const getInterviewModeGuidance = (mode?: string) =>
+  isInterviewMode(mode) ? INTERVIEW_MODE_GUIDANCE[mode] : INTERVIEW_MODE_GUIDANCE.sde;
 
 export type SkillGraphNode = {
   skill: string;
@@ -109,6 +177,14 @@ export type AnswerEvaluation = {
   missingSignals?: string[];
 };
 
+export type AdaptiveFollowUpDecision = {
+  action: NonNullable<AnswerEvaluation['nextAction']>;
+  focus: string;
+  reason: string;
+  targetDifficulty: NonNullable<GeneratedQuestion['difficulty']>;
+  followUpIntent: NonNullable<GeneratedQuestion['followUpIntent']>;
+};
+
 export type QuestionAnalysisItem = {
   question: string;
   answer: string;
@@ -153,6 +229,12 @@ export type InterviewReport = {
   hiringRecommendationReason?: string;
 };
 
+export type AdaptiveTurnResponse = {
+  candidateMessageIntent: 'answer' | 'question_to_interviewer';
+  interviewerReply?: string | null;
+  question: GeneratedQuestion;
+};
+
 export type AdaptiveQuestionContext = InterviewContext & {
   previousQuestions: GeneratedQuestion[];
   transcript: Array<{
@@ -168,6 +250,7 @@ export type AdaptiveQuestionContext = InterviewContext & {
   lastQuestion: GeneratedQuestion;
   lastAnswer: string;
   lastEvaluation: AnswerEvaluation;
+  followUpDecision?: AdaptiveFollowUpDecision;
   targetQuestionCount: number;
   currentQuestionIndex: number;
   jdProfile?: JobDescriptionProfile;
@@ -185,6 +268,10 @@ export type CompanyInterviewGuidance = {
   systemDesignExpectations: string;
   technicalDepth: string;
   caution: string;
+  researchSource?: 'static' | 'web' | 'static+web';
+  researchedAt?: string;
+  researchQueries?: string[];
+  researchInsights?: string[];
 };
 
 export type ResumeInterviewProfile = {
@@ -510,6 +597,36 @@ const TECHNICAL_TERM_REPLACEMENTS: Array<[RegExp, string]> = [
   [/\bgit\s*hub\b/gi, 'GitHub'],
 ];
 
+const SAFE_CONTEXT_TERM_MIN_LENGTH = 5;
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const levenshtein = (a: string, b: string) => {
+  const matrix = Array.from({ length: b.length + 1 }, (_, i) => [i]);
+  for (let j = 0; j <= a.length; j += 1) matrix[0][j] = j;
+  for (let i = 1; i <= b.length; i += 1) {
+    for (let j = 1; j <= a.length; j += 1) {
+      matrix[i][j] =
+        b.charAt(i - 1) === a.charAt(j - 1)
+          ? matrix[i - 1][j - 1]
+          : Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
+    }
+  }
+  return matrix[b.length][a.length];
+};
+
+const replaceSafeContextTerm = (text: string, term: string) => {
+  if (term.length < SAFE_CONTEXT_TERM_MIN_LENGTH) return text;
+
+  const pattern = new RegExp(`\\b${escapeRegExp(term).replace(/\s+/g, '\\s+')}\\b`, 'gi');
+  return text.replace(pattern, (match) => {
+    if (match.toLowerCase() === term.toLowerCase()) return term;
+    const distance = levenshtein(match.toLowerCase(), term.toLowerCase());
+    const maxDistance = term.length >= 8 ? 2 : 1;
+    return distance <= maxDistance ? term : match;
+  });
+};
+
 export const normalizeTechnicalTranscript = (text: string, context?: TranscriptionContext) => {
   let normalized = text.replace(/\s+/g, ' ').trim();
   TECHNICAL_TERM_REPLACEMENTS.forEach(([pattern, replacement]) => {
@@ -518,38 +635,79 @@ export const normalizeTechnicalTranscript = (text: string, context?: Transcripti
 
   const contextTerms = unique([
     ...(context?.resumeSkills ?? []),
+    ...(context?.resumeProjects ?? []),
     ...extractJobDescriptionTechnologies(context?.jobDescription),
   ]).sort((a, b) => b.length - a.length);
 
   contextTerms.forEach((term) => {
-    if (term.length < 3) return;
-    const relaxed = term
-      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      .replace(/\\\./g, '\\s*\\.?\\s*')
-      .replace(/\s+/g, '\\s+');
-    normalized = normalized.replace(new RegExp(`\\b${relaxed}\\b`, 'gi'), term);
+    normalized = replaceSafeContextTerm(normalized, term);
   });
 
   return normalized;
 };
 
+const WHISPER_PROMPT_MAX_CHARS = 800;
+const MIN_INTERVIEW_AUDIO_BYTES = 1200;
+
+const extractQuestionVocabulary = (question?: string) => {
+  if (!question?.trim()) return [] as string[];
+  return extractJobDescriptionTechnologies(question);
+};
+
+/**
+ * Groq/OpenAI Whisper uses `prompt` as style + vocabulary priming — NOT instructions.
+ * Long "do not hallucinate" text can bleed into the transcript or skew output.
+ * We prime with a short, natural candidate-answer sentence containing expected terms.
+ */
+export const buildGroqWhisperPrompt = (context?: TranscriptionContext): string => {
+  const terms = unique(
+    [
+      ...(context?.resumeSkills ?? []),
+      ...(context?.resumeProjects ?? []),
+      ...extractJobDescriptionTechnologies(context?.jobDescription),
+      ...extractQuestionVocabulary(context?.currentQuestion),
+      context?.roleDomain,
+      context?.targetCompany,
+    ].filter((term): term is string => Boolean(term?.trim())),
+  )
+    .map((term) => term.trim())
+    .filter((term) => term.length >= 3 && term.length <= 48)
+    .slice(0, 18);
+
+  if (terms.length >= 3) {
+    const [first, second, third, ...rest] = terms;
+    const tail = rest.slice(0, 6).join(', ');
+    const sample = tail
+      ? `In my project I used ${first}, ${second}, and ${third}, along with ${tail}. I explained the architecture, trade-offs, and testing approach.`
+      : `In my project I used ${first}, ${second}, and ${third}. I explained the design, implementation, and results.`;
+    return sample.slice(0, WHISPER_PROMPT_MAX_CHARS);
+  }
+
+  return 'In my internship I worked on REST APIs, a SQL database, and backend services. I handled debugging, testing, and deployment.'.slice(
+    0,
+    WHISPER_PROMPT_MAX_CHARS,
+  );
+};
+
 const buildTranscriptionPrompt = (context?: TranscriptionContext) => {
+  if (env.AI_PROVIDER === 'groq') {
+    return buildGroqWhisperPrompt(context);
+  }
+
   const terms = Array.from(
     new Set([
       ...(context?.resumeSkills ?? []),
+      ...(context?.resumeProjects ?? []),
       ...extractJobDescriptionTechnologies(context?.jobDescription),
-    ].map((term) => term.trim()).filter(Boolean)),
-  ).slice(0, 40);
+      ...extractQuestionVocabulary(context?.currentQuestion),
+    ]
+      .map((term) => term.trim())
+      .filter(Boolean)),
+  ).slice(0, 30);
 
-  const parts = [
-    'The audio is a candidate answering a mock technical interview question in English.',
-    context?.roleDomain ? `Role/domain: ${context.roleDomain}.` : '',
-    context?.currentQuestion ? `Current question: ${context.currentQuestion}` : '',
-    terms.length ? `Important technical words to recognize exactly: ${terms.join(', ')}.` : '',
-    'Transcribe technical terms, product names, acronyms, and programming language names accurately.',
-  ].filter(Boolean);
-
-  return parts.join('\n').slice(0, 1800);
+  return terms.length
+    ? `Technical interview answer mentioning ${terms.join(', ')}.`
+    : 'Technical interview answer about software engineering projects and experience.';
 };
 
 const extractJson = <T>(text: string): T => {
@@ -557,7 +715,13 @@ const extractJson = <T>(text: string): T => {
   return JSON.parse(cleaned) as T;
 };
 
-const generateJson = async <T>(prompt: string, fallback: T): Promise<T> => {
+const generateJson = async <T>(
+  prompt: string,
+  fallback: T,
+  options?: { systemPrompt?: string },
+): Promise<T> => {
+  const systemContent = options?.systemPrompt ?? 'Return strict JSON only. Do not include markdown.';
+
   try {
     if (env.AI_PROVIDER === 'openai' && openai) {
       const client = openai as unknown as {
@@ -572,7 +736,7 @@ const generateJson = async <T>(prompt: string, fallback: T): Promise<T> => {
 
       const response = await client.responses.create({
         model: env.OPENAI_MODEL,
-        input: prompt,
+        input: `${systemContent}\n\n${prompt}`,
         text: { format: { type: 'json_object' } },
       });
 
@@ -583,7 +747,7 @@ const generateJson = async <T>(prompt: string, fallback: T): Promise<T> => {
       const response = await groq.chat.completions.create({
         model: env.GROQ_MODEL,
         messages: [
-          { role: 'system', content: 'Return strict JSON only. Do not include markdown.' },
+          { role: 'system', content: systemContent },
           { role: 'user', content: prompt },
         ],
         response_format: { type: 'json_object' },
@@ -601,11 +765,24 @@ const generateJson = async <T>(prompt: string, fallback: T): Promise<T> => {
 export const transcribeAudio = async (file: Express.Multer.File, context?: TranscriptionContext) => {
   const client = env.AI_PROVIDER === 'groq' ? groq : openai;
   const model = env.AI_PROVIDER === 'groq' ? env.GROQ_WHISPER_MODEL : env.WHISPER_MODEL;
+  const provider = env.AI_PROVIDER;
 
   if (!client) {
     return {
-      text: `Transcription unavailable locally for ${file.originalname}. Configure ${env.AI_PROVIDER.toUpperCase()}_API_KEY to enable speech recognition.`,
+      text: `Transcription unavailable locally for ${file.originalname}. Configure ${provider.toUpperCase()}_API_KEY to enable speech recognition.`,
       model,
+      provider,
+    };
+  }
+
+  if (file.buffer.length < MIN_INTERVIEW_AUDIO_BYTES) {
+    return {
+      text: '',
+      rawText: '',
+      model,
+      provider,
+      promptApplied: false,
+      warning: 'Audio clip was too short to transcribe reliably.',
     };
   }
 
@@ -617,15 +794,22 @@ export const transcribeAudio = async (file: Express.Multer.File, context?: Trans
     language: 'en',
     prompt,
     temperature: 0,
+    response_format: 'json',
   } as any);
 
+  const rawText = typeof response.text === 'string' ? response.text.trim() : '';
+
   return {
-    text: normalizeTechnicalTranscript(response.text, context),
-    rawText: response.text,
+    text: normalizeTechnicalTranscript(rawText, context),
+    rawText,
     model,
+    provider,
     promptApplied: Boolean(prompt),
   };
 };
+
+/** Mock interview answer STT — Groq Whisper when AI_PROVIDER=groq. Sarvam STT is separate (image-description route). */
+export const transcribeInterviewAnswer = transcribeAudio;
 
 const firstTranscript = (value: unknown): string | undefined => {
   if (!value) return undefined;
@@ -711,7 +895,9 @@ const fallbackInitialQuestions = (
   questionCount: number,
   jdProfile: JobDescriptionProfile,
 ): GeneratedQuestion[] => {
+  const modeGuidance = getInterviewModeGuidance(context.interviewMode);
   const topics = unique([
+    ...modeGuidance.questionAngles,
     ...jdProfile.requiredSkills,
     ...jdProfile.toolsTechnologies,
     ...(context.resumeSkills ?? []),
@@ -731,8 +917,8 @@ const fallbackInitialQuestions = (
       followUpIntent: 'bridge-topic',
     },
     {
-      question: `The job description emphasizes ${primaryTopic}. Can you explain how you have used it in ${projectAnchor}?`,
-      expectedSignals: ['specific project context', 'hands-on usage', 'clear technical terminology'],
+      question: `For a ${modeGuidance.label} interview, the role emphasizes ${primaryTopic}. Can you explain how you have used it in ${projectAnchor}?`,
+      expectedSignals: ['specific project context', 'hands-on usage', 'mode-relevant technical terminology'],
       questionType: 'technical',
       resumeReference: `JD skill: ${primaryTopic}`,
       difficulty: 'easy-medium',
@@ -740,7 +926,7 @@ const fallbackInitialQuestions = (
       followUpIntent: 'deepen',
     },
     {
-      question: `How would you compare ${primaryTopic} with ${secondaryTopic} when deciding how to build a production feature?`,
+      question: `How would you compare ${primaryTopic} with ${secondaryTopic} when making a ${modeGuidance.label} design decision?`,
       expectedSignals: ['trade-off reasoning', 'practical constraints', 'production awareness'],
       questionType: 'technical',
       resumeReference: `JD skill graph: ${primaryTopic} and ${secondaryTopic}`,
@@ -749,7 +935,7 @@ const fallbackInitialQuestions = (
       followUpIntent: 'challenge',
     },
     {
-      question: `Imagine a feature using ${primaryTopic} starts failing in production. How would you investigate and communicate the issue?`,
+      question: `Imagine work involving ${primaryTopic} starts failing in a real ${modeGuidance.label} scenario. How would you investigate and communicate the issue?`,
       expectedSignals: ['debugging steps', 'observability', 'stakeholder communication'],
       questionType: 'situational',
       resumeReference: `JD responsibility: ${jdProfile.responsibilities[0] ?? 'production ownership'}`,
@@ -774,120 +960,73 @@ const fallbackInitialQuestions = (
   }));
 };
 
-export const generateInterviewQuestions = (context: InterviewContext) => {
-  const questionCount = plannedQuestionCountForDuration(context.duration);
+const buildPromptBuilderInput = (
+  context: InterviewContext,
+  jdProfile?: JobDescriptionProfile,
+  companyQuestionBank?: CompanyQuestionEntry[] | null,
+  companyBankMode: 'verified' | 'generic' | 'none' = 'none',
+) => {
+  const modeGuidance = getInterviewModeGuidance(context.interviewMode);
+  const candidateResume =
+    context.resumeProfile ??
+    ({
+      summary: context.resumeSummary,
+      skills: context.resumeSkills,
+      rawText: context.resumeText,
+    } as const);
 
-  // Unique session seed varies phrasing only; source topics must still come from the resume, JD, role, company, or answers.
-  const sessionSeed = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  return {
+    candidateResume,
+    jobDescription: context.jobDescription,
+    jdProfile,
+    company: context.targetCompany,
+    role: context.roleDomain,
+    experienceLevel: mapExperienceLevel(context.roleLevel),
+    companyQuestionBank: companyQuestionBank ?? null,
+    companyBankMode,
+    interviewType: mapInterviewPromptType(context.interviewType ?? context.interviewStyle),
+    personaId: context.personaId,
+    personaPersonality: context.personaPersonality,
+    interviewModeLabel: modeGuidance.label,
+    interviewModeTemplate: modeGuidance.questionTemplate,
+    complexity: context.complexity,
+    roleLevel: context.roleLevel,
+  };
+};
 
-  const personaBlock = context.personaPersonality
-    ? `\nYOU ARE: A ${context.personaId ?? 'professional'} interviewer.\nPersonality: ${context.personaPersonality}\nAsk questions in your persona's natural tone and style.\n`
-    : context.personaId
-    ? `\nInterviewer persona: ${PERSONA_PERSONALITIES[context.personaId] ?? 'Professional interviewer'}\n`
-    : '';
+const resolveCompanyQuestionBank = (context: InterviewContext) => {
+  const bankResult = getCompanyQuestions(
+    context.targetCompany,
+    context.roleDomain,
+    mapExperienceLevel(context.roleLevel),
+    8,
+  );
 
-  // Build rich resume context block — use all available resume data
-  let resumeBlock = '';
-  if (context.resumeSummary || context.resumeText) {
-    const skills = (context.resumeSkills ?? []).join(', ');
-    resumeBlock = `
-CANDIDATE RESUME — read every detail carefully:
-${context.resumeSummary ? `Summary: ${context.resumeSummary}` : ''}
-${context.resumeText ? `\nFull resume text:\n${context.resumeText}` : ''}
-
-IDENTIFIED SKILLS: ${skills || 'See resume text above'}
-EXPERIENCE LEVEL: ${context.resumeExperienceLevel ?? context.roleLevel}
-
-SUGGESTED QUESTION ANGLES (do NOT copy these verbatim — use them as inspiration and create FRESH, rephrased variants):
-${(context.resumeSuggestedQuestions ?? []).map((q, i) => `${i + 1}. ${q}`).join('\n')}
-`;
-  } else {
-    resumeBlock = `\nRole domain: ${context.roleDomain}\nRole level: ${context.roleLevel}\n`;
+  if (!bankResult) {
+    return { questions: null as CompanyQuestionEntry[] | null, mode: 'none' as const };
   }
 
-  const jdTechnologies = extractJobDescriptionTechnologies(context.jobDescription);
+  return { questions: bankResult.questions, mode: bankResult.mode };
+};
+
+export const generateInterviewQuestions = (context: InterviewContext) => {
+  const questionCount = plannedQuestionCountForDuration(context.duration);
+  const sessionSeed = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const jdProfile = buildJobDescriptionProfile(context.jobDescription, {
     roleLevel: context.roleLevel,
     roleDomain: context.roleDomain,
     resumeSkills: context.resumeSkills,
   });
-  const jdTechnologyTargetCount = jdTechnologies.length
-    ? Math.min(questionCount - 1, Math.max(2, Math.ceil(questionCount * 0.7)))
-    : 0;
-
-  const jobDescriptionBlock = context.jobDescription?.trim()
-    ? `
-JOB DESCRIPTION — align the interview with these responsibilities and requirements:
-${context.jobDescription.trim()}
-${jdTechnologies.length ? `\nDETECTED JD TECHNOLOGIES: ${jdTechnologies.join(', ')}` : ''}
-JD SKILL GRAPH:
-${JSON.stringify(jdProfile, null, 2)}
-`
-    : '';
-
-  const styleInstruction =
-    context.interviewType === 'Behavioural'
-      ? 'ALL questions must use the STAR method (Situation / Task / Action / Result). Start each with "Tell me about a time when..." or "Describe a situation where..."'
-      : context.interviewType === 'Technical'
-      ? 'ALL questions must probe deep technical knowledge — architecture decisions, specific technologies named in the resume, trade-offs, debugging strategies, system design.'
-      : `Mix questions: roughly half STAR behavioural (starting "Tell me about a time...") and half deep technical questions targeting specific skills from the resume.`;
-
-  const complexityNote =
-    context.complexity === 'Beginner'
-      ? 'Entry-level complexity: focus on fundamentals, coursework, personal projects, and learning mindset. Avoid deep system design.'
-      : context.complexity === 'Advanced'
-      ? 'Senior/advanced complexity: include system design, scalability trade-offs, leadership, cross-functional influence, and strategic decisions.'
-      : 'Intermediate complexity: blend theory with practical real-world examples and moderate system design thinking.';
+  const { questions: companyQuestionBank, mode: companyBankMode } = resolveCompanyQuestionBank(context);
+  const systemPrompt = buildInterviewSystemPrompt(
+    buildPromptBuilderInput(context, jdProfile, companyQuestionBank, companyBankMode),
+  );
+  const userPrompt = buildInitialQuestionsUserPrompt(questionCount, sessionSeed);
 
   return generateJson<{ questions: GeneratedQuestion[] }>(
-    `SESSION ID: ${sessionSeed}  ← use this only to vary wording; do not invent random topics.
-
-You are generating ${questionCount} interview questions for a LIVE interview session. These questions will be asked aloud to the candidate.
-
-You are the Interview Intelligence Engine of Fluent_AI. Behave like an experienced software engineering interviewer who has carefully read the candidate's resume before Question 1.
-
-${personaBlock}
-${resumeBlock}
-${jobDescriptionBlock}
-
-INTERVIEW TYPE: ${context.interviewType ?? 'Mixed'} | ROLE: ${context.roleDomain} ${context.roleLevel} | COMPLEXITY: ${context.complexity ?? 'Intermediate'} | TARGET COMPANY: ${context.targetCompany ?? 'None'}
-STYLE RULE: ${styleInstruction}
-COMPLEXITY RULE: ${complexityNote}
-COMPANY RULE: If a target company is provided, align follow-up questions with that company's likely interview style, service/product context, and role expectations while still grounding questions in the resume.
-JD RULE: If a job description is provided, the JD is the primary source. Use the JD SKILL GRAPH to cover required skills, responsibilities, seniority, domain knowledge, tools, soft skills, and keywords before generic role topics.
-JD TECHNOLOGY RULE: If DETECTED JD TECHNOLOGIES is present, at least ${jdTechnologyTargetCount || 'most'} non-introduction questions MUST directly test those technologies. Name the technology in the question or resumeReference. If the resume does not mention a JD technology, ask a fundamentals, project-transfer, or scenario question for that JD technology instead of ignoring it.
-DIFFICULTY RULE: Stage the interview naturally: easy warm-up, easy-medium, medium, medium-hard, scenario, problem-solving, behavioral. Early questions build confidence; later questions probe depth.
-RESUME ANALYSIS RULE: Before forming questions, extract education, CGPA, branch, projects, internship/work experience, languages, frameworks, libraries, databases, cloud, AI/ML, certifications, achievements, developer tools, coursework, soft skills, and interests when present. Only ask from extracted evidence, selected role, selected company, JD, or prior candidate answers.
-QUESTION SOURCE RULE: Use public interview patterns only as formats, such as architecture walkthroughs, coding reasoning, debugging, scalability, performance, SQL, OS fundamentals, and STAR behavior. Do not reuse another candidate's project names, internships, or example questions unless they are explicitly present in this candidate's resume/JD.
-FLOW RULE: Follow this arc unless the JD requires a stronger emphasis: self introduction, resume overview, technical skills, projects, internship/work experience, certifications, role-based questions, company-specific questions, behavioral, HR.
-PROJECT RULE: For every important project, start with architecture and end-to-end flow before asking about individual technologies, challenges, optimizations, scalability, or deployment.
-FOLLOW-UP RULE: A follow-up may only come from the candidate's previous answer or a topic already present in the resume/JD/roadmap.
-
-ABSOLUTE RULES — violating any rule makes the output unusable:
-1. Generate EXACTLY ${questionCount} questions — no more, no fewer
-2. Every question MUST target something SPECIFIC from this resume or the provided job description. Prefer questions that connect both. No generic or copy-paste questions.
-3. NO two questions may be semantically similar or ask about the same topic
-4. Questions MUST be varied — different skills, different question types, different depths
-5. Do NOT copy the suggested question angles verbatim — rephrase and combine them creatively
-6. Never ask standalone definition questions like "What is OOP?", "What is Python?", "What is SQL?", or "Difference between GET and POST?". Connect fundamentals to a resume project, coursework, role scenario, or JD responsibility.
-7. Scale difficulty appropriately to ${context.roleLevel} level
-8. Use the SESSION ID above only for wording variety. Question reasons must come from the resume, JD, role, company, or prior answer context.
-9. If an example question list exists in resumeSuggestedQuestions, use it only to infer interview style. Never treat it as a universal script for future candidates.
-
-Each question object MUST have ALL these fields:
-- question: string (the exact question text, ready to speak aloud)
-- expectedSignals: string[] (2-4 bullet points: what a strong answer must include)
-- questionType: "behavioural" | "technical" | "situational"
-- resumeReference: string (which specific skill/project/role/tech this targets)
-- difficulty: "easy" | "easy-medium" | "medium" | "medium-hard" | "scenario" | "problem-solving" | "behavioral"
-- topic: string (one primary skill/domain this question covers)
-- followUpIntent: "deepen" | "clarify" | "bridge-topic" | "challenge" | "recover-confidence"
-
-Return ONLY valid JSON. No markdown fences, no preamble, no explanation.
-{
-  "questions": [ ... ]
-}`,
+    userPrompt,
     { questions: fallbackInitialQuestions(context, questionCount, jdProfile) },
+    { systemPrompt },
   );
 };
 
@@ -958,9 +1097,15 @@ const fallbackComparisonEvaluation = (
     ...(wordCount >= 30 ? ['Gave enough detail for evaluation.'] : []),
   ];
 
+  const whatWorked = signalCoverage.length
+    ? `Correct: covered ${signalCoverage.slice(0, 2).join(', ')}.`
+    : 'Correct: the answer attempted the question, but it did not clearly cover the expected signals.';
+  const whatWasMissing = `Missing: ${missingConcepts.slice(0, 2).join(', ')}.`;
+  const improvementDirection = `Improve by explaining ${missingConcepts[0]} with a concrete project example, trade-off, and validation step.`;
+
   return {
     score,
-    feedback: `The answer was compared against the expected signals for ${context?.topic || context?.roleDomain || 'this question'}. It covered ${signalCoverage.length}/${Math.max(1, expectedSignals.length)} expected points and needs stronger depth around ${missingConcepts[0]}.`,
+    feedback: `${whatWorked} ${whatWasMissing} ${improvementDirection} The ideal answer should be structured, technically accurate, and backed by evidence.`,
     idealAnswer,
     samplePerfectAnswer: idealAnswer,
     conceptsCovered: signalCoverage,
@@ -974,8 +1119,8 @@ const fallbackComparisonEvaluation = (
       technicalMistakes: [],
       communication: wordCount < 25 ? 'The answer needs clearer structure and more complete sentences.' : 'The answer is understandable; it can improve by using a clearer beginning, middle, and conclusion.',
       confidence: /\b(maybe|i think|not sure|probably)\b/i.test(answer) ? 'The wording sounds tentative; use more decisive language after stating assumptions.' : 'The answer sounds reasonably confident based on wording.',
-      areasToImprove: missingConcepts.map((item) => `Add a precise explanation for ${item}.`).slice(0, 4),
-      nextLearningSuggestions: missingConcepts.map((item) => `Review ${item} and practice explaining it with a project example.`).slice(0, 4),
+      areasToImprove: missingConcepts.map((item) => `Concept to improve: ${item}. Explain what it means, why it matters, and how you used or would use it.`).slice(0, 4),
+      nextLearningSuggestions: missingConcepts.map((item) => `Practice an ideal-answer version for ${item}: definition, project example, trade-off, and validation.`).slice(0, 4),
       practicalUnderstanding: /\b(project|built|implemented|deployed|tested|used)\b/i.test(answer)
         ? 'The answer includes some practical framing.'
         : 'The answer should include a practical implementation or project example.',
@@ -1011,7 +1156,7 @@ export const evaluateAnswer = (question: string, answer: string, context?: Answe
     const idealAnswer = buildIdealAnswerFallback(question, context);
     return Promise.resolve<AnswerEvaluation>({
       score: 0,
-      feedback: 'No answer was provided for this question. Skipped or empty answers score zero.',
+      feedback: 'No answer was provided. Correct coverage: none. Missing: all expected concepts for this question. Improve by giving a structured answer with a direct explanation, one project or practical example, and the key trade-offs; review the ideal answer below.',
       idealAnswer,
       samplePerfectAnswer: idealAnswer,
       conceptsCovered: [],
@@ -1025,7 +1170,7 @@ export const evaluateAnswer = (question: string, answer: string, context?: Answe
         technicalMistakes: [],
         communication: 'No communication could be evaluated because no answer was provided.',
         confidence: 'No confidence could be evaluated because no answer was provided.',
-        areasToImprove: ['Answer the question with a structured explanation and at least one relevant example.'],
+        areasToImprove: ['Concept to improve: the full question topic. Answer with a direct explanation, one relevant example, and the expected signals.'],
         nextLearningSuggestions: ['Review the sample perfect answer and practice a 60-90 second response aloud.'],
         practicalUnderstanding: 'No practical understanding was demonstrated.',
         interviewReadiness: 'Not interview-ready for this question until a substantive answer is provided.',
@@ -1066,6 +1211,7 @@ IDEAL ANSWER REQUIREMENTS:
 - The ideal answer must be professional, interview quality, easy to understand, and cover all expected concepts.
 - The samplePerfectAnswer must NOT personalize to the candidate and must NOT copy candidate wording.
 - Compare ideal answer vs candidate answer.
+- Feedback must clearly state: what was correct, what was missing, which concept to improve, and what an ideal answer should include.
 
 SCORING RULES (be strict and honest — do NOT inflate scores):
 - Score 0–20  → No meaningful answer, completely off-topic, or just a few words
@@ -1099,7 +1245,7 @@ IMPORTANT:
 Return ONLY a JSON object:
 {
   "score": number (0-100, strict),
-  "feedback": string (2-3 dynamic sentences comparing candidate answer against the ideal answer; no templates),
+  "feedback": string (2-4 dynamic sentences comparing candidate answer against the ideal answer; explicitly mention what was correct, what was missing, what concept to improve, and what the ideal answer should include),
   "idealAnswer": string (internal ideal answer used for comparison),
   "samplePerfectAnswer": string (professionally written perfect answer for the candidate to learn from; generic, not personalized),
   "conceptsCovered": string[],
@@ -1173,6 +1319,84 @@ const nextDifficulty = (
   return DIFFICULTY_ORDER[clampDifficultyIndex(Math.max(safeIndex, DIFFICULTY_ORDER.indexOf(difficultyForPosition(position, total))))];
 };
 
+const firstMeaningfulGap = (evaluation: AnswerEvaluation) =>
+  [
+    ...(evaluation.missingConcepts ?? []),
+    ...(evaluation.missingSignals ?? []),
+    ...(evaluation.dynamicFeedback?.missingConcepts ?? []),
+    ...(evaluation.technicalMistakes ?? []),
+  ]
+    .map((item) => canonicalize(item))
+    .find((item) => item && !/no clear gap|not available|none/i.test(item)) ?? 'the missing part of the answer';
+
+export const decideAdaptiveFollowUp = ({
+  evaluation,
+  lastQuestion,
+  position,
+  total,
+}: {
+  evaluation: AnswerEvaluation;
+  lastQuestion?: GeneratedQuestion;
+  position: number;
+  total: number;
+}): AdaptiveFollowUpDecision => {
+  const score = evaluation.score ?? 0;
+  const focus = firstMeaningfulGap(evaluation);
+  const targetDifficulty = nextDifficulty(lastQuestion?.difficulty, evaluation, position, total);
+  const incomplete =
+    evaluation.nextAction === 'clarify' ||
+    (evaluation.completenessScore ?? 100) < 65 ||
+    Boolean((evaluation.missingConcepts?.length ?? 0) || (evaluation.missingSignals?.length ?? 0));
+
+  if (evaluation.nextAction === 'reduce_difficulty' || score < 40) {
+    return {
+      action: 'reduce_difficulty',
+      focus,
+      reason: 'Weak answer: ask an easier clarifying question that rebuilds confidence.',
+      targetDifficulty,
+      followUpIntent: 'recover-confidence',
+    };
+  }
+
+  if (incomplete && score < 75) {
+    return {
+      action: 'clarify',
+      focus,
+      reason: 'Incomplete answer: target the missing concept before moving on.',
+      targetDifficulty,
+      followUpIntent: 'clarify',
+    };
+  }
+
+  if (evaluation.nextAction === 'challenge' || score >= 85) {
+    return {
+      action: 'challenge',
+      focus: lastQuestion?.topic || focus,
+      reason: 'Strong answer: increase depth with a technical challenge.',
+      targetDifficulty,
+      followUpIntent: 'challenge',
+    };
+  }
+
+  if (evaluation.nextAction === 'ask_deeper' || score >= 70) {
+    return {
+      action: 'ask_deeper',
+      focus: lastQuestion?.topic || focus,
+      reason: 'Strong answer: ask a deeper follow-up on the same topic.',
+      targetDifficulty,
+      followUpIntent: 'deepen',
+    };
+  }
+
+  return {
+    action: 'move_topic',
+    focus,
+    reason: 'Adequate answer: continue coverage with the next planned topic.',
+    targetDifficulty,
+    followUpIntent: 'bridge-topic',
+  };
+};
+
 const topicCoverage = (transcript: AdaptiveQuestionContext['transcript']) => {
   const coverage = new Map<string, { asked: number; averageScore: number }>();
   transcript.forEach((item) => {
@@ -1226,8 +1450,10 @@ const roadmapTopicsInOrder = (context: AdaptiveQuestionContext) =>
   unique((context.interviewRoadmap?.sections ?? []).flatMap((section) => section.topics));
 
 const chooseCoverageTopic = (context: AdaptiveQuestionContext) => {
+  const modeGuidance = getInterviewModeGuidance(context.interviewMode);
   const jdTopics = unique([
     ...roadmapTopicsInOrder(context),
+    ...modeGuidance.questionAngles,
     ...(context.jdProfile?.requiredSkills ?? []),
     ...(context.jdProfile?.toolsTechnologies ?? []),
     ...(context.jdProfile?.domainKnowledge ?? []),
@@ -1252,40 +1478,15 @@ const chooseCoverageTopic = (context: AdaptiveQuestionContext) => {
   );
 };
 
-const transitionForAction = (action: AnswerEvaluation['nextAction'], score: number) => {
-  if (action === 'reduce_difficulty' || score < 40) return "Let's make that more concrete.";
-  if (action === 'clarify' || score < 60) return 'I want to clarify one part of that.';
-  if (action === 'challenge' || score >= 85) return "That's a strong answer. Let's stretch it further.";
-  if (action === 'ask_deeper' || score >= 70) return "Good. Let's go one level deeper.";
-  return "Thanks. Let's connect that to another part of the role.";
-};
-
-const fallbackAdaptiveQuestion = (context: AdaptiveQuestionContext): GeneratedQuestion => {
-  const sameTopic = context.lastQuestion.topic || context.lastQuestion.resumeReference || context.roleDomain;
-  const exhausted = isTopicExhausted(context, sameTopic);
-  const action = exhausted ? 'move_topic' : context.lastEvaluation.nextAction ?? 'move_topic';
-  const difficulty = nextDifficulty(
-    context.lastQuestion.difficulty,
-    context.lastEvaluation,
-    context.currentQuestionIndex + 1,
-    context.targetQuestionCount,
-  );
-  const coverageTopic = chooseCoverageTopic(context);
-  const topic = action === 'ask_deeper' || action === 'clarify' || action === 'challenge' || action === 'reduce_difficulty'
-    ? sameTopic
-    : coverageTopic;
-  const projectTransition = projectForTopic(context, sameTopic)
-    ? "Great. Let's move to another project."
-    : sectionForTopic(context, coverageTopic)?.key === 'certifications'
-    ? `I noticed ${coverageTopic} on your resume.`
-    : sectionForTopic(context, coverageTopic)?.key === 'internship'
-    ? "I'd like to discuss your internship now."
-    : sectionForTopic(context, coverageTopic)?.key === 'company_specific'
-    ? "Let's move to some company-specific questions."
-    : sectionForTopic(context, coverageTopic)?.key === 'behavioral'
-    ? "Now I'd like to ask a behavioral question."
-    : `I see ${coverageTopic} in your profile or target role.`;
-  const transition = action === 'move_topic' ? projectTransition : transitionForAction(action, context.lastEvaluation.score);
+const buildNaturalFallbackQuestion = (
+  context: AdaptiveQuestionContext,
+  action: NonNullable<AnswerEvaluation['nextAction']>,
+  topic: string,
+  focus: string,
+  difficulty: NonNullable<GeneratedQuestion['difficulty']>,
+): GeneratedQuestion => {
+  const modeGuidance = getInterviewModeGuidance(context.interviewMode);
+  const projectName = context.resumeProfile?.projects?.[0] ?? 'one of your projects';
   const questionType: GeneratedQuestion['questionType'] =
     difficulty === 'behavioral'
       ? 'behavioural'
@@ -1295,16 +1496,16 @@ const fallbackAdaptiveQuestion = (context: AdaptiveQuestionContext): GeneratedQu
 
   const question =
     action === 'reduce_difficulty'
-      ? `${transition} In your own words, when would you use ${topic}, and what is one simple example from your experience?`
+      ? `Can you walk me through ${focus} in simpler terms, maybe using ${projectName} as an example?`
       : action === 'clarify'
-      ? `${transition} Can you walk me through the missing step or trade-off in your previous answer about ${topic}?`
+      ? `You brought up ${topic}, but I'd like more detail on ${focus}. Can you give me a concrete example?`
       : action === 'challenge' || difficulty === 'scenario'
-      ? `${transition} Suppose ${topic} has to handle a production failure or a sudden scale increase. How would you diagnose it and what trade-offs would you consider?`
+      ? `Suppose ${topic} fails under load in production. How would you diagnose it, and what trade-offs would you weigh?`
       : difficulty === 'problem-solving'
-      ? `${transition} Design a practical solution using ${topic}; cover the approach, edge cases, time or space complexity, and one optimization.`
+      ? `For a ${modeGuidance.label} scenario involving ${topic}, outline your approach, edge cases, and complexity.`
       : difficulty === 'behavioral'
-      ? `${transition} Tell me about a time you had to make a difficult technical decision related to ${topic}. What was your role, action, result, and what would you do differently now?`
-      : `${transition} How does ${topic} work under the hood, and what mistake should engineers avoid when using it?`;
+      ? `Tell me about a time you had to make a tough call related to ${topic}. What was the situation, your action, and the result?`
+      : `In your work on ${projectName}, how did ${topic} factor in, and what would you do differently today?`;
 
   return {
     question,
@@ -1313,7 +1514,7 @@ const fallbackAdaptiveQuestion = (context: AdaptiveQuestionContext): GeneratedQu
         ? ['STAR structure', 'specific role and action', 'outcome and reflection']
         : ['accurate concept explanation', 'practical example', 'trade-offs or edge cases'],
     questionType,
-    resumeReference: action === 'move_topic' ? `Coverage topic: ${topic}` : `Follow-up on: ${sameTopic}`,
+    resumeReference: `Follow-up on: ${topic}`,
     difficulty,
     topic,
     followUpIntent:
@@ -1323,106 +1524,126 @@ const fallbackAdaptiveQuestion = (context: AdaptiveQuestionContext): GeneratedQu
         ? 'bridge-topic'
         : action === 'ask_deeper'
         ? 'deepen'
-        : action,
+        : 'clarify',
   };
 };
 
-export const generateAdaptiveInterviewQuestion = async (context: AdaptiveQuestionContext) => {
+const fallbackAdaptiveQuestion = (context: AdaptiveQuestionContext): GeneratedQuestion => {
+  const sameTopic = context.lastQuestion.topic || context.lastQuestion.resumeReference || context.roleDomain;
+  const exhausted = isTopicExhausted(context, sameTopic);
+  const decision = context.followUpDecision ?? decideAdaptiveFollowUp({
+    evaluation: context.lastEvaluation,
+    lastQuestion: context.lastQuestion,
+    position: context.currentQuestionIndex + 1,
+    total: context.targetQuestionCount,
+  });
+  const action = exhausted ? 'move_topic' : decision.action;
+  const difficulty = decision.targetDifficulty;
+  const coverageTopic = chooseCoverageTopic(context);
+  const topic =
+    action === 'ask_deeper' || action === 'clarify' || action === 'challenge' || action === 'reduce_difficulty'
+      ? sameTopic
+      : coverageTopic;
+
+  return buildNaturalFallbackQuestion(context, action, topic, decision.focus, difficulty);
+};
+
+const mergeInterviewerReply = (turn: AdaptiveTurnResponse) => {
+  if (turn.candidateMessageIntent !== 'question_to_interviewer' || !turn.interviewerReply?.trim()) {
+    return turn.question;
+  }
+
+  const reply = turn.interviewerReply.trim();
+  const nextQuestion = turn.question.question.trim();
+  const combined = nextQuestion ? `${reply} ${nextQuestion}` : reply;
+
+  return {
+    ...turn.question,
+    question: combined,
+  };
+};
+
+export const generateAdaptiveInterviewQuestion = async (
+  context: AdaptiveQuestionContext,
+): Promise<AdaptiveTurnResponse> => {
   const difficulty = nextDifficulty(
     context.lastQuestion.difficulty,
     context.lastEvaluation,
     context.currentQuestionIndex + 1,
     context.targetQuestionCount,
   );
-  const coveredTopics = Array.from(topicCoverage(context.transcript).entries()).map(([topic, value]) => ({
-    topic,
-    asked: value.asked,
-    averageScore: value.averageScore,
-  }));
-  const fallback = fallbackAdaptiveQuestion(context);
+  const fallbackQuestion = fallbackAdaptiveQuestion(context);
+  const fallbackTurn: AdaptiveTurnResponse = {
+    candidateMessageIntent: 'answer',
+    interviewerReply: null,
+    question: fallbackQuestion,
+  };
 
-  return generateJson<{ question: GeneratedQuestion }>(
-    `You are conducting a LIVE adaptive mock interview. Generate exactly ONE next question that sounds like a professional human interviewer.
-
-ROLE: ${context.roleDomain} ${context.roleLevel}
-INTERVIEW TYPE: ${context.interviewType ?? 'Mixed'}
-TARGET COMPANY: ${context.targetCompany ?? 'None'}
-COMPANY STYLE GUIDANCE (inspiration only, do not claim official questions):
-${context.companyGuidance ? JSON.stringify(context.companyGuidance, null, 2) : 'No company-specific style guidance available.'}
-
-JOB DESCRIPTION PROFILE AND SKILL GRAPH:
-${JSON.stringify(context.jdProfile ?? buildJobDescriptionProfile(context.jobDescription, {
+  const jdProfile =
+    context.jdProfile ??
+    buildJobDescriptionProfile(context.jobDescription, {
       roleLevel: context.roleLevel,
       roleDomain: context.roleDomain,
       resumeSkills: context.resumeSkills,
-    }), null, 2)}
+    });
+  const { questions: companyQuestionBank, mode: companyBankMode } = resolveCompanyQuestionBank(context);
+  const systemPrompt = buildInterviewSystemPrompt(
+    buildPromptBuilderInput(context, jdProfile, companyQuestionBank, companyBankMode),
+  );
 
-RESUME SUMMARY: ${context.resumeSummary ?? 'Not available'}
-RESUME SKILLS: ${(context.resumeSkills ?? []).join(', ') || 'Not available'}
-INTERNAL INTERVIEW ROADMAP:
-${context.interviewRoadmap ? JSON.stringify(context.interviewRoadmap, null, 2) : 'No internal roadmap available.'}
-CURRENT INTERVIEW STATE:
-${context.interviewState ? JSON.stringify(context.interviewState, null, 2) : 'No state snapshot available.'}
+  const conversationHistory: ConversationTurn[] = context.transcript.map((item) => ({
+    question: item.question,
+    answer: item.answer,
+    score: item.score,
+    topic: item.topic,
+    questionType: item.questionType,
+  }));
 
-LAST QUESTION:
-${JSON.stringify(context.lastQuestion, null, 2)}
-LAST ANSWER:
-${context.lastAnswer}
-LAST EVALUATION:
-${JSON.stringify(context.lastEvaluation, null, 2)}
-
-TOPIC COVERAGE SO FAR:
-${JSON.stringify(coveredTopics, null, 2)}
-PREVIOUS QUESTIONS:
-${JSON.stringify(context.previousQuestions.map((item) => ({
-      question: item.question,
-      topic: item.topic,
-      difficulty: item.difficulty,
-      questionType: item.questionType,
-    })), null, 2)}
-
-NEXT QUESTION REQUIREMENTS:
-- Must depend directly on the candidate's previous answer and evaluation.
-- Follow the INTERNAL INTERVIEW ROADMAP, but do not reveal it to the candidate.
-- If a project has reached ${context.interviewRoadmap?.projectQuestionLimit ?? 3} total questions, move to another project or section.
-- Never exceed ${context.interviewRoadmap?.followUpLimit ?? 2} follow-ups on the same topic.
-- Ask a follow-up only when clarification is needed, the answer is incomplete, the candidate mentioned a new technology, or a deeper challenge is justified.
-- If enough depth was shown or a topic is exhausted, move to an uncovered resume/JD/company section without feeling random.
-- Cover projects, skills, internship/work experience, certifications, role-specific, company-specific, coding/problem-solving, behavioral, and HR sections when present.
-- Do not repeat a previous question or ask semantically similar questions.
-- Do not repeat a covered concept from CURRENT INTERVIEW STATE.
-- Respect target difficulty: ${difficulty}.
-- Prefer JD-required skills and resume/JD overlap over generic programming.
-- For coding-style questions, ask for complexity, edge cases, alternatives, and optimization. Do not reveal solutions.
-- For behavioral questions, use STAR follow-up logic.
-- Use a natural transition sentence, not labels like "Question 4".
-
-Return ONLY this JSON:
-{
-  "question": {
-    "question": string,
-    "expectedSignals": string[],
-    "questionType": "behavioural" | "technical" | "situational",
-    "resumeReference": string,
-    "difficulty": "easy" | "easy-medium" | "medium" | "medium-hard" | "scenario" | "problem-solving" | "behavioral",
-    "topic": string,
-    "followUpIntent": "deepen" | "clarify" | "bridge-topic" | "challenge" | "recover-confidence"
-  }
-}`,
-    { question: fallback },
-  ).then((result) => {
-    const candidate = {
-      ...fallback,
-      ...result.question,
-      expectedSignals: result.question.expectedSignals?.length ? result.question.expectedSignals : fallback.expectedSignals,
-    };
-    const normalizedCandidate = canonicalize(candidate.question).toLowerCase().replace(/[?.!]+$/g, '');
-    const repeatedQuestion = context.previousQuestions.some(
-      (item) => canonicalize(item.question).toLowerCase().replace(/[?.!]+$/g, '') === normalizedCandidate,
-    );
-    const exhaustedTopic = candidate.topic !== fallback.topic && isTopicExhausted(context, candidate.topic);
-    return repeatedQuestion || exhaustedTopic ? fallback : candidate;
+  const userPrompt = buildAdaptiveTurnUserPrompt({
+    conversationHistory,
+    candidateMessage: context.lastAnswer,
+    lastEvaluation: {
+      score: context.lastEvaluation.score,
+      nextAction: context.lastEvaluation.nextAction,
+      missingConcepts: context.lastEvaluation.missingConcepts,
+      conceptsCovered: context.lastEvaluation.conceptsCovered,
+      feedback: context.lastEvaluation.feedback,
+    },
+    followUpDecision: context.followUpDecision,
+    previousQuestionTopics: context.previousQuestions.map((item) => item.topic ?? item.resumeReference ?? '').filter(Boolean),
+    targetDifficulty: difficulty,
+    questionsRemaining: Math.max(0, context.targetQuestionCount - context.currentQuestionIndex - 1),
   });
+
+  return generateJson<AdaptiveTurnResponse>(userPrompt, fallbackTurn, { systemPrompt })
+    .then((result) => {
+      const candidate = {
+        ...fallbackTurn,
+        ...result,
+        question: {
+          ...fallbackQuestion,
+          ...result.question,
+          expectedSignals: result.question?.expectedSignals?.length
+            ? result.question.expectedSignals
+            : fallbackQuestion.expectedSignals,
+        },
+      };
+
+      const normalizedCandidate = canonicalize(candidate.question.question).toLowerCase().replace(/[?.!]+$/g, '');
+      const repeatedQuestion = context.previousQuestions.some(
+        (item) => canonicalize(item.question).toLowerCase().replace(/[?.!]+$/g, '') === normalizedCandidate,
+      );
+      const exhaustedTopic = candidate.question.topic !== fallbackQuestion.topic && isTopicExhausted(context, candidate.question.topic);
+
+      if (repeatedQuestion || exhaustedTopic) {
+        return fallbackTurn;
+      }
+
+      return {
+        ...candidate,
+        question: mergeInterviewerReply(candidate),
+      };
+    });
 };
 
 export type WritingEvaluation = {

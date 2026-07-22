@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { userAPI, interviewAPI, sessionAPI } from '../services/api';
+import { InterviewFlowSteps } from './interview/InterviewFlowSteps';
 import '../styles/Dashboard.css';
 
 const skillMeta = {
@@ -74,9 +75,23 @@ export const Dashboard = ({ setCurrentView, onResumePractice, onStartPracticeSki
   return (
     <div className="dashboard">
       <div className="dashboard-hero">
-        <div>
-          <span className="dashboard-kicker">Learning Overview</span>
-          <h1>Welcome back, {displayUser.name || 'Learner'}</h1>
+        <div className="dashboard-hero-copy">
+          <span className="dashboard-kicker">AI Mock Interview Platform</span>
+          <h1>Fluent_AI turns your resume into a live interview practice session.</h1>
+          <p>
+            Upload a resume, choose your target role, answer adaptive interviewer questions, and review a detailed feedback report.
+          </p>
+          <div className="dashboard-hero-actions">
+            <button type="button" className="dashboard-primary-cta" onClick={() => setCurrentView?.('interview')}>
+              Start AI Interview
+            </button>
+            <button type="button" className="dashboard-secondary-cta" onClick={() => setCurrentView?.('results')}>
+              View Reports
+            </button>
+          </div>
+        </div>
+        <div className="dashboard-hero-flow">
+          <InterviewFlowSteps activeIndex={0} compact />
         </div>
       </div>
 

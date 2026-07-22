@@ -2,13 +2,34 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { interviewAPI, resumeAPI } from '../services/api';
 import { PERSONAS } from '../lib/personas';
 import { COMPANY_OPTIONS } from '../lib/companyOptions';
+import companyReadiness from '../lib/companyReadiness.json';
 import { createAudioRecorder, getRecordedAudioFileName } from '../lib/audioRecording';
 import { playProcessedTtsBlob, stopTtsAudio } from '../lib/ttsAudio';
 import { AvatarPortrait } from './interview/AvatarPortrait';
+import { InterviewFlowSteps } from './interview/InterviewFlowSteps';
+import PracticeModePanel from './interview/PracticeModePanel';
 import VoiceIndicator from './interview/VoiceIndicator';
 import '../styles/Interview.css';
 
-const STEPS = ['Resume', 'Persona', 'Config', 'System Check'];
+const STEPS = ['Goal', 'Resume', 'Review', 'Interviewer', 'Setup', 'Roadmap', 'System Check'];
+const ROLE_OPTIONS = [
+  { label: 'SDE', value: 'SDE', mode: 'sde' },
+  { label: 'Data Analyst', value: 'Data Analyst', mode: 'data_analyst' },
+  { label: 'AI/ML', value: 'AI/ML Engineer', mode: 'ai_ml' },
+  { label: 'Frontend', value: 'Frontend Developer', mode: 'frontend' },
+  { label: 'Backend', value: 'Backend Developer', mode: 'backend' },
+  { label: 'QA', value: 'QA Engineer', mode: 'qa' },
+  { label: 'HR/Behavioral', value: 'HR / Behavioral', mode: 'hr_behavioral' },
+];
+const INTERVIEW_TYPE_OPTIONS = ['Mixed', 'Technical', 'Behavioural'];
+const ROADMAP_STAGES = [
+  'Introduction',
+  'Resume questions',
+  'Technical questions',
+  'Project deep dive',
+  'Company questions',
+  'HR questions',
+];
 const REVIEW_WARNING_THRESHOLD = 3;
 const PERSON_CHECK_INTERVAL_MS = 1500;
 const PERSON_MISSING_GRACE_MS = 5000;
@@ -21,6 +42,16 @@ const INTERVIEW_TTS_PLAYBACK_SETTINGS = {
   speechRate: 1,
   pitch: 0,
   voiceStyle: 'default',
+};
+const COMPANY_LABEL_BY_VALUE = new Map(COMPANY_OPTIONS.map(company => [company.value, company.label]));
+
+const readinessForCompany = (companyValue) => {
+  const readiness = companyReadiness[companyValue] || companyReadiness.default;
+  const selectedLabel = COMPANY_LABEL_BY_VALUE.get(companyValue);
+  return {
+    ...readiness,
+    label: companyValue ? readiness.label || selectedLabel || companyValue : companyReadiness.default.label,
+  };
 };
 
 const isLikelyMobileDevice = () =>
@@ -159,8 +190,145 @@ const playAudioBlob = (blob, options = {}) =>
 
 const ttsErrorMessage = async (_error, fallback) => fallback;
 
+const splitEditableList = (value) =>
+  String(value || '')
+    .split(/\n|,/)
+    .map(item => item.trim())
+    .filter(Boolean);
+
+const resumeLines = (text = '') =>
+  String(text)
+    .split(/\r?\n/)
+    .map(line => line.replace(/^[\s>*•-]+/, '').trim())
+    .filter(line => line.length > 1);
+
+const sectionLines = (lines, headingPattern) => {
+  const start = lines.findIndex(line => headingPattern.test(line));
+  if (start < 0) return [];
+  const output = [];
+  const headingLike = /^(career objective|summary|education|technical skills|skills|projects?|experience|internships?|certifications?|coursework|achievements)$/i;
+  for (let i = start + 1; i < lines.length; i += 1) {
+    if (headingLike.test(lines[i]) && output.length > 0) break;
+    if (!headingLike.test(lines[i])) output.push(lines[i]);
+  }
+  return output.slice(0, 12);
+};
+
+const cleanResumeItem = (value) =>
+  String(value || '')
+    .replace(/\s+[–-]\s+.*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const extractNamedItems = (lines, pattern, maxItems = 8) =>
+  Array.from(new Set(
+    lines
+      .map(cleanResumeItem)
+      .filter(line => line.length >= 3)
+      .filter(line => pattern.test(line) || line.split(/\s+/).length <= 8),
+  )).slice(0, maxItems);
+
+const extractResumePreview = (resume) => {
+  const rawText = resume?.rawText || resume?.extractedText || '';
+  const lines = resumeLines(rawText);
+  const skills = resume?.analysis?.skills?.length
+    ? resume.analysis.skills
+    : extractNamedItems(sectionLines(lines, /^(technical skills|skills)$/i), /\b(java|python|react|node|sql|aws|api|ml|ai|excel|power bi|selenium)\b/i, 14);
+  const projects = extractNamedItems(sectionLines(lines, /^projects?$/i), /\b(project|app|system|platform|dashboard|website|chatbot|api|portal|model)\b/i, 8);
+  const internships = extractNamedItems(sectionLines(lines, /^(experience|internships?|work experience)$/i), /\b(intern|developer|engineer|analyst|associate|trainee)\b/i, 6);
+  const certifications = extractNamedItems(sectionLines(lines, /^certifications?/i), /\b(certified|certification|certificate|hackerrank|aws|azure|google|nptel|oracle|microsoft)\b/i, 8);
+
+  return { skills, projects, internships, certifications };
+};
+
+const buildCorrectedResumeText = (resume, structured) => {
+  const rawText = resume?.rawText || resume?.extractedText || '';
+  const block = [
+    'Corrected Interview Profile',
+    'Skills',
+    ...(structured.skills || []),
+    'Projects',
+    ...(structured.projects || []),
+    'Internships',
+    ...(structured.internships || []),
+    'Certifications',
+    ...(structured.certifications || []),
+  ].join('\n');
+
+  return `${rawText}\n\n${block}`.trim();
+};
+
 /* ─────────────────────────────────────────────────────────────────
-   Step 1: Resume Upload
+   Step 1: Goal Onboarding
+───────────────────────────────────────────────────────────────── */
+function OnboardingStep({ onNext }) {
+  const [roleDomain, setRoleDomain] = useState(ROLE_OPTIONS[0].value);
+  const [interviewType, setInterviewType] = useState('Mixed');
+  const selectedRole = ROLE_OPTIONS.find(role => role.value === roleDomain) || ROLE_OPTIONS[0];
+
+  return (
+    <div className="iv-step iv-step--wide">
+      <span className="iv-step-kicker">Interview goal</span>
+      <h2 className="iv-step-title">Set your target before uploading a resume.</h2>
+      <p className="iv-step-desc">Fluent_AI will use this role and interview type to frame the resume review, question mix, and final feedback.</p>
+
+      <InterviewFlowSteps activeIndex={0} className="iv-flow-preview" />
+
+      <div className="iv-onboarding-grid">
+        <div>
+          <label className="iv-label">Target Role</label>
+          <div className="iv-choice-grid">
+            {ROLE_OPTIONS.map(role => (
+              <button
+                key={role.value}
+                type="button"
+                className={`iv-choice-card${roleDomain === role.value ? ' iv-choice-card--active' : ''}`}
+                onClick={() => setRoleDomain(role.value)}
+              >
+                {role.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label className="iv-label">Interview Type</label>
+          <div className="iv-choice-stack">
+            {INTERVIEW_TYPE_OPTIONS.map(type => (
+              <button
+                key={type}
+                type="button"
+                className={`iv-choice-card${interviewType === type ? ' iv-choice-card--active' : ''}`}
+                onClick={() => setInterviewType(type)}
+              >
+                {type}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="iv-next-preview">
+        <strong>What happens next</strong>
+        <span>Upload your resume, review the extracted profile, choose an interviewer, confirm setup, and start the mock interview.</span>
+      </div>
+
+      <div className="iv-step-actions">
+        <button
+          className="iv-btn iv-btn--primary"
+          onClick={() => onNext({
+            onboarding: { roleDomain, interviewType, interviewMode: selectedRole.mode },
+            config: { roleDomain, interviewType, interviewMode: selectedRole.mode },
+          })}
+        >
+          Continue to resume →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Step 2: Resume Upload
 ───────────────────────────────────────────────────────────────── */
 function ResumeStep({ onNext }) {
   const [uploading, setUploading] = useState(false);
@@ -258,7 +426,78 @@ function ResumeStep({ onNext }) {
 }
 
 /* ─────────────────────────────────────────────────────────────────
-   Step 2: Persona Selection — with voice preview
+   Step 3: Resume Intelligence Preview
+───────────────────────────────────────────────────────────────── */
+function ResumeIntelligenceStep({ resume, onNext, onBack }) {
+  const initialPreview = extractResumePreview(resume);
+  const [draft, setDraft] = useState({
+    skills: initialPreview.skills.join('\n'),
+    projects: initialPreview.projects.join('\n'),
+    internships: initialPreview.internships.join('\n'),
+    certifications: initialPreview.certifications.join('\n'),
+  });
+
+  const updateDraft = (key, value) => setDraft(prev => ({ ...prev, [key]: value }));
+  const structured = {
+    skills: splitEditableList(draft.skills),
+    projects: splitEditableList(draft.projects),
+    internships: splitEditableList(draft.internships),
+    certifications: splitEditableList(draft.certifications),
+  };
+
+  const fields = [
+    ['skills', 'Skills', 'React\nNode.js\nSQL'],
+    ['projects', 'Projects', 'Portfolio Website\nInventory API'],
+    ['internships', 'Internships / Work Experience', 'Software Developer Intern at Example Labs'],
+    ['certifications', 'Certifications', 'HackerRank SQL\nAWS Cloud Practitioner'],
+  ];
+
+  return (
+    <div className="iv-step iv-step--wide">
+      <span className="iv-step-kicker">Resume intelligence</span>
+      <h2 className="iv-step-title">Review what Fluent_AI extracted.</h2>
+      <p className="iv-step-desc">Correct anything that looks wrong. These edits will guide the interview questions.</p>
+
+      <div className="iv-resume-preview-grid">
+        {fields.map(([key, label, placeholder]) => (
+          <label key={key} className="iv-preview-field">
+            <span>{label}</span>
+            <textarea
+              className="iv-input iv-textarea"
+              value={draft[key]}
+              onChange={event => updateDraft(key, event.target.value)}
+              placeholder={placeholder}
+              rows={5}
+            />
+          </label>
+        ))}
+      </div>
+
+      <div className="iv-profile-summary">
+        <div><strong>{structured.skills.length}</strong><span>skills</span></div>
+        <div><strong>{structured.projects.length}</strong><span>projects</span></div>
+        <div><strong>{structured.internships.length}</strong><span>experience items</span></div>
+        <div><strong>{structured.certifications.length}</strong><span>certifications</span></div>
+      </div>
+
+      <div className="iv-step-actions">
+        <button className="iv-btn iv-btn--ghost" onClick={onBack}>← Back</button>
+        <button
+          className="iv-btn iv-btn--primary"
+          onClick={() => onNext({
+            resumeProfileEdits: structured,
+            correctedResumeText: buildCorrectedResumeText(resume, structured),
+          })}
+        >
+          Continue →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Step 4: Persona Selection — with voice preview
 ───────────────────────────────────────────────────────────────── */
 function PersonaStep({ onNext, onBack }) {
   const [selected, setSelected] = useState(null);
@@ -359,12 +598,13 @@ function PersonaStep({ onNext, onBack }) {
 /* ─────────────────────────────────────────────────────────────────
    Step 3: Interview Configuration
 ───────────────────────────────────────────────────────────────── */
-function ConfigStep({ persona, onNext, onBack }) {
+function ConfigStep({ persona, onboarding, onNext, onBack }) {
   const [config, setConfig] = useState({
     roleLevel: 'Mid',
-    roleDomain: 'Software Engineering',
+    roleDomain: onboarding?.roleDomain || 'Software Engineering',
+    interviewMode: onboarding?.interviewMode || 'sde',
     jobDescription: '',
-    interviewType: 'Mixed',
+    interviewType: onboarding?.interviewType || 'Mixed',
     complexity: 'Intermediate',
     duration: 30,
     targetCompany: '',
@@ -428,7 +668,66 @@ function ConfigStep({ persona, onNext, onBack }) {
 }
 
 /* ─────────────────────────────────────────────────────────────────
-   Step 4: System Check
+   Step 6: Interview Roadmap Preview
+───────────────────────────────────────────────────────────────── */
+function RoadmapPreviewStep({ config, resumeProfileEdits, onNext, onBack }) {
+  const projectCount = resumeProfileEdits?.projects?.length || 0;
+  const skillCount = resumeProfileEdits?.skills?.length || 0;
+  const readiness = readinessForCompany(config?.targetCompany);
+
+  return (
+    <div className="iv-step iv-step--wide">
+      <span className="iv-step-kicker">Interview roadmap</span>
+      <h2 className="iv-step-title">Here is the sequence before you start.</h2>
+      <p className="iv-step-desc">
+        The actual questions are still generated by the existing interview engine. This preview only shows the planned stage flow.
+      </p>
+
+      <InterviewFlowSteps activeIndex={1} className="iv-flow-preview" />
+
+      <div className="iv-roadmap-list">
+        {ROADMAP_STAGES.map((stage, index) => (
+          <div key={stage} className="iv-roadmap-item">
+            <span>{index + 1}</span>
+            <strong>{stage}</strong>
+          </div>
+        ))}
+      </div>
+
+      <div className="iv-roadmap-meta">
+        <div><span>Role</span><strong>{config?.roleDomain || 'Role not selected'}</strong></div>
+        <div><span>Interview Type</span><strong>{config?.interviewType || 'Mixed'}</strong></div>
+        <div><span>Company</span><strong>{readiness.label}</strong></div>
+        <div><span>Resume Signals</span><strong>{skillCount} skills · {projectCount} projects</strong></div>
+      </div>
+
+      <section className="iv-company-readiness" aria-label="Company Readiness">
+        <div>
+          <span className="iv-section-kicker">Company Readiness</span>
+          <h3>For {readiness.label}, focus on:</h3>
+        </div>
+        <div className="iv-readiness-list">
+          {readiness.focusAreas.map(area => (
+            <span key={area}>{area}</span>
+          ))}
+        </div>
+        {readiness.notes?.length > 0 && (
+          <p>{readiness.notes.join(' ')}</p>
+        )}
+      </section>
+
+      <PracticeModePanel interviewMode={config?.interviewMode} roleDomain={config?.roleDomain} />
+
+      <div className="iv-step-actions">
+        <button className="iv-btn iv-btn--ghost" onClick={onBack}>← Back</button>
+        <button className="iv-btn iv-btn--primary" onClick={onNext}>Continue to system check →</button>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Step 7: System Check
 ───────────────────────────────────────────────────────────────── */
 function SystemCheckStep({ onStart, onBack, loading }) {
   const videoRef = useRef(null);
@@ -586,6 +885,8 @@ function LiveSession({ interview, persona, onComplete }) {
   const [cameraReady, setCameraReady] = useState(false);
   const [personDetected, setPersonDetected] = useState(false);
   const [voiceDiagnostics, setVoiceDiagnostics] = useState(null);
+  const [latestEvaluation, setLatestEvaluation] = useState(null);
+  const [liveScores, setLiveScores] = useState(interview.liveScores || {});
 
   const videoRef        = useRef(null);
   const personCanvasRef = useRef(null);
@@ -992,7 +1293,9 @@ function LiveSession({ interview, persona, onComplete }) {
     }
     try {
       const voiceStyle = persona?.voiceStyle || 'default';
-      const res = await interviewAPI.speak(interview._id, questionText, voiceStyle);
+      const res = await interviewAPI.speak(interview._id, questionText, voiceStyle, {
+        pace: persona?.speechPace || 1,
+      });
       if (sessionClosedRef.current) return;
       const played = await playSpeechBlob(res.data);
       if (!played && !sessionClosedRef.current) {
@@ -1250,18 +1553,23 @@ function LiveSession({ interview, persona, onComplete }) {
       const q = questions[currentIdx]?.question || '';
       const response = await interviewAPI.submitAnswer(interview._id, q, answerText || '(skipped)');
       const state = response.data?.state;
+      const evaluation = response.data?.evaluation;
       const nextQuestions = state?.questions || response.data?.interview?.questions;
       const nextIndex = Number.isInteger(state?.currentQuestionIndex) ? state.currentQuestionIndex : currentIdx + 1;
       const nextQuestion = state?.currentQuestion || nextQuestions?.[nextIndex];
 
       if (Array.isArray(nextQuestions)) setQuestions(nextQuestions);
       if (state?.totalQuestions) setTotalQuestions(state.totalQuestions);
+      if (state?.liveScores) setLiveScores(state.liveScores);
+      if (evaluation) setLatestEvaluation(evaluation);
       currentAnswerPartsRef.current = [];
       setInterimText('');
       setCurrentIdx(nextIndex);
 
       if (nextQuestion?.question) {
-        speakQuestion(nextQuestion.question);
+        window.setTimeout(() => {
+          if (!sessionClosedRef.current) speakQuestion(nextQuestion.question);
+        }, persona?.questionPauseMs ?? 700);
       } else {
         finishSession();
       }
@@ -1278,6 +1586,14 @@ function LiveSession({ interview, persona, onComplete }) {
   const fmtTime = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
   const currentQ = questions[currentIdx];
   const hasBufferedAnswer = !isListening && Boolean(getAnswerSinceLastQuestion());
+  const latestScore = latestEvaluation?.score;
+  const latestDynamic = latestEvaluation?.dynamicFeedback || {};
+  const liveScoreItems = [
+    ['Confidence', liveScores.confidence],
+    ['Completeness', liveScores.completeness],
+    ['Depth', liveScores.depth],
+    ['Terminology', liveScores.terminology],
+  ].filter(([, value]) => typeof value === 'number');
 
   const playCurrentQuestion = () => {
     if (!currentQ?.question || sessionClosedRef.current || ending) return;
@@ -1370,6 +1686,52 @@ function LiveSession({ interview, persona, onComplete }) {
             </div>
           )}
 
+          {(latestEvaluation || liveScoreItems.length > 0) && (
+            <div className="iv-live-feedback" aria-live="polite">
+              <div className="iv-live-feedback-head">
+                <span>Latest answer feedback</span>
+                {typeof latestScore === 'number' && <strong>{latestScore}/100</strong>}
+              </div>
+              {latestEvaluation?.feedback && <p className="iv-live-feedback-text">{latestEvaluation.feedback}</p>}
+              {liveScoreItems.length > 0 && (
+                <div className="iv-live-score-grid">
+                  {liveScoreItems.map(([label, value]) => (
+                    <div key={label}>
+                      <span>{label}</span>
+                      <strong>{Math.round(value)}%</strong>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="iv-feedback-columns">
+                <div>
+                  <span className="iv-feedback-mini-title">Covered</span>
+                  <ul>
+                    {(latestEvaluation?.conceptsCovered || latestDynamic.strengths || []).slice(0, 3).map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                    {!(latestEvaluation?.conceptsCovered || latestDynamic.strengths || []).length && <li>No strong concept coverage recorded yet.</li>}
+                  </ul>
+                </div>
+                <div>
+                  <span className="iv-feedback-mini-title">Improve</span>
+                  <ul>
+                    {(latestDynamic.areasToImprove || latestEvaluation?.missingConcepts || []).slice(0, 3).map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                    {!(latestDynamic.areasToImprove || latestEvaluation?.missingConcepts || []).length && <li>No specific gap recorded yet.</li>}
+                  </ul>
+                </div>
+              </div>
+              {latestEvaluation?.samplePerfectAnswer && (
+                <details className="iv-ideal-answer">
+                  <summary>Ideal answer outline</summary>
+                  <p>{latestEvaluation.samplePerfectAnswer}</p>
+                </details>
+              )}
+            </div>
+          )}
+
           <div className="iv-controls">
             <VoiceIndicator audioLevel={isListening ? audioLevel : 0} isActive={isListening} label="" color="blue" />
             <button
@@ -1432,15 +1794,17 @@ export const Interview = ({ setCurrentView }) => {
   const handleStart = async () => {
     try {
       setLoading(true); setError('');
+      const correctedResumeText = data.correctedResumeText?.trim();
       const payload = {
         roleLevel:       data.config?.roleLevel || 'Mid',
-        roleDomain:      data.config?.roleDomain || 'Software Engineering',
+        roleDomain:      data.config?.roleDomain || data.onboarding?.roleDomain || 'Software Engineering',
         interviewStyle:  data.config?.interviewType || 'Mixed',
         duration:        data.config?.duration || 30,
-        resumeId:        data.resume?._id,
-        resumeText:      data.resume?.rawText || data.resume?.extractedText,
+        resumeId:        correctedResumeText ? undefined : data.resume?._id,
+        resumeText:      correctedResumeText || data.resume?.rawText || data.resume?.extractedText,
         personaId:       data.persona?.id,
-        interviewType:   data.config?.interviewType,
+        interviewType:   data.config?.interviewType || data.onboarding?.interviewType,
+        interviewMode:   data.config?.interviewMode || data.onboarding?.interviewMode,
         complexity:      data.config?.complexity,
         jobDescription:  data.config?.jobDescription?.trim() || undefined,
         targetCompany:   data.config?.targetCompany || undefined,
@@ -1448,7 +1812,7 @@ export const Interview = ({ setCurrentView }) => {
       const res = await interviewAPI.createInterview(payload);
       const startRes = await interviewAPI.startInterview(res.data._id);
       setInterview(startRes.data?.interview ?? res.data);
-      setStep(4);
+      setStep(7);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to start interview.');
     } finally {
@@ -1456,7 +1820,7 @@ export const Interview = ({ setCurrentView }) => {
     }
   };
 
-  if (step === 4 && interview) {
+  if (step === 7 && interview) {
     return (
       <LiveSession
         interview={interview}
@@ -1478,16 +1842,33 @@ export const Interview = ({ setCurrentView }) => {
         ))}
       </div>
       {error && <p className="iv-error iv-error--center">{error}</p>}
-      {step === 0 && <ResumeStep onNext={next} />}
-      {step === 1 && <PersonaStep onNext={next} onBack={back} />}
+      {step === 0 && <OnboardingStep onNext={next} />}
+      {step === 1 && <ResumeStep onNext={next} />}
       {step === 2 && (
-        <ConfigStep
-          persona={persona}
+        <ResumeIntelligenceStep
+          resume={data.resume}
           onNext={next}
           onBack={back}
         />
       )}
-      {step === 3 && <SystemCheckStep onStart={handleStart} onBack={back} loading={loading} />}
+      {step === 3 && <PersonaStep onNext={next} onBack={back} />}
+      {step === 4 && (
+        <ConfigStep
+          persona={persona}
+          onboarding={data.onboarding}
+          onNext={next}
+          onBack={back}
+        />
+      )}
+      {step === 5 && (
+        <RoadmapPreviewStep
+          config={data.config}
+          resumeProfileEdits={data.resumeProfileEdits}
+          onNext={() => setStep(6)}
+          onBack={back}
+        />
+      )}
+      {step === 6 && <SystemCheckStep onStart={handleStart} onBack={back} loading={loading} />}
     </div>
   );
 };

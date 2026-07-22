@@ -1,4 +1,10 @@
-import { buildJobDescriptionProfile, evaluateAnswer, normalizeTechnicalTranscript } from '../services/ai.service';
+import {
+  buildJobDescriptionProfile,
+  decideAdaptiveFollowUp,
+  evaluateAnswer,
+  getInterviewModeGuidance,
+  normalizeTechnicalTranscript,
+} from '../services/ai.service';
 
 describe('adaptive interview engine helpers', () => {
   it('builds a JD-first profile with skill graph signals', () => {
@@ -32,6 +38,78 @@ describe('adaptive interview engine helpers', () => {
     expect(text).toContain('GitHub');
   });
 
+  it('keeps distinct prompt guidance for each role-wise interview mode', () => {
+    expect(getInterviewModeGuidance('frontend').questionAngles).toEqual(expect.arrayContaining(['accessibility', 'frontend performance']));
+    expect(getInterviewModeGuidance('backend').questionAngles).toEqual(expect.arrayContaining(['REST/API design', 'production incidents']));
+    expect(getInterviewModeGuidance('data_analyst').questionAngles).toEqual(expect.arrayContaining(['SQL queries', 'business metrics']));
+    expect(getInterviewModeGuidance('ai_ml').questionAngles).toEqual(expect.arrayContaining(['model selection', 'model deployment']));
+    expect(getInterviewModeGuidance('qa').questionAngles).toEqual(expect.arrayContaining(['test case design', 'regression testing']));
+    expect(getInterviewModeGuidance('hr_behavioral').questionAngles).toEqual(expect.arrayContaining(['conflict handling', 'career goals']));
+  });
+
+  it('chooses easier clarification for weak answers', () => {
+    const decision = decideAdaptiveFollowUp({
+      evaluation: {
+        score: 25,
+        feedback: '',
+        communicationScore: 20,
+        technicalScore: 20,
+        behavioralScore: 20,
+        nextAction: 'reduce_difficulty',
+        missingConcepts: ['index trade-offs'],
+      },
+      lastQuestion: { question: 'Explain indexes.', expectedSignals: [], difficulty: 'medium', topic: 'SQL indexes' },
+      position: 2,
+      total: 10,
+    });
+
+    expect(decision.action).toBe('reduce_difficulty');
+    expect(decision.followUpIntent).toBe('recover-confidence');
+    expect(decision.focus).toContain('index trade-offs');
+  });
+
+  it('targets the missing part for incomplete answers', () => {
+    const decision = decideAdaptiveFollowUp({
+      evaluation: {
+        score: 58,
+        feedback: '',
+        communicationScore: 60,
+        technicalScore: 55,
+        behavioralScore: 40,
+        completenessScore: 50,
+        nextAction: 'move_topic',
+        missingConcepts: ['edge case handling'],
+      },
+      lastQuestion: { question: 'Explain your API design.', expectedSignals: [], difficulty: 'medium', topic: 'API design' },
+      position: 3,
+      total: 10,
+    });
+
+    expect(decision.action).toBe('clarify');
+    expect(decision.followUpIntent).toBe('clarify');
+    expect(decision.focus).toContain('edge case handling');
+  });
+
+  it('escalates strong answers into deeper challenges', () => {
+    const decision = decideAdaptiveFollowUp({
+      evaluation: {
+        score: 90,
+        feedback: '',
+        communicationScore: 90,
+        technicalScore: 92,
+        behavioralScore: 80,
+        nextAction: 'ask_deeper',
+      },
+      lastQuestion: { question: 'Explain caching.', expectedSignals: [], difficulty: 'medium', topic: 'Caching' },
+      position: 5,
+      total: 10,
+    });
+
+    expect(['ask_deeper', 'challenge']).toContain(decision.action);
+    expect(['deepen', 'challenge']).toContain(decision.followUpIntent);
+    expect(decision.targetDifficulty).not.toBe('easy');
+  });
+
   it('returns comparison fields and a sample perfect answer for skipped answers', async () => {
     const result = await evaluateAnswer('Explain SQL indexes with one practical example.', '(skipped)', {
       expectedSignals: ['index purpose', 'query performance', 'trade-offs'],
@@ -44,6 +122,7 @@ describe('adaptive interview engine helpers', () => {
 
     expect(result.score).toBe(0);
     expect(result.samplePerfectAnswer).toContain('SQL');
+    expect(result.feedback).toMatch(/Correct|Missing|Improve|ideal answer/i);
     expect(result.missingConcepts).toEqual(expect.arrayContaining(['index purpose', 'query performance', 'trade-offs']));
     expect(result.dynamicFeedback?.areasToImprove.length).toBeGreaterThan(0);
     expect(result.dynamicFeedback?.interviewReadiness).toContain('Not interview-ready');

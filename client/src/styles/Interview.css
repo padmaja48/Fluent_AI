@@ -81,6 +81,21 @@
   padding: 2rem 2rem 1.5rem;
 }
 
+.iv-step--wide {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.iv-step-kicker {
+  display: inline-block;
+  margin-bottom: 0.45rem;
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .iv-step-title {
   font-size: 1.4rem;
   font-weight: 650;
@@ -92,6 +107,347 @@
   color: var(--text-muted);
   margin: 0 0 1.5rem;
   font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.iv-flow-preview {
+  margin: 1rem 0 1.5rem;
+}
+
+.iv-flow-preview.flow-steps,
+.iv-step .flow-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.iv-step .flow-step {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.iv-step .flow-step-index {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.iv-step .flow-step--active .flow-step-index,
+.iv-step .flow-step--done .flow-step-index {
+  background: var(--accent);
+  color: #fff;
+}
+
+.iv-step .flow-step-label {
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.iv-onboarding-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr);
+  gap: 22px;
+}
+
+.iv-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.iv-choice-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.iv-choice-card {
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.iv-choice-card--active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.iv-next-preview {
+  margin-top: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  padding: 14px 16px;
+  display: grid;
+  gap: 4px;
+}
+
+.iv-next-preview strong {
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.iv-next-preview span {
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.iv-resume-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.iv-preview-field {
+  display: grid;
+  gap: 8px;
+}
+
+.iv-preview-field > span {
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.iv-profile-summary,
+.iv-roadmap-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.iv-profile-summary div,
+.iv-roadmap-meta div {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  padding: 12px;
+  min-width: 0;
+}
+
+.iv-profile-summary strong,
+.iv-roadmap-meta strong {
+  display: block;
+  color: var(--text);
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.iv-profile-summary span,
+.iv-roadmap-meta span {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.iv-roadmap-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.iv-roadmap-item {
+  min-height: 68px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.iv-roadmap-item span {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.iv-roadmap-item strong {
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.iv-company-readiness {
+  margin-top: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 94%, var(--accent) 6%);
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.iv-section-kicker {
+  display: block;
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.iv-company-readiness h3 {
+  margin: 4px 0 0;
+  color: var(--text);
+  font-size: 1.02rem;
+}
+
+.iv-readiness-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.iv-readiness-list span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 7px 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.iv-company-readiness p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.iv-practice-panel {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.iv-practice-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.iv-practice-head h3 {
+  margin: 4px 0 0;
+  color: var(--text);
+  font-size: 1.02rem;
+}
+
+.iv-practice-head p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.iv-practice-head strong {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--accent);
+  padding: 7px 10px;
+  font-size: 0.78rem;
+}
+
+.iv-practice-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.iv-practice-tab {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-muted);
+  min-height: 36px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.iv-practice-tab--active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.iv-practice-workspace {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.2fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.iv-practice-prompt {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  padding: 12px;
+}
+
+.iv-practice-prompt span {
+  display: block;
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.iv-practice-prompt p {
+  margin: 8px 0 0;
+  color: var(--text);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.iv-practice-editor {
+  min-height: 190px;
+  resize: vertical;
+}
+
+.iv-practice-editor--code {
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 0.86rem;
+  line-height: 1.55;
 }
 
 .iv-step-actions {
@@ -338,6 +694,17 @@
   .iv-stepper   { gap: 16px; margin-bottom: 2rem; }
   .iv-step-dot  { min-width: 72px; }
   .iv-step      { padding: 1.5rem 1.25rem 1.25rem; }
+  .iv-onboarding-grid,
+  .iv-resume-preview-grid,
+  .iv-practice-workspace,
+  .iv-roadmap-meta {
+    grid-template-columns: 1fr;
+  }
+  .iv-choice-grid,
+  .iv-roadmap-list,
+  .iv-profile-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .iv-persona-grid { grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
   .iv-sys-check { flex-direction: column; gap: 1rem; }
   .iv-cam-preview { flex: none; }
@@ -352,6 +719,17 @@
   .iv-step-label { font-size: 0.65rem; }
   .iv-step      { padding: 1.25rem 1rem 1rem; }
   .iv-step-title { font-size: 1.15rem; }
+  .iv-flow-preview.flow-steps,
+  .iv-step .flow-steps,
+  .iv-choice-grid,
+  .iv-practice-tabs,
+  .iv-roadmap-list,
+  .iv-profile-summary {
+    grid-template-columns: 1fr;
+  }
+  .iv-practice-head {
+    flex-direction: column;
+  }
   .iv-persona-grid { grid-template-columns: 1fr; }
   .iv-step-actions { flex-direction: column-reverse; gap: 0.5rem; }
   .iv-step-actions .iv-btn { width: 100%; text-align: center; justify-content: center; }
@@ -802,6 +1180,104 @@
 .iv-current-q-label { font-size: 0.72rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
 .iv-current-q-text { color: var(--text); font-weight: 500; }
 
+.iv-live-feedback {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 220px;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.iv-live-feedback-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.iv-live-feedback-head strong {
+  color: var(--accent);
+  font-size: 0.9rem;
+}
+
+.iv-live-feedback-text {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.iv-live-score-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.iv-live-score-grid div {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.45rem;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.iv-live-score-grid span,
+.iv-feedback-mini-title {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.iv-live-score-grid strong {
+  color: var(--text);
+  font-size: 0.86rem;
+}
+
+.iv-feedback-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.iv-feedback-columns ul {
+  margin: 0.25rem 0 0;
+  padding-left: 1rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.iv-ideal-answer {
+  border-top: 1px solid var(--border);
+  padding-top: 0.45rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.iv-ideal-answer summary {
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.iv-ideal-answer p {
+  margin: 0.4rem 0 0;
+  line-height: 1.5;
+}
+
 .iv-controls {
   display: flex;
   align-items: center;
@@ -1233,4 +1709,15 @@
 .iv-terminated-icon {
   font-size: 3.5rem;
   line-height: 1;
+}
+
+@media (max-width: 900px) {
+  .iv-live-score-grid,
+  .iv-feedback-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .iv-live-feedback {
+    max-height: 260px;
+  }
 }

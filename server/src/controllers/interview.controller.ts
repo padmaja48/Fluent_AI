@@ -7,10 +7,12 @@ import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
 import {
   buildJobDescriptionProfile,
+  decideAdaptiveFollowUp,
   evaluateAnswer,
+  generateAdaptiveInterviewQuestion,
   generateInterviewQuestions,
   generateReport,
-  transcribeAudio,
+  transcribeInterviewAnswer,
 } from '../services/ai.service';
 import { uploadBuffer, uploadText } from '../services/storage.service';
 import { getPersonaIntro, getPersonaVoiceStyle, synthesizeSpeech } from '../services/voice.service';
@@ -19,7 +21,16 @@ import {
   buildInterviewRoadmap,
   deriveInterviewRuntimeState,
   getCompanyInterviewGuidance,
+  getCompanyInterviewGuidanceWithResearch,
+  COMPANY_LABELS,
 } from '../services/companyQuestions.service';
+import {
+  companyQuestionsToGenerated,
+  ensureCompanyQuestions,
+  hasEnoughCompanyQuestions,
+} from '../services/companyQuestionResearch.service';
+import { mapExperienceLevel } from '../services/promptBuilder';
+import { slugifyCompanyName } from '../services/companyQuestionBank';
 
 const idParams = z.object({
   params: z.object({
@@ -41,6 +52,7 @@ export const createInterviewSchema = z.object({
     duration: z.coerce.number().int().refine((value) => [15, 20, 30, 45, 60].includes(value), 'Unsupported interview duration').default(30),
     personaId: z.enum(['us-american', 'us-indian', 'us-australian', 'ru-russian']).optional(),
     interviewType: z.enum(['Behavioural', 'Technical', 'Mixed']).optional(),
+    interviewMode: z.enum(['sde', 'frontend', 'backend', 'data_analyst', 'ai_ml', 'qa', 'hr_behavioral']).optional(),
     complexity: z.enum(['Beginner', 'Intermediate', 'Advanced']).optional(),
     targetCompany: z.string().min(1).max(120).optional(),
   }),
@@ -128,12 +140,14 @@ const buildContextFromInterview = (interview: Awaited<ReturnType<typeof getInter
   personaId: (interview as any).personaId,
   personaPersonality: getPersonaPersonality((interview as any).personaId),
   interviewType: (interview as any).interviewType,
+  interviewMode: (interview as any).interviewMode,
   complexity: (interview as any).complexity,
   targetCompany: (interview as any).targetCompany,
   resumeSkills: (interview as any).resumeSkills ?? [],
   resumeExperienceLevel: (interview as any).resumeExperienceLevel ?? '',
   resumeSuggestedQuestions: (interview as any).resumeSuggestedQuestions ?? [],
   resumeSummary: (interview as any).resumeSummary ?? '',
+  resumeProfile: (interview as any).interviewRoadmap?.resumeProfile,
 });
 
 const averageMetric = (previous: number | undefined, next: number | undefined, count: number) => {
@@ -160,46 +174,6 @@ const toGeneratedQuestion = (item: any) => ({
   topic: item.topic,
   followUpIntent: item.followUpIntent,
 });
-
-const hasInterviewerBridge = (question?: string) =>
-  /^(You mentioned|You touched on|I want to clarify|Let's make that more concrete|Good, let's connect|Thanks, let's connect|Since your last answer)/i.test(question ?? '');
-
-const conciseTopic = (value?: string) => {
-  const clean = (value ?? '').replace(/^(Skill coverage|Role focus|Role-specific Questions|Projects|Certifications|Internship \/ Work Experience):\s*/i, '').trim();
-  return clean || 'that point';
-};
-
-const bridgeQuestionAfterAnswer = ({
-  nextQuestion,
-  previousQuestion,
-  answer,
-  evaluation,
-}: {
-  nextQuestion: ReturnType<typeof toGeneratedQuestion>;
-  previousQuestion?: ReturnType<typeof toGeneratedQuestion>;
-  answer: string;
-  evaluation: Awaited<ReturnType<typeof evaluateAnswer>>;
-}) => {
-  if (!nextQuestion?.question || hasInterviewerBridge(nextQuestion.question)) return nextQuestion;
-
-  const previousTopic = conciseTopic(previousQuestion?.topic ?? previousQuestion?.resumeReference);
-  const nextTopic = conciseTopic(nextQuestion.topic ?? nextQuestion.resumeReference);
-  const answeredSubstantively = answer.trim().length >= 20 && !/^\(?\s*(skipped|no answer)\s*\)?$/i.test(answer.trim());
-  const mentioned = evaluation.conceptsCovered?.[0] ?? previousTopic;
-  const bridge =
-    !answeredSubstantively || evaluation.score < 40
-      ? `Let's make that more concrete. Staying connected to ${nextTopic}, `
-      : evaluation.nextAction === 'clarify' || evaluation.score < 60
-      ? `I want to clarify one part of your answer about ${previousTopic}. Now, `
-      : evaluation.nextAction === 'ask_deeper' || evaluation.nextAction === 'challenge' || evaluation.score >= 70
-      ? `You touched on ${mentioned}; let's connect that to ${nextTopic}. `
-      : `Good, let's connect your previous answer to ${nextTopic}. `;
-
-  return {
-    ...nextQuestion,
-    question: `${bridge}${nextQuestion.question.charAt(0).toLowerCase()}${nextQuestion.question.slice(1)}`,
-  };
-};
 
 export const logViolationSchema = z.object({
   body: z.object({
@@ -244,7 +218,11 @@ export const createInterview = asyncHandler(async (req, res) => {
     roleDomain: req.body.roleDomain,
     resumeSkills,
   });
-  const companyGuidance = getCompanyInterviewGuidance(req.body.targetCompany);
+  const companyGuidance =
+    (await getCompanyInterviewGuidanceWithResearch({
+      targetCompany: req.body.targetCompany,
+      roleDomain: req.body.roleDomain,
+    })) ?? getCompanyInterviewGuidance(req.body.targetCompany);
   const interviewRoadmap = buildInterviewRoadmap({
     resumeText,
     resumeSkills,
@@ -278,6 +256,17 @@ export const createInterview = asyncHandler(async (req, res) => {
     liveScores: {},
     status: 'Setup',
   });
+
+  if (req.body.targetCompany) {
+    const companyLabel =
+      COMPANY_LABELS[slugifyCompanyName(req.body.targetCompany)] ?? req.body.targetCompany;
+    void ensureCompanyQuestions({
+      companyName: req.body.targetCompany,
+      companyLabel,
+      role: req.body.roleDomain,
+      experienceLevel: mapExperienceLevel(req.body.roleLevel),
+    }).catch(() => undefined);
+  }
 
   res.status(201).json(interview);
 });
@@ -316,7 +305,11 @@ export const startInterview = asyncHandler(async (req, res) => {
     });
   }
   if (!(interview as any).companyGuidance) {
-    (interview as any).companyGuidance = getCompanyInterviewGuidance((interview as any).targetCompany);
+    (interview as any).companyGuidance =
+      (await getCompanyInterviewGuidanceWithResearch({
+        targetCompany: (interview as any).targetCompany,
+        roleDomain: interview.roleDomain,
+      })) ?? getCompanyInterviewGuidance((interview as any).targetCompany);
   }
   if (!(interview as any).interviewRoadmap) {
     (interview as any).interviewRoadmap = buildInterviewRoadmap({
@@ -342,14 +335,42 @@ export const startInterview = asyncHandler(async (req, res) => {
     (interview as any).interviewRoadmap?.targetQuestionCount ?? (interview as any).totalPlannedQuestions;
 
   if (interview.questions.length === 0) {
-    const generated = await generateInterviewQuestions(buildContextFromInterview(interview)).catch(() => ({ questions: [] }));
+    let researchedCompanyQuestions: ReturnType<typeof companyQuestionsToGenerated> = [];
+    const targetCompany = (interview as any).targetCompany as string | undefined;
+
+    if (targetCompany) {
+      const companyLabel =
+        COMPANY_LABELS[slugifyCompanyName(targetCompany)] ??
+        COMPANY_LABELS[targetCompany] ??
+        targetCompany;
+      const bankResult = await ensureCompanyQuestions({
+        companyName: targetCompany,
+        companyLabel,
+        role: interview.roleDomain,
+        experienceLevel: mapExperienceLevel(interview.roleLevel),
+      }).catch(() => ({
+        questions: [],
+        mode: 'generic' as const,
+        companyLabel: targetCompany,
+        fromCache: false,
+      }));
+
+      researchedCompanyQuestions = companyQuestionsToGenerated(bankResult.questions, bankResult.companyLabel);
+      (interview as any).companyQuestionSource = bankResult.mode;
+    }
+
+    const useAiGeneration = !targetCompany || !hasEnoughCompanyQuestions(researchedCompanyQuestions.length);
+    const generated = useAiGeneration
+      ? await generateInterviewQuestions(buildContextFromInterview(interview)).catch(() => ({ questions: [] }))
+      : { questions: [] };
 
     interview.questions = buildInterviewQuestionSet({
       generatedQuestions: generated.questions,
-      targetCompany: (interview as any).targetCompany,
+      targetCompany,
       duration: interview.duration,
       interviewRoadmap: (interview as any).interviewRoadmap,
-      prioritizeGenerated: Boolean((interview as any).jobDescription?.trim()),
+      prioritizeGenerated: useAiGeneration && Boolean((interview as any).jobDescription?.trim()),
+      researchedCompanyQuestions,
     });
   }
 
@@ -456,13 +477,31 @@ export const submitAnswer = asyncHandler(async (req, res) => {
 
   if (nextIndex < targetQuestionCount) {
     const plannedNextQuestion = interview.questions[nextIndex];
-    if (plannedNextQuestion) {
-      interview.questions[nextIndex] = bridgeQuestionAfterAnswer({
-        nextQuestion: toGeneratedQuestion(plannedNextQuestion),
-        previousQuestion: activeQuestion ? toGeneratedQuestion(activeQuestion) : undefined,
-        answer: req.body.answer,
+    if (plannedNextQuestion && activeQuestion) {
+      const followUpDecision = decideAdaptiveFollowUp({
         evaluation,
+        lastQuestion: toGeneratedQuestion(activeQuestion),
+        position: nextIndex,
+        total: targetQuestionCount,
       });
+
+      const adaptiveTurn = await generateAdaptiveInterviewQuestion({
+        ...buildContextFromInterview(interview),
+        previousQuestions: interview.questions.slice(0, nextIndex).map(toGeneratedQuestion),
+        transcript: answeredTranscript,
+        lastQuestion: toGeneratedQuestion(activeQuestion),
+        lastAnswer: req.body.answer,
+        lastEvaluation: evaluation,
+        followUpDecision,
+        targetQuestionCount,
+        currentQuestionIndex: questionIndex,
+        jdProfile: (interview as any).jdProfile,
+        companyGuidance: (interview as any).companyGuidance,
+        interviewRoadmap: (interview as any).interviewRoadmap,
+        interviewState: (interview as any).interviewState,
+      }).catch(() => undefined);
+
+      interview.questions[nextIndex] = adaptiveTurn?.question ?? toGeneratedQuestion(plannedNextQuestion);
     }
     interview.markModified('questions');
   }
@@ -609,11 +648,16 @@ export const transcribeRecording = asyncHandler(async (req, res) => {
   }
 
   const interview = await getInterviewForUser(interviewId, req.userId);
-  const transcription = await transcribeAudio(req.file, {
+  const resumeProfile = (interview as any).interviewRoadmap?.resumeProfile;
+  const transcription = await transcribeInterviewAnswer(req.file, {
     roleDomain: interview.roleDomain,
     currentQuestion: interview.questions[interview.currentQuestionIndex]?.question,
     jobDescription: (interview as any).jobDescription,
     resumeSkills: (interview as any).resumeSkills ?? [],
+    resumeProjects: resumeProfile?.projects ?? [],
+    resumeSummary: (interview as any).resumeSummary,
+    resumeText: interview.resumeText?.slice(0, 1200),
+    targetCompany: (interview as any).targetCompany,
   });
   res.json(transcription);
 });

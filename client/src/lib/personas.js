@@ -11,6 +11,8 @@ export const PERSONAS = [
     company: 'Technical Depth',
     focus: 'Technical depth',
     voiceStyle: 'professional_female',
+    speechPace: 0.96,
+    questionPauseMs: 700,
     personality:
       'Analytical and thorough. Probes technical depth. Asks detailed follow-up questions. Rewards structured thinking.',
     avatarUrl: avatarUrl(
@@ -27,6 +29,8 @@ export const PERSONAS = [
     company: 'Communication Clarity',
     focus: 'Communication clarity',
     voiceStyle: 'neutral',
+    speechPace: 0.98,
+    questionPauseMs: 850,
     personality:
       'Relaxed but sharp. Tests cultural fit and communication clarity. Conversational style but digs into motivations.',
     avatarUrl: avatarUrl(
@@ -43,6 +47,8 @@ export const PERSONAS = [
     company: 'System Design',
     focus: 'System design',
     voiceStyle: 'professional_male',
+    speechPace: 0.92,
+    questionPauseMs: 950,
     personality:
       'Precise and methodical. Focuses on algorithmic thinking, system design, and problem-solving depth. Expects rigorous, well-reasoned answers with clear logical structure.',
     avatarUrl: avatarUrl(

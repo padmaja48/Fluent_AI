@@ -2,6 +2,7 @@ import {
   buildInterviewQuestionSet,
   buildInterviewRoadmap,
   deriveInterviewRuntimeState,
+  getCompanyInterviewGuidanceWithResearch,
   getInterviewQuestionCount,
 } from '../services/companyQuestions.service';
 
@@ -546,5 +547,117 @@ describe('company question composition', () => {
     expect(questionText).not.toMatch(/PDF Knowledge Chatbot|Blood Donation Platform|Intellibotics/i);
     expect(questionText).not.toMatch(/Full Stack Development.*AI\/ML|AI\/ML.*Software Development Engineering/i);
     expect(questionText).not.toMatch(/Node\.js handles multiple client requests|React application becomes slow/i);
+  });
+
+  it('extracts projects and skills from poorly formatted inline resumes', () => {
+    const roadmap = buildInterviewRoadmap({
+      roleDomain: 'Frontend Developer',
+      roleLevel: 'Fresher',
+      duration: 30,
+      complexity: 'Intermediate',
+      resumeText:
+        'Riya Sharma | Skills React JavaScript CSS Jest | Projects Portfolio Website - React app with responsive UI | Weather Dashboard - JavaScript API integration | Experience Frontend Intern at Pixel Labs built reusable components',
+    });
+
+    expect(roadmap.resumeProfile.projects).toEqual(expect.arrayContaining(['Portfolio Website', 'Weather Dashboard']));
+    expect(roadmap.resumeProfile.workExperience.join(' ')).toMatch(/Frontend Intern/i);
+
+    const questions = buildInterviewQuestionSet({
+      duration: 30,
+      generatedQuestions: [],
+      interviewRoadmap: roadmap,
+    });
+    const questionText = questions.map((question) => question.question).join(' ');
+    expect(questionText).toMatch(/Portfolio Website|Weather Dashboard|React|frontend performance|responsive UI/i);
+  });
+
+  it('adds fallback topics when the resume has very few projects or skills', () => {
+    const roadmap = buildInterviewRoadmap({
+      roleDomain: 'Software Engineer',
+      roleLevel: 'Fresher',
+      duration: 15,
+      complexity: 'Beginner',
+      resumeText: 'Asha Kumar Education B.Tech Computer Science',
+    });
+
+    const technicalSection = roadmap.sections.find((section) => section.key === 'technical_skills');
+    expect(technicalSection?.topics).toEqual(expect.arrayContaining(['core fundamentals for the role', 'small project idea']));
+  });
+
+  it('keeps useful tail sections when parsing very long resumes', () => {
+    const longIntro = Array.from({ length: 4500 }, (_, index) => `Earlier responsibility ${index}: collaborated with teams on documentation.`).join('\n');
+    const roadmap = buildInterviewRoadmap({
+      roleDomain: 'Backend Developer',
+      roleLevel: 'Mid',
+      duration: 30,
+      complexity: 'Intermediate',
+      resumeText: [
+        longIntro,
+        'Projects',
+        'Logistics Routing API - Java, Spring Boot, PostgreSQL',
+        'Experience',
+        'Backend Engineer at RouteWorks',
+      ].join('\n'),
+    });
+
+    expect(roadmap.resumeProfile.projects).toContain('Logistics Routing API');
+    expect(roadmap.resumeProfile.workExperience.join(' ')).toMatch(/Backend Engineer/i);
+  });
+
+  it('stages question difficulty from easier prompts to later challenges', () => {
+    const roadmap = buildInterviewRoadmap({
+      roleDomain: 'Backend Developer',
+      roleLevel: 'Fresher',
+      duration: 30,
+      complexity: 'Intermediate',
+      resumeSkills: ['Java', 'Spring Boot', 'SQL'],
+      resumeText: ['Projects', 'Inventory API - Java Spring Boot SQL'].join('\n'),
+    });
+
+    const questions = buildInterviewQuestionSet({
+      duration: 30,
+      generatedQuestions: [],
+      interviewRoadmap: roadmap,
+    });
+    const difficulties = questions.map((question) => question.difficulty);
+
+    expect(difficulties.slice(0, 4)).toEqual(expect.arrayContaining(['easy', 'easy-medium']));
+    expect(difficulties.slice(-5).some((difficulty) => ['medium-hard', 'scenario', 'problem-solving'].includes(difficulty ?? ''))).toBe(true);
+  });
+
+  it('keeps company research optional and falls back safely in tests', async () => {
+    const guidance = await getCompanyInterviewGuidanceWithResearch({
+      targetCompany: 'amazon',
+      roleDomain: 'Backend Developer',
+    });
+
+    expect(guidance?.company).toBe('Amazon');
+    expect(guidance?.researchSource).toBe('static');
+    expect(guidance?.preferredTopics).toEqual(expect.arrayContaining(['ownership', 'coding fundamentals']));
+  });
+
+  it.each([
+    ['Data Analyst', ['SQL', 'Power BI', 'Excel'], /SQL|Power BI|dashboard|data cleaning/i],
+    ['Frontend Developer', ['React', 'JavaScript', 'CSS'], /responsive UI|React|frontend performance|browser debugging/i],
+    ['Backend Developer', ['Java', 'Spring Boot', 'PostgreSQL'], /API|database|backend.*concurrency|request/i],
+    ['AI/ML Engineer', ['Python', 'Machine Learning', 'TensorFlow'], /model selection|data preprocessing|model validation|monitoring/i],
+    ['QA Engineer', ['Selenium', 'API Testing', 'Jest'], /test case|API testing|automation framework|regression/i],
+    ['HR Executive', ['Communication', 'Excel'], /stakeholder communication|business impact|role motivation|practical/i],
+  ])('generates role-wise coverage for %s', (roleDomain, skills, expectedPattern) => {
+    const roadmap = buildInterviewRoadmap({
+      roleDomain,
+      roleLevel: 'Fresher',
+      duration: 30,
+      complexity: 'Intermediate',
+      resumeSkills: skills,
+      resumeText: ['Projects', `${roleDomain} Practice Project - ${skills.join(', ')}`].join('\n'),
+    });
+    const questions = buildInterviewQuestionSet({
+      duration: 30,
+      generatedQuestions: [],
+      interviewRoadmap: roadmap,
+    });
+
+    expect(questions.map((question) => question.question).join(' ')).toMatch(expectedPattern);
   });
 });

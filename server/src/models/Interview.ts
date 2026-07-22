@@ -1,6 +1,7 @@
 import mongoose, { Document, Model, Schema } from 'mongoose';
 
 export type InterviewStatus = 'Setup' | 'In Progress' | 'Completed' | 'Pending Review' | 'Cancelled';
+export type InterviewMode = 'sde' | 'frontend' | 'backend' | 'data_analyst' | 'ai_ml' | 'qa' | 'hr_behavioral';
 
 export interface IInterviewQuestion {
   question: string;
@@ -60,6 +61,7 @@ export interface IInterview extends Document {
   completedAt?: Date;
   personaId?: 'us-american' | 'us-indian' | 'us-australian' | 'ru-russian';
   interviewType?: 'Behavioural' | 'Technical' | 'Mixed';
+  interviewMode?: InterviewMode;
   complexity?: 'Beginner' | 'Intermediate' | 'Advanced';
   targetCompany?: string;
   violations: IInterviewViolation[];
@@ -144,6 +146,7 @@ const interviewSchema = new Schema<IInterview>(
     completedAt: Date,
     personaId: { type: String, enum: ['us-american', 'us-indian', 'us-australian', 'ru-russian'] },
     interviewType: { type: String, enum: ['Behavioural', 'Technical', 'Mixed'], default: 'Mixed' },
+    interviewMode: { type: String, enum: ['sde', 'frontend', 'backend', 'data_analyst', 'ai_ml', 'qa', 'hr_behavioral'], default: 'sde' },
     complexity: { type: String, enum: ['Beginner', 'Intermediate', 'Advanced'], default: 'Intermediate' },
     targetCompany: { type: String, trim: true, lowercase: true },
     violations: [

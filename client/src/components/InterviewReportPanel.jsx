@@ -63,7 +63,88 @@ const ScoreBar = ({ label, value, fillClass }) => (
   </div>
 );
 
-const downloadInterviewPdf = ({ selectedInterview, report, candidate, qa }) => {
+const averageScore = (items) => {
+  const scored = (items || []).filter((item) => typeof item.score === 'number');
+  if (!scored.length) return null;
+  return Math.round(scored.reduce((sum, item) => sum + Number(item.score || 0), 0) / scored.length);
+};
+
+const sectionMatches = (item, pattern) =>
+  pattern.test(`${item.question || ''} ${item.questionType || ''} ${item.resumeReference || ''} ${item.topic || ''}`);
+
+const clampScore = (value, fallback = 0) =>
+  Math.max(0, Math.min(100, Math.round(Number(value ?? fallback) || 0)));
+
+const deriveSectionScores = ({ report, qa, selectedInterview }) => {
+  const resumeItems = qa.filter((item) => sectionMatches(item, /resume|project|internship|experience|introduction|background/i));
+  const problemItems = qa.filter((item) => sectionMatches(item, /scenario|problem|debug|scale|complexity|design|trade-off|production/i));
+  const companyItems = qa.filter((item) => sectionMatches(item, /company|readiness|tcs|amazon|microsoft|google|accenture|deloitte|infosys|jpmorgan/i));
+  const hrItems = qa.filter((item) => sectionMatches(item, /behavio|hr|star|conflict|team|communication|motivation|strength/i));
+  const companyFallback = selectedInterview?.targetCompany ? report.overallScore : report.communicationScore;
+
+  return [
+    { key: 'resume', label: 'Resume Explanation', value: clampScore(averageScore(resumeItems), report.overallScore), note: 'Project and background clarity' },
+    { key: 'technical', label: 'Technical Depth', value: clampScore(report.technicalScore, report.overallScore), note: 'Concept accuracy and depth' },
+    { key: 'communication', label: 'Communication', value: clampScore(report.communicationScore, report.overallScore), note: 'Clarity, structure, grammar' },
+    { key: 'confidence', label: 'Confidence', value: clampScore(report.confidenceScore, report.communicationScore), note: 'Answer control and certainty' },
+    { key: 'problem', label: 'Problem Solving', value: clampScore(averageScore(problemItems), report.technicalScore), note: 'Debugging and trade-offs' },
+    { key: 'company', label: 'Company Readiness', value: clampScore(averageScore(companyItems), companyFallback), note: 'Company fit and preparation' },
+    { key: 'hr', label: 'HR Readiness', value: clampScore(averageScore(hrItems), report.behavioralScore), note: 'STAR stories and maturity' },
+  ];
+};
+
+const splitFeedbackSentence = (feedback, label) => {
+  const match = cleanText(feedback).match(new RegExp(`${label}:\\s*([^.]*(?:\\.[^A-Z]*)?)`, 'i'));
+  return cleanText(match?.[1]);
+};
+
+const getQuestionFeedbackParts = (item) => {
+  const correct = item.whatWorked ||
+    splitFeedbackSentence(item.feedback, 'Correct') ||
+    item.dynamicFeedback?.strengths?.[0] ||
+    ((item.conceptsCovered || []).length ? `Covered ${(item.conceptsCovered || []).slice(0, 3).join(', ')}.` : 'No clear correct concept was recorded.');
+  const missing = item.whatToImprove ||
+    splitFeedbackSentence(item.feedback, 'Missing') ||
+    item.dynamicFeedback?.areasToImprove?.[0] ||
+    ((item.missingConcepts || []).length ? `Missing ${(item.missingConcepts || []).slice(0, 3).join(', ')}.` : 'No specific missing concept was recorded.');
+  const concepts = Array.from(new Set([
+    ...(item.missingConcepts || []),
+    ...(item.technicalMistakes || []),
+    ...(item.wrongTerminology || []),
+    ...(item.dynamicFeedback?.missingConcepts || []),
+  ].filter(Boolean))).slice(0, 5);
+  const ideal = item.idealAnswer || item.samplePerfectAnswer || 'A strong answer should directly address the question, include a concrete example, mention trade-offs, and explain validation or impact.';
+  const improved = item.samplePerfectAnswer || item.idealAnswer || `Improve this answer by covering: ${concepts.join(', ') || 'the expected signals'}, then add one specific project example.`;
+
+  return { correct, missing, ideal, concepts, improved };
+};
+
+const deriveLearningRoadmap = ({ report, sectionScores, qa }) => {
+  const weakSections = sectionScores.filter((section) => section.value < 70);
+  const missed = Array.from(new Set([
+    ...(report.missedConcepts || []),
+    ...(report.areasForImprovement || []),
+    ...qa.flatMap((item) => item.missingConcepts || []),
+  ].filter(Boolean))).slice(0, 6);
+  const roadmap = [];
+
+  weakSections.forEach((section) => {
+    if (section.key === 'technical') roadmap.push('Revise the weakest technical concepts and explain each with one project example.');
+    else if (section.key === 'resume') roadmap.push('Practice a 90-second project architecture explanation from problem to outcome.');
+    else if (section.key === 'communication') roadmap.push('Practice answers aloud using a clear opening, evidence, and conclusion.');
+    else if (section.key === 'confidence') roadmap.push('Reduce hesitant language and state assumptions before answering.');
+    else if (section.key === 'problem') roadmap.push('Practice debugging scenarios with steps, metrics, trade-offs, and rollback plan.');
+    else if (section.key === 'company') roadmap.push('Prepare company-specific focus areas and connect them to your resume examples.');
+    else if (section.key === 'hr') roadmap.push('Improve STAR answers for teamwork, conflict, ownership, and learning stories.');
+  });
+
+  missed.slice(0, 4).forEach((item) => roadmap.push(`Revise ${item}.`));
+  (report.recommendedLearningResources || report.recommendations || []).slice(0, 3).forEach((item) => roadmap.push(item));
+
+  return Array.from(new Set(roadmap)).slice(0, 7);
+};
+
+const downloadInterviewPdf = ({ selectedInterview, report, candidate, qa, sectionScores, learningRoadmap }) => {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const page = {
     width: doc.internal.pageSize.getWidth(),
@@ -124,6 +205,9 @@ const downloadInterviewPdf = ({ selectedInterview, report, candidate, qa }) => {
   addText(`Interview Type: ${candidate.interviewType} | Duration: ${candidate.duration} | Difficulty: ${candidate.difficulty}`);
   addText(`Scores: Communication ${report.communicationScore ?? '-'}, Technical ${report.technicalScore ?? '-'}, Behavioural ${report.behavioralScore ?? '-'}`);
 
+  addHeading('Section-Wise Scorecard');
+  sectionScores.forEach((section) => addText(`${section.label}: ${section.value}/100 - ${section.note}`, { gap: 7 }));
+
   if (report.transcriptSummary) {
     addHeading('AI Summary');
     addText(report.transcriptSummary);
@@ -140,8 +224,12 @@ const downloadInterviewPdf = ({ selectedInterview, report, candidate, qa }) => {
     addList(report.recommendations);
   }
 
+  addHeading('Personalized Learning Roadmap');
+  addList(learningRoadmap);
+
   addHeading('Question Timeline and Feedback');
   qa.forEach((item, idx) => {
+    const feedbackParts = getQuestionFeedbackParts(item);
     addPageIfNeeded(90);
     doc.setDrawColor('#e5e7eb');
     doc.line(page.margin, y, page.width - page.margin, y);
@@ -149,12 +237,11 @@ const downloadInterviewPdf = ({ selectedInterview, report, candidate, qa }) => {
     addText(`Q${idx + 1}${item.score != null ? ` - Score: ${item.score}/100` : ''}`, { size: 11, style: 'bold', gap: 8 });
     addText(`Question: ${item.question}`, { gap: 8 });
     addText(`Answer: ${item.answer || item.userAnswer || 'No answer recorded'}`, { gap: 8 });
-    if (item.feedback) addText(`Feedback: ${item.feedback}`, { gap: 8 });
-    if (item.whatWorked) addText(`What worked: ${item.whatWorked}`, { gap: 8 });
-    if (item.whatToImprove) addText(`Improve: ${item.whatToImprove}`, { gap: 12 });
-    if ((item.missingConcepts || []).length > 0) addText(`Missing concepts: ${(item.missingConcepts || []).join(', ')}`, { gap: 8 });
-    if ((item.technicalMistakes || []).length > 0) addText(`Technical mistakes: ${(item.technicalMistakes || []).join(', ')}`, { gap: 8 });
-    if (item.samplePerfectAnswer) addText(`Sample perfect answer: ${item.samplePerfectAnswer}`, { gap: 12 });
+    addText(`What was correct: ${feedbackParts.correct}`, { gap: 8 });
+    addText(`What was missing: ${feedbackParts.missing}`, { gap: 8 });
+    addText(`Ideal answer: ${feedbackParts.ideal}`, { gap: 8 });
+    addText(`Concepts to revise: ${feedbackParts.concepts.length ? feedbackParts.concepts.join(', ') : 'No specific concepts recorded.'}`, { gap: 8 });
+    addText(`Suggested improved answer: ${feedbackParts.improved}`, { gap: 12 });
   });
 
   const fileName = `${safeFilePart(candidate.name)}-${safeFilePart(candidate.role)}-report.pdf`;
@@ -230,11 +317,12 @@ export const InterviewReportPanel = ({ interviews, selectedInterview, report, on
           const qa = report.questionAnalysis?.length
             ? report.questionAnalysis
             : (selectedInterview.questions || []);
+          const sectionScores = deriveSectionScores({ report, qa, selectedInterview });
+          const learningRoadmap = deriveLearningRoadmap({ report, sectionScores, qa });
 
           return (
             <>
-              {/* Hero score card — mirrors practice .results-hero */}
-              <div className="results-hero">
+              <div className="results-hero report-scorecard-hero">
                 <div
                   className="score-ring"
                   style={{ '--score-deg': scoreToDeg(report.overallScore) }}
@@ -263,19 +351,45 @@ export const InterviewReportPanel = ({ interviews, selectedInterview, report, on
                   <button
                     type="button"
                     className="report-download-btn"
-                    onClick={() => downloadInterviewPdf({ selectedInterview, report, candidate, qa })}
+                    onClick={() => downloadInterviewPdf({ selectedInterview, report, candidate, qa, sectionScores, learningRoadmap })}
                   >
                     Download PDF
                   </button>
                 </div>
               </div>
 
-              {/* Score breakdown bars — mirrors practice .skill-bars */}
-              <div className="skill-bars">
-                <p className="skill-bars-title">Score Breakdown</p>
+              <section className="report-scorecard-section">
+                <div className="report-section-heading">
+                  <span>Professional Scorecard</span>
+                  <h3>Section-wise interview readiness</h3>
+                </div>
+                <div className="report-section-score-grid">
+                  {sectionScores.map((section) => (
+                    <div key={section.key} className="report-section-score-card">
+                      <div
+                        className="report-mini-ring"
+                        style={{
+                          '--score-deg': scoreToDeg(section.value),
+                          '--score-color': scoreColor(section.value),
+                        }}
+                      >
+                        <strong>{section.value}</strong>
+                      </div>
+                      <div>
+                        <h4>{section.label}</h4>
+                        <p>{section.note}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <div className="skill-bars report-metric-bars">
+                <p className="skill-bars-title">Core Metrics</p>
                 <ScoreBar label="Communication" value={report.communicationScore} fillClass="accuracy" />
                 <ScoreBar label="Technical"     value={report.technicalScore}     fillClass="score" />
                 <ScoreBar label="Behavioural"   value={report.behavioralScore}    fillClass="completion" />
+                <ScoreBar label="Confidence"    value={report.confidenceScore}    fillClass="score" />
               </div>
 
               {/* Strengths + Improvements — mirrors practice .feedback-cards */}
@@ -317,15 +431,75 @@ export const InterviewReportPanel = ({ interviews, selectedInterview, report, on
                 </div>
               )}
 
+              <section className="report-scorecard-section report-roadmap-section">
+                <div className="report-section-heading">
+                  <span>Learning Roadmap</span>
+                  <h3>What to practice next</h3>
+                </div>
+                <ol className="report-roadmap-list">
+                  {learningRoadmap.length > 0
+                    ? learningRoadmap.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)
+                    : <li>Continue practicing role-specific answers and review the lowest question scores.</li>
+                  }
+                </ol>
+              </section>
+
+              {((report.missedConcepts || []).length > 0 || (report.recommendedLearningResources || []).length > 0 || report.hiringRecommendation) && (
+                <div className="feedback-cards">
+                  <div className="feedback-card feedback-card--focus">
+                    <h4>Concepts to Improve</h4>
+                    <ul>
+                      {(report.missedConcepts || []).length > 0
+                        ? report.missedConcepts.slice(0, 8).map((item, i) => <li key={i}>{item}</li>)
+                        : <li>No missed concepts recorded.</li>
+                      }
+                    </ul>
+                  </div>
+                  <div className="feedback-card feedback-card--strengths">
+                    <h4>Next Learning Steps</h4>
+                    <ul>
+                      {(report.recommendedLearningResources || []).length > 0
+                        ? report.recommendedLearningResources.slice(0, 6).map((item, i) => <li key={i}>{item}</li>)
+                        : <li>Continue practicing role-specific interview answers.</li>
+                      }
+                    </ul>
+                    {report.hiringRecommendation && (
+                      <p style={{ margin: '10px 0 0', fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                        <strong style={{ color: 'var(--text)' }}>Hiring signal:</strong> {report.hiringRecommendation}
+                        {report.hiringRecommendationReason ? ` - ${report.hiringRecommendationReason}` : ''}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {(report.difficultyProgression || []).length > 0 && (
+                <div className="skill-bars" style={{ gap: '10px' }}>
+                  <p className="skill-bars-title" style={{ marginBottom: '4px' }}>Difficulty Progression</p>
+                  <div className="report-difficulty-strip">
+                    {report.difficultyProgression.map((difficulty, index) => (
+                      <span key={`${difficulty}-${index}`}>Q{index + 1}: {difficulty}</span>
+                    ))}
+                  </div>
+                  {report.followUpQuality && (
+                    <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.6, margin: 0 }}>
+                      {report.followUpQuality}
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Q&A Transcript */}
               {qa.length > 0 && (
-                <div className="skill-bars" style={{ gap: '12px' }}>
-                  <p className="skill-bars-title" style={{ marginBottom: '4px' }}>
-                    Full Q&amp;A Transcript · AI Feedback
-                  </p>
+                <section className="report-scorecard-section" style={{ gap: '12px' }}>
+                  <div className="report-section-heading">
+                    <span>Question-by-question Feedback</span>
+                    <h3>Detailed answer review</h3>
+                  </div>
                   {qa.map((item, idx) => {
                     const qScore = item.score;
                     const qColor = qScore != null ? scoreColor(qScore) : 'var(--text-muted)';
+                    const feedbackParts = getQuestionFeedbackParts(item);
                     return (
                       <div key={idx} className="report-qa-card">
                         {/* Question header row */}
@@ -357,17 +531,40 @@ export const InterviewReportPanel = ({ interviews, selectedInterview, report, on
                           }
                         </div>
 
-                        {/* AI feedback block */}
-                        {(item.feedback || item.whatWorked || item.whatToImprove) && (
-                          <div className="report-ai-feedback">
-                            <div className="report-feedback-label">AI Feedback</div>
+                        <div className="report-answer-feedback-grid">
+                          <div className="report-feedback-box report-feedback-box--correct">
+                            <span>What was correct</span>
+                            <p>{feedbackParts.correct}</p>
+                          </div>
+                          <div className="report-feedback-box report-feedback-box--missing">
+                            <span>What was missing</span>
+                            <p>{feedbackParts.missing}</p>
+                          </div>
+                          <div className="report-feedback-box">
+                            <span>Ideal answer</span>
+                            <p>{feedbackParts.ideal}</p>
+                          </div>
+                          <div className="report-feedback-box">
+                            <span>Concepts to revise</span>
+                            {feedbackParts.concepts.length > 0
+                              ? (
+                                <div className="report-concept-tags">
+                                  {feedbackParts.concepts.map((concept) => <em key={concept}>{concept}</em>)}
+                                </div>
+                              )
+                              : <p>No specific revision concepts recorded.</p>
+                            }
+                          </div>
+                          <div className="report-feedback-box report-feedback-box--wide">
+                            <span>Suggested improved answer</span>
+                            <p>{feedbackParts.improved}</p>
+                          </div>
+                        </div>
+
+                        {(item.feedback || item.dynamicFeedback) && (
+                          <details className="report-ai-feedback">
+                            <summary>Additional evaluator notes</summary>
                             {item.feedback && <p>{item.feedback}</p>}
-                            {item.whatWorked && (
-                              <div className="report-micro-row green">{item.whatWorked}</div>
-                            )}
-                            {item.whatToImprove && (
-                              <div className="report-micro-row amber">{item.whatToImprove}</div>
-                            )}
                             {item.dynamicFeedback?.communication && (
                               <p><strong>Communication:</strong> {item.dynamicFeedback.communication}</p>
                             )}
@@ -395,18 +592,12 @@ export const InterviewReportPanel = ({ interviews, selectedInterview, report, on
                             {(item.dynamicFeedback?.nextLearningSuggestions || []).length > 0 && (
                               <p><strong>Learning suggestions:</strong> {item.dynamicFeedback.nextLearningSuggestions.join(' ')}</p>
                             )}
-                            {item.samplePerfectAnswer && (
-                              <>
-                                <div className="report-feedback-label">Sample Perfect Answer</div>
-                                <p>{item.samplePerfectAnswer}</p>
-                              </>
-                            )}
-                          </div>
+                          </details>
                         )}
                       </div>
                     );
                   })}
-                </div>
+                </section>
               )}
             </>
           );

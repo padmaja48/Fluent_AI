@@ -453,8 +453,27 @@ const SECTION_HEADINGS: Record<string, RegExp> = {
   additionalInformation: /^(additional information|core competencies)$/i,
 };
 
+const SECTION_LABEL_PATTERN =
+  /(^|\n)\s*(Career Objective|Objective|Profile Summary|Summary|Education|Academic Background|Qualification|Technical Skills|Skills|Technical Summary|Projects?|Academic Projects?|Personal Projects?|Internships?|Internship Experience|Training|Work Experience|Professional Experience|Employment|Experience|Certifications?(?:\s*&\s*Training)?|Certificates?|Licenses?|Technical Certifications|Achievements?|Awards?|Honou?rs?|Hackathons?|Coding Competitions?|Research Papers?|Research Work|Publications?|Leadership|Positions? of Responsibility|Responsibilities|Areas? of Interest|Interests?|Coursework|Relevant Coursework|Courses|Subjects|Language Proficiency|Languages|Additional Information|Core Competencies)\b\s*:?\s*/gim;
+
+const MAX_RESUME_TEXT_CHARS = 180000;
+const MAX_SECTION_LINES = 28;
+
+const boundResumeText = (resumeText?: string) => {
+  const text = resumeText ?? '';
+  if (text.length <= MAX_RESUME_TEXT_CHARS) return text;
+  return `${text.slice(0, 120000)}\n${text.slice(-60000)}`;
+};
+
+const normalizeResumeTextForParsing = (resumeText?: string) =>
+  boundResumeText(resumeText)
+    .replace(/\r/g, '\n')
+    .replace(/[|·]/g, '\n')
+    .replace(/[•●▪◆]/g, '\n')
+    .replace(SECTION_LABEL_PATTERN, '\n$2\n');
+
 const splitResumeLines = (resumeText?: string) =>
-  (resumeText ?? '')
+  normalizeResumeTextForParsing(resumeText)
     .split(/\r?\n/)
     .map((line) => line.replace(/^[\s>*-]+/, '').trim())
     .filter((line) => line.length > 1);
@@ -472,7 +491,7 @@ const extractSectionLines = (lines: string[], heading: RegExp) => {
     if (isLikelyHeading(line) && output.length > 0) break;
     if (!isLikelyHeading(line)) output.push(line);
   }
-  return output.slice(0, 12);
+  return output.slice(0, MAX_SECTION_LINES);
 };
 
 const extractNamedItems = (lines: string[], fallbackPattern: RegExp, maxItems = 8) =>
@@ -504,6 +523,16 @@ const extractProjectItems = (lines: string[], maxItems = 8) =>
       .filter((line) => /\b(project|app|system|platform|model|dashboard|website|portal|engine|chatbot|tracker|finder)\b/i.test(line) || line.split(/\s+/).length <= 6),
   ).slice(0, maxItems);
 
+const fallbackProjectItems = (lines: string[], maxItems = 6) =>
+  uniqueTopics(
+    lines
+      .filter((line) => /\b(project|app|application|system|platform|portal|dashboard|website|chatbot|model|api|service|tracker|management)\b/i.test(line))
+      .filter((line) => !/@|linkedin|github\.com|www\.|http/i.test(line))
+      .map(cleanProjectName)
+      .filter((line) => line.split(/\s+/).length <= 10)
+      .filter((line) => !/^(?:developed|built|implemented|created|designed|used|worked|responsible)\b/i.test(line)),
+  ).slice(0, maxItems);
+
 const cleanExperienceName = (line: string) =>
   cleanBullet(line)
     .replace(/\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+\d{4}\s+[–-]\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+\d{4}.*$/i, '')
@@ -517,6 +546,14 @@ const extractExperienceItems = (lines: string[], maxItems = 6) =>
       .filter((line) => line.split(/\s+/).length <= 12),
   ).slice(0, maxItems);
 
+const fallbackExperienceItems = (lines: string[], maxItems = 5) =>
+  uniqueTopics(
+    lines
+      .filter((line) => /\b(intern|engineer|developer|analyst|consultant|associate|trainee|worked at|experience at)\b/i.test(line))
+      .map(cleanExperienceName)
+      .filter((line) => line.split(/\s+/).length <= 14),
+  ).slice(0, maxItems);
+
 const extractCertificationItems = (lines: string[], maxItems = 8) =>
   uniqueTopics(
     lines
@@ -525,6 +562,16 @@ const extractCertificationItems = (lines: string[], maxItems = 8) =>
       .filter((line) => !/^(technical certifications|professional development)$/i.test(line))
       .map((line) => line.replace(/\s+[–-]\s+.*$/, '').trim())
       .filter((line) => /\b(certification|certified|sql|python|mern|aws|azure|google|tensorflow|oracle|microsoft|nptel|zoho|cambridge|pet)\b/i.test(line)),
+  ).slice(0, maxItems);
+
+const fallbackCertificationItems = (lines: string[], maxItems = 6) =>
+  uniqueTopics(
+    lines
+      .filter((line) => /\b(certification|certified|certificate|hackerrank|coursera|udemy|nptel|practitioner|associate|professional|fundamentals|essentials)\b/i.test(line))
+      .filter((line) => !/\b(project|app|system|platform|dashboard|website|portal)\b/i.test(line))
+      .map(cleanBullet)
+      .map((line) => line.replace(/\s+[–-]\s+.*$/, '').trim())
+      .filter((line) => line.length >= 4 && line.split(/\s+/).length <= 12),
   ).slice(0, maxItems);
 
 const extractEducation = (lines: string[]) => {
@@ -562,17 +609,20 @@ export const analyzeResumeForInterview = ({
   targetCompany?: string;
 }): ResumeInterviewProfile => {
   const lines = splitResumeLines(resumeText);
-  const fullText = `${resumeText ?? ''}\n${resumeSummary ?? ''}\n${resumeSkills.join(' ')}`;
+  const fullText = `${normalizeResumeTextForParsing(resumeText)}\n${resumeSummary ?? ''}\n${resumeSkills.join(' ')}`;
   const education = extractEducation(lines);
   const firstContentLine = lines.find((line) => !isLikelyHeading(line) && !/@|http|www\.|linkedin|github/i.test(line));
-  const experienceItems = extractExperienceItems(extractSectionLines(lines, SECTION_HEADINGS.workExperience), 6);
-  const projects = extractProjectItems(extractSectionLines(lines, SECTION_HEADINGS.projects), 8);
+  const experienceSectionItems = extractExperienceItems(extractSectionLines(lines, SECTION_HEADINGS.workExperience), 6);
+  const experienceItems = experienceSectionItems.length ? experienceSectionItems : fallbackExperienceItems(lines, 6);
+  const projectSectionItems = extractProjectItems(extractSectionLines(lines, SECTION_HEADINGS.projects), 8);
+  const projects = projectSectionItems.length ? projectSectionItems : fallbackProjectItems(lines, 8);
   const internships = uniqueTopics([
     ...extractExperienceItems(extractSectionLines(lines, SECTION_HEADINGS.internships), 5),
     ...experienceItems.filter((item) => /\bintern\b/i.test(item)),
   ]).slice(0, 5);
   const workExperience = experienceItems;
-  const certifications = extractCertificationItems(extractSectionLines(lines, SECTION_HEADINGS.certifications), 8);
+  const certificationSectionItems = extractCertificationItems(extractSectionLines(lines, SECTION_HEADINGS.certifications), 8);
+  const certifications = certificationSectionItems.length ? certificationSectionItems : fallbackCertificationItems(lines, 8);
   const coursework = extractNamedItems(extractSectionLines(lines, SECTION_HEADINGS.coursework), /\b(data structures?|algorithms?|dbms|operating systems?|computer networks?|machine learning|artificial intelligence|cloud|software engineering|statistics|marketing|analytics)\b/i, 10);
   const interests = extractNamedItems(extractSectionLines(lines, SECTION_HEADINGS.areasOfInterest), /\b(ai|cloud|web|data|security|software|machine learning|marketing|analytics|development)\b/i, 8);
 
@@ -717,7 +767,7 @@ const roleSpecificTopics = (roleDomain: string, resumeProfile?: ResumeInterviewP
   }
 
   if (/\bai|artificial intelligence|ml|machine learning\b/i.test(roleDomain)) {
-    return ['model selection', 'data preprocessing', 'feature evaluation', 'model validation', 'AI product integration', 'responsible AI checks'];
+    return ['model selection', 'data preprocessing', 'feature evaluation', 'model validation', 'AI product integration', 'responsible AI checks', 'model deployment and monitoring'];
   }
 
   if (/\bsde|software\s+development\s+engineer|software|developer|programmer\b/i.test(roleDomain)) {
@@ -741,11 +791,15 @@ const roleSpecificTopics = (roleDomain: string, resumeProfile?: ResumeInterviewP
   }
 
   if (/\bfrontend\b/i.test(roleDomain)) {
-    return ['responsive UI implementation', 'state management', 'API integration', 'accessibility', 'performance optimization'];
+    return ['responsive UI implementation', 'state management', 'API integration', 'accessibility', 'frontend performance optimization', 'browser debugging'];
   }
 
   if (/\bbackend\b/i.test(roleDomain)) {
-    return ['API design basics', 'database interaction', 'authentication flow', 'error handling', 'testing strategy'];
+    return ['API design basics', 'database interaction', 'authentication flow', 'error handling', 'backend request handling and concurrency', 'testing strategy'];
+  }
+
+  if (/\bqa|quality assurance|test engineer|sdet\b/i.test(roleDomain)) {
+    return ['test case design', 'bug reporting', 'API testing', 'automation framework design', 'regression testing', 'defect triage'];
   }
 
   if (/\bbusiness\s*analyst|product|sales|operations|hr|human resources|finance|accounting\b/i.test(roleDomain)) {
@@ -773,6 +827,22 @@ const problemSolvingTopicsForRole = (roleDomain: string, resumeProfile: ResumeIn
   return isTechnicalInterviewRole(roleDomain)
     ? roleSpecificTopics(roleDomain, resumeProfile).slice(0, 6)
     : uniqueTopics(['role scenario', 'prioritization', 'metrics analysis', 'execution plan']);
+};
+
+const sparseResumeFallbackTopics = (roleDomain: string, resumeProfile: ResumeInterviewProfile) => {
+  const hasSparseEvidence =
+    resumeProfile.projects.length === 0 &&
+    resumeProfile.internships.length === 0 &&
+    resumeProfile.workExperience.length === 0 &&
+    resumeSkillTopics(resumeProfile).length <= 2;
+
+  if (!hasSparseEvidence) return [];
+
+  if (isTechnicalInterviewRole(roleDomain)) {
+    return ['core fundamentals for the role', 'small project idea', 'debugging basics', 'testing and validation'];
+  }
+
+  return ['role motivation', 'transferable strengths', 'learning plan', 'practical role scenario'];
 };
 
 const prioritizeCertificationTopics = (certifications: string[], roleDomain: string) => {
@@ -863,7 +933,10 @@ export const buildInterviewRoadmap = ({
   const systemDesignApplicable = shouldAskSystemDesign(roleDomain, roleLevel, technicalSkillTopics, jdProfile);
   const targetQuestionCount = getInterviewQuestionCount(duration);
   const limits = getDifficultyLimits(complexity);
-  const technicalTopics = technicalSkillTopics.slice(0, 30);
+  const technicalTopics = uniqueTopics([
+    ...technicalSkillTopics,
+    ...sparseResumeFallbackTopics(roleDomain, resumeProfile),
+  ]).slice(0, 30);
   const sections: Omit<InterviewRoadmapSection, 'questionBudget'>[] = [
     { key: 'self_introduction', title: 'Self Introduction', topics: ['Candidate overview'] },
     { key: 'resume_overview', title: 'Resume Overview', topics: uniqueTopics([resumeProfile.candidateInformation.degree ?? '', resumeProfile.candidateInformation.college ?? '', roleDomain]).slice(0, 4) },
@@ -1553,6 +1626,87 @@ export const getCompanyInterviewGuidance = (targetCompany?: string): CompanyInte
     ...(category ? categoryGuidance[category] : {}),
     ...(explicit[companyKey] ?? {}),
     company,
+  };
+};
+
+const decodeHtmlEntities = (value: string) =>
+  value
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+
+const cleanSearchSnippet = (value: string) =>
+  decodeHtmlEntities(value)
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const inferResearchTopics = (text: string) => {
+  const topics: string[] = [];
+  const checks: Array<[string, RegExp]> = [
+    ['coding rounds', /\bcoding|dsa|data structures?|algorithm|leetcode|hackerrank\b/i],
+    ['system design', /\bsystem design|scalability|architecture|distributed\b/i],
+    ['behavioral stories', /\bbehavioral|leadership principles?|star|ownership|teamwork\b/i],
+    ['SQL/database fundamentals', /\bsql|database|dbms|query\b/i],
+    ['resume project deep dives', /\bproject|resume|experience\b/i],
+    ['operating-system and OOP fundamentals', /\boop|operating system|process|thread|network\b/i],
+    ['product and customer impact', /\bcustomer|product|impact|metrics\b/i],
+  ];
+  checks.forEach(([topic, pattern]) => {
+    if (pattern.test(text)) topics.push(topic);
+  });
+  return uniqueTopics(topics).slice(0, 6);
+};
+
+const fetchCompanyResearchSnippets = async (company: string, roleDomain: string) => {
+  if (process.env.NODE_ENV === 'test') return [];
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2500);
+  const query = encodeURIComponent(`${company} ${roleDomain} interview questions process`);
+  try {
+    const response = await fetch(`https://duckduckgo.com/html/?q=${query}`, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'FluentAIInterviewResearch/1.0' },
+    });
+    if (!response.ok) return [];
+    const html = await response.text();
+    return Array.from(html.matchAll(/<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>|<div[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/div>/gi))
+      .map((match) => cleanSearchSnippet(match[1] || match[2] || ''))
+      .filter((snippet) => snippet.length > 40)
+      .slice(0, 5);
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+export const getCompanyInterviewGuidanceWithResearch = async ({
+  targetCompany,
+  roleDomain,
+}: {
+  targetCompany?: string;
+  roleDomain: string;
+}): Promise<CompanyInterviewGuidance | undefined> => {
+  const guidance = getCompanyInterviewGuidance(targetCompany);
+  if (!guidance?.company) return guidance;
+
+  const snippets = await fetchCompanyResearchSnippets(guidance.company, roleDomain);
+  if (!snippets.length) {
+    return { ...guidance, researchSource: 'static', researchedAt: new Date().toISOString() };
+  }
+
+  const researchedTopics = inferResearchTopics(snippets.join(' '));
+  return {
+    ...guidance,
+    researchSource: 'static+web',
+    researchedAt: new Date().toISOString(),
+    researchQueries: [`${guidance.company} ${roleDomain} interview questions process`],
+    researchInsights: snippets,
+    preferredTopics: uniqueTopics([...researchedTopics, ...guidance.preferredTopics]).slice(0, 10),
+    caution: `${guidance.caution} Fresh web snippets were used only as trend signals and not as official company questions.`,
   };
 };
 
@@ -2248,6 +2402,40 @@ const withQuestionMetadata = (questions: GeneratedQuestion[]) =>
         : 'deepen'),
   }));
 
+const stagedDifficulty = (
+  question: GeneratedQuestion,
+  index: number,
+  total: number,
+  roadmap?: InterviewRoadmap,
+): NonNullable<GeneratedQuestion['difficulty']> => {
+  if (index === 0) return 'easy';
+  const ratio = index / Math.max(1, total - 1);
+  const current = question.difficulty ?? 'medium';
+
+  if (roadmap?.difficulty === 'Easy') {
+    if (ratio < 0.45) return current === 'behavioral' ? 'behavioral' : 'easy-medium';
+    if (ratio < 0.8) return current === 'scenario' ? 'scenario' : 'medium';
+    return question.questionType === 'situational' ? 'scenario' : current === 'behavioral' ? 'behavioral' : 'medium';
+  }
+
+  if (ratio < 0.25) {
+    return current === 'behavioral' ? 'behavioral' : current === 'easy' ? 'easy' : 'easy-medium';
+  }
+  if (ratio < 0.6) {
+    return current === 'behavioral' ? 'behavioral' : current === 'scenario' ? 'medium-hard' : 'medium';
+  }
+  if (ratio < 0.82) {
+    return current === 'behavioral' ? 'behavioral' : question.questionType === 'situational' ? 'scenario' : 'medium-hard';
+  }
+  return current === 'behavioral' ? 'behavioral' : question.questionType === 'situational' ? 'scenario' : 'problem-solving';
+};
+
+const applyDifficultyProgression = (questions: GeneratedQuestion[], roadmap?: InterviewRoadmap) =>
+  questions.map((question, index) => ({
+    ...question,
+    difficulty: stagedDifficulty(question, index, questions.length, roadmap),
+  }));
+
 const sectionTitleFromReference = (question: GeneratedQuestion) =>
   normalizeTopic((question.resumeReference ?? '').split(':')[0] ?? '');
 
@@ -2314,15 +2502,22 @@ export const buildInterviewQuestionSet = ({
   duration,
   interviewRoadmap,
   prioritizeGenerated = false,
+  researchedCompanyQuestions = [],
 }: {
   generatedQuestions: GeneratedQuestion[];
   targetCompany?: string;
   duration: number;
   interviewRoadmap?: InterviewRoadmap;
   prioritizeGenerated?: boolean;
+  researchedCompanyQuestions?: GeneratedQuestion[];
 }) => {
   const company = normalizeCompany(targetCompany);
-  const companyQuestions = company ? getCompanyBank(company) : [];
+  const companyQuestions =
+    researchedCompanyQuestions.length > 0
+      ? researchedCompanyQuestions
+      : company
+      ? getCompanyBank(company)
+      : [];
   const targetCount = getInterviewQuestionCount(duration);
   const finalTargetCount = interviewRoadmap?.targetQuestionCount ?? targetCount;
   const generatedWithoutIntro = generatedQuestions.filter((question) => !isIntroQuestion(question));
@@ -2379,22 +2574,36 @@ export const buildInterviewQuestionSet = ({
     remainingResumeQuestions,
     remainingRoleAndCodingPrimary,
     companyPlannedQuestions,
-    remainingRoleQuestions,
     remainingSkillQuestions,
+    remainingRoleQuestions,
   );
 
   if (!interviewRoadmap) {
     const fallbackOrderedQuestions = prioritizeGenerated
       ? [INTRO_QUESTION, ...generatedWithoutIntro, ...companyQuestions]
       : [INTRO_QUESTION, ...companyQuestions, ...generatedWithoutIntro];
-    return withQuestionMetadata(uniqueByQuestion(fallbackOrderedQuestions).slice(0, finalTargetCount));
+    const selected = uniqueByQuestion(fallbackOrderedQuestions).slice(0, finalTargetCount);
+    return withQuestionMetadata(applyDifficultyProgression(selected, interviewRoadmap));
+  }
+
+  if (researchedCompanyQuestions.length > 0 && companyQuestions.length > 0) {
+    const orderedQuestions = [
+      INTRO_QUESTION,
+      ...companyQuestions,
+      ...behavioralHrQuestions.slice(0, 2),
+      ...resumePrimaryQuestions.slice(0, 2),
+      ...generatedWithoutIntro,
+    ];
+    const selected = uniqueByQuestion(orderedQuestions).slice(0, finalTargetCount);
+    return withQuestionMetadata(applyDifficultyProgression(selected, interviewRoadmap));
   }
 
   const orderedQuestions = prioritizeGenerated
     ? [INTRO_QUESTION, ...resumeConversation, ...generatedWithoutIntro, ...resumeRoleSkillConversation, ...companyQuestions, ...behavioralHrQuestions, ...remainingPlannedQuestions]
     : [INTRO_QUESTION, ...resumeConversation, ...resumeRoleSkillConversation, ...companyQuestions, ...behavioralHrQuestions, ...remainingPlannedQuestions, ...generatedWithoutIntro];
 
-  return withQuestionMetadata(removeRepeatedSkillCoverage(uniqueByQuestion(orderedQuestions)).slice(0, finalTargetCount));
+  const selected = removeRepeatedSkillCoverage(uniqueByQuestion(orderedQuestions)).slice(0, finalTargetCount);
+  return withQuestionMetadata(applyDifficultyProgression(selected, interviewRoadmap));
 };
 
 const topicMatches = (candidate: string | undefined, topic: string) => {
