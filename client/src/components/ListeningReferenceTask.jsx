@@ -7,21 +7,21 @@ const listeningSets = [
     title: 'Campus Orientation Desk',
     section: 'Section 1',
     script:
-      'Receptionist: Good morning. You are here for the new student orientation, right? Student: Yes, my name is Kavya Rao. Receptionist: Please take the blue folder from the table. Your first talk is in Room 204 at ten fifteen. After that, you will meet your mentor near the library entrance. Student: Do I need my ID card today? Receptionist: Yes, show it at the lunch counter. The campus tour starts at two o clock, but the sports centre visit is cancelled because of maintenance.',
+      'Receptionist: Good morning. You are here for the new student orientation, right? Student: Yes, my name is Kavya Rao. Receptionist: Please take the blue folder from the table. Your first talk was listed for ten fifteen, but we moved it to ten thirty in Room 204. After that, you will meet your mentor near the library entrance. Student: Do I need my ID card today? Receptionist: Yes, show it at the lunch counter. The campus tour starts at two o clock, but the sports centre visit is cancelled because of maintenance.',
     questions: [
       {
         prompt: 'What should Kavya take from the table?',
-        options: ['A blue folder', 'A sports pass', 'A library card', 'A lunch coupon'],
+        options: ['A blue folder', 'Her ID card', 'A mentor pass', 'A lunch coupon'],
         answer: 'A blue folder',
       },
       {
-        prompt: 'Where is the first talk?',
-        options: ['Room 204', 'The library entrance', 'The sports centre', 'The lunch counter'],
-        answer: 'Room 204',
+        prompt: 'When is the first talk now scheduled?',
+        options: ['Ten thirty', 'Ten fifteen', 'Two o clock', 'After the library meeting'],
+        answer: 'Ten thirty',
       },
       {
         prompt: 'What is cancelled?',
-        options: ['The sports centre visit', 'The campus tour', 'The mentor meeting', 'The first talk'],
+        options: ['The sports centre visit', 'The campus tour', 'The mentor meeting', 'The orientation talk'],
         answer: 'The sports centre visit',
       },
     ],
@@ -31,21 +31,21 @@ const listeningSets = [
     title: 'Museum Tour Information',
     section: 'Section 2',
     script:
-      'Guide: Welcome to the city museum audio tour. Start in Gallery A, where you will see photographs of the old railway station. Please spend no more than fifteen minutes there because a school group arrives at half past eleven. Gallery B has the textile collection, but the lights are low to protect the cloth. The cafe is open until four, and tickets for the evening lecture are available at the information desk. If you lose your group, wait beside the large clock near the main staircase.',
+      'Guide: Welcome to the city museum audio tour. Start in Gallery A, where you will see photographs of the old railway station. Please spend no more than fifteen minutes there because a school group arrives at half past eleven, actually quarter to twelve. Gallery B has the textile collection, but the lights are low to protect the cloth. The cafe is open until four, and tickets for the evening lecture are available at the information desk. If you lose your group, wait beside the large clock near the main staircase.',
     questions: [
       {
         prompt: 'What is shown in Gallery A?',
-        options: ['Photographs of the old railway station', 'A textile collection', 'A large clock', 'Evening lecture tickets'],
-        answer: 'Photographs of the old railway station',
+        options: ['Railway station photos', 'A textile collection', 'Evening lecture tickets', 'The main staircase'],
+        answer: 'Railway station photos',
       },
       {
-        prompt: 'Why should visitors limit time in Gallery A?',
-        options: ['A school group will arrive', 'The lights are low', 'The cafe will close', 'The staircase is crowded'],
-        answer: 'A school group will arrive',
+        prompt: 'When will the school group arrive?',
+        options: ['Quarter to twelve', 'Half past eleven', 'At four o clock', 'After fifteen minutes'],
+        answer: 'Quarter to twelve',
       },
       {
         prompt: 'Where should lost visitors wait?',
-        options: ['Beside the large clock', 'Inside Gallery B', 'At the cafe door', 'Near the railway photos'],
+        options: ['Beside the large clock', 'Inside Gallery B', 'At the information desk', 'Near the railway photos'],
         answer: 'Beside the large clock',
       },
     ],
@@ -55,21 +55,21 @@ const listeningSets = [
     title: 'Community Volunteer Briefing',
     section: 'Section 3',
     script:
-      'Coordinator: Before Saturday clean-up begins, please check your team number on the notice board. Team One will collect plastic near the lake path. Team Two will speak to visitors and explain why reusable bottles are helpful. Team Three will count the bags at the end, so we can report the result to the council. Volunteer: Should we bring gloves? Coordinator: We have gloves and bags, but bring water. If it rains heavily, we will move the briefing to the school hall and start one hour later.',
+      'Coordinator: Before Saturday clean-up begins, please check your team number on the notice board. Team One will collect plastic near the lake path. Team Two will speak to visitors and explain why reusable bottles are helpful. Team Three will count the bags at the end, so we can report the result to the council. Volunteer: Should we bring gloves? Coordinator: We have gloves and bags, but bring water. If it rains heavily, we will move the briefing to the school hall and start one hour later, not cancel the event.',
     questions: [
       {
         prompt: 'What will Team Two do?',
-        options: ['Speak to visitors', 'Count the bags', 'Clean the school hall', 'Collect plastic near the path'],
+        options: ['Speak to visitors', 'Count the bags', 'Collect plastic near the path', 'Check the notice board'],
         answer: 'Speak to visitors',
       },
       {
         prompt: 'What should volunteers bring?',
-        options: ['Water', 'Gloves', 'Bags', 'A notice board'],
+        options: ['Water', 'Gloves', 'Reusable bottles', 'Team numbers'],
         answer: 'Water',
       },
       {
         prompt: 'What happens if there is heavy rain?',
-        options: ['The briefing moves to the school hall', 'The clean-up is cancelled completely', 'Team Three starts first', 'The council sends more bags'],
+        options: ['The briefing moves to the school hall', 'The clean-up is cancelled', 'Team Three starts first', 'The council sends more bags'],
         answer: 'The briefing moves to the school hall',
       },
     ],
@@ -79,17 +79,17 @@ const listeningSets = [
     title: 'Student Accommodation Call',
     section: 'Section 1',
     script:
-      'Agent: Riverside House, how can I help? Student: I am calling about a single room for September. Agent: We have one room on the third floor. It costs eight thousand rupees per month, including internet, but electricity is separate. Student: Is the bus stop close? Agent: Yes, it is two minutes away. The kitchen is shared by five students. If you want the room, send your ID copy before Friday evening. Student: Can I visit tomorrow? Agent: Yes, come after three thirty.',
+      'Agent: Riverside House, how can I help? Student: I am calling about a single room for September. Agent: We have one room on the third floor. It costs eight thousand rupees per month, including internet, but electricity is separate. Student: Is the bus stop close? Agent: Yes, it is two minutes away. The kitchen is shared by five students. If you want the room, send your ID copy before Friday evening. Student: Can I visit tomorrow? Agent: I said after three thirty, but the manager prefers four fifteen.',
     questions: [
       {
         prompt: 'Which cost is separate from the rent?',
-        options: ['Electricity', 'Internet', 'Kitchen use', 'Bus travel'],
+        options: ['Electricity', 'Internet', 'Kitchen use', 'The bus stop'],
         answer: 'Electricity',
       },
       {
-        prompt: 'How far is the bus stop?',
-        options: ['Two minutes away', 'Five minutes away', 'Ten minutes away', 'On the third floor'],
-        answer: 'Two minutes away',
+        prompt: 'When should the student visit?',
+        options: ['Four fifteen', 'Three thirty', 'Friday evening', 'Before September'],
+        answer: 'Four fifteen',
       },
       {
         prompt: 'What must the student send before Friday evening?',
@@ -103,21 +103,21 @@ const listeningSets = [
     title: 'Workplace Training Announcement',
     section: 'Section 4',
     script:
-      'Manager: Next week, all new staff will attend a short training session on customer communication. The aim is not to memorize fixed sentences, but to listen for the customer problem and choose a suitable response. On Monday, we will practise greeting callers. On Wednesday, we will review difficult complaints. Please complete the online form before Tuesday noon, so the trainer can prepare examples from your department. Staff who work evening shifts can watch the recording, but they must still submit the practice task by Friday.',
+      'Manager: Next week, all new staff will attend a short training session on customer communication. The aim is not to memorize fixed sentences, but to listen for the customer problem and choose a suitable response. On Monday, we will practise greeting callers. On Wednesday, we will review difficult complaints. Please complete the online form before Tuesday noon, actually by Wednesday morning, so the trainer can prepare examples from your department. Staff who work evening shifts can watch the recording, but they must still submit the practice task by Friday.',
     questions: [
       {
         prompt: 'What is the main aim of the training?',
-        options: ['To choose suitable responses to customer problems', 'To memorize fixed sentences', 'To change evening shifts', 'To prepare a sales report'],
-        answer: 'To choose suitable responses to customer problems',
+        options: ['Choose suitable responses', 'Memorize fixed sentences', 'Change evening shifts', 'Prepare a sales report'],
+        answer: 'Choose suitable responses',
       },
       {
-        prompt: 'When will difficult complaints be reviewed?',
-        options: ['Wednesday', 'Monday', 'Tuesday noon', 'Friday'],
-        answer: 'Wednesday',
+        prompt: 'When should staff complete the online form?',
+        options: ['By Wednesday morning', 'Before Tuesday noon', 'On Monday', 'By Friday only'],
+        answer: 'By Wednesday morning',
       },
       {
         prompt: 'What must evening shift staff do by Friday?',
-        options: ['Submit the practice task', 'Attend the live Monday session', 'Call every customer again', 'Prepare examples for the trainer'],
+        options: ['Submit the practice task', 'Attend the live Monday session', 'Review every complaint', 'Prepare trainer examples'],
         answer: 'Submit the practice task',
       },
     ],
