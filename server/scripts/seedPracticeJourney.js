@@ -8,6 +8,7 @@ const {
   buildReadingItemContent,
   loadReadingPassagePoolFromDb,
 } = require('../src/services/readingPassageGenerator.service');
+const { buildWritingPromptItem } = require('../src/services/writingPromptGenerator.service');
 
 const QUESTIONS_PER_SKILL_LEVEL = 1000;
 const MODULES_PER_SKILL_LEVEL = 5;
@@ -245,8 +246,8 @@ const buildQuestion = (skill, level, index) => {
   }
 
   if (skill.id === 'Writing') {
-    const writingItem = buildWritingItem({ level, context, competency, index, module });
-    question.type = 'MCQ';
+    const writingItem = buildWritingPromptItem({ level, context, competency, index, module });
+    question.type = 'Task';
     question.stem = writingItem.stem;
     question.passageText = writingItem.passageText;
     question.correctAnswer = writingItem.correctAnswer;
@@ -256,7 +257,7 @@ const buildQuestion = (skill, level, index) => {
     question.audioPrompt = writingItem.evaluationCriteria;
     question.moduleType = writingItem.moduleType;
     question.moduleLabel = writingItem.moduleLabel;
-    question.competency = writingItem.competency;
+    question.competency = competency;
   }
 
   return question;
@@ -394,6 +395,71 @@ const buildSpeakingItem = ({ level, context, competency, index, module }) => {
   };
 };
 
+const buildMixedTestWritingQuestions = () => {
+  const sections = [
+    { id: 'sentence-correction', label: 'Sentence Correction' },
+    { id: 'error-detection', label: 'Error Detection' },
+    { id: 'fill-in-the-blanks', label: 'Fill in the Blanks' },
+    { id: 'correct-sentence', label: 'Choose the Correct Sentence' },
+    { id: 'vocabulary', label: 'Vocabulary' },
+    { id: 'sentence-completion', label: 'Sentence Completion' },
+  ];
+  const writingSkill = skills.find((skill) => skill.id === 'Writing');
+  const bulkOps = [];
+
+  for (const level of levels) {
+    for (const section of sections) {
+      for (let index = 1; index <= QUESTIONS_PER_SKILL_LEVEL; index += 1) {
+        const competency = writingSkill.competencies[(index - 1) % writingSkill.competencies.length];
+        const context = level.contexts[(index - 1) % level.contexts.length];
+        const item = buildWritingCorrectionItem({
+          level,
+          context,
+          competency,
+          index,
+          module: { id: section.id, label: section.label },
+        });
+
+        bulkOps.push({
+          updateOne: {
+            filter: { seedKey: `mixed-writing:${section.id}:${level.id}:${String(index).padStart(4, '0')}` },
+            update: {
+              $set: {
+                seedKey: `mixed-writing:${section.id}:${level.id}:${String(index).padStart(4, '0')}`,
+                stem: `${section.label}: ${item.stem.replace(/^[^:]+:\s*/, '')}`,
+                skill: 'Writing',
+                level: level.id,
+                type: 'MCQ',
+                options: rotateOptions(item.correctAnswer, item.distractors, index),
+                correctAnswer: item.correctAnswer,
+                explanation: item.explanation,
+                passageText: item.passageText,
+                hints: item.hints,
+                audioPrompt: item.evaluationCriteria,
+                journeyOrder: index,
+                levelOrder: level.order,
+                skillOrder: writingSkill.order,
+                topic: section.label,
+                competency: item.competency,
+                moduleType: section.id,
+                moduleLabel: section.label,
+                moduleOrder: section.id === 'sentence-correction' ? 1 : sections.findIndex((entry) => entry.id === section.id) + 1,
+                moduleQuestionOrder: index,
+                status: 'Active',
+                updatedAt: new Date(),
+              },
+              $setOnInsert: { createdAt: new Date() },
+            },
+            upsert: true,
+          },
+        });
+      }
+    }
+  }
+
+  return bulkOps;
+};
+
 const buildWritingCorrectionItem = ({ level, context, competency, index, module }) => {
   const pick = (items, multiplier, offset = 0) =>
     items[((level.order * QUESTIONS_PER_SKILL_LEVEL + index) * multiplier + offset) % items.length];
@@ -401,14 +467,16 @@ const buildWritingCorrectionItem = ({ level, context, competency, index, module 
   const subjects = ['project update', 'meeting note', 'client email', 'support reply', 'application form', 'training message'];
   const actor = pick(actors, 5, level.order);
   const subject = pick(subjects, 7, index);
-  const section = [
-    { id: 'sentence-correction', label: 'Sentence Correction' },
-    { id: 'error-detection', label: 'Error Detection' },
-    { id: 'fill-in-the-blanks', label: 'Fill in the Blanks' },
-    { id: 'correct-sentence', label: 'Choose the Correct Sentence' },
-    { id: 'vocabulary', label: 'Vocabulary' },
-    { id: 'sentence-completion', label: 'Sentence Completion' },
-  ][(index - 1) % 6];
+  const section = module?.id
+    ? { id: module.id, label: module.label || module.id }
+    : [
+        { id: 'sentence-correction', label: 'Sentence Correction' },
+        { id: 'error-detection', label: 'Error Detection' },
+        { id: 'fill-in-the-blanks', label: 'Fill in the Blanks' },
+        { id: 'correct-sentence', label: 'Choose the Correct Sentence' },
+        { id: 'vocabulary', label: 'Vocabulary' },
+        { id: 'sentence-completion', label: 'Sentence Completion' },
+      ][(index - 1) % 6];
   const word = pick([
     { term: 'accurate', synonym: 'correct', antonym: 'incorrect', wrong: ['late', 'brief', 'ordinary'] },
     { term: 'expand', synonym: 'increase', antonym: 'reduce', wrong: ['protect', 'borrow', 'repeat'] },
@@ -501,267 +569,6 @@ const buildWritingCorrectionItem = ({ level, context, competency, index, module 
       `Competency: ${competency}`,
     ],
     evaluationCriteria: `${section.label}: ${item.focus}`,
-  };
-};
-
-const buildWritingItem = ({ level, context, competency, index, module }) => {
-  const pick = (items, multiplier, offset = 0) =>
-    items[((level.order * QUESTIONS_PER_SKILL_LEVEL + index) * multiplier + offset) % items.length];
-
-  return buildWritingCorrectionItem({ level, context, competency, index, module });
-
-  // Real writing prompts by level and module type
-  const promptsByModule = {
-    'sentence-control': {
-      A1: [
-        `Write 2–3 sentences to your teacher explaining why you were absent from class.`,
-        `Write a short message to a friend asking them to meet you at the library.`,
-        `Write 2–3 sentences about your favourite food and why you like it.`,
-        `Write a note to your neighbour asking them to keep noise down in the evening.`,
-        `Write 2 sentences introducing yourself to a new classmate.`,
-      ],
-      A2: [
-        `Write a short email to your manager explaining that you will be late to work today and why.`,
-        `Write a note to a friend describing a place you visited recently.`,
-        `Write 3–4 sentences recommending a local restaurant to a colleague.`,
-        `Write a brief message to a shop asking about the opening hours.`,
-        `Write a short email cancelling an appointment and suggesting a new time.`,
-      ],
-      B1: [
-        `Write an email to your team lead updating them on the progress of your current project.`,
-        `Write a message to a customer explaining a delay in their order and what you will do about it.`,
-        `Write a paragraph describing a problem in your community and one solution you would suggest.`,
-        `Write an email to a colleague giving feedback on a report they shared with you.`,
-        `Write a short message to a landlord asking for a repair to be made in your flat.`,
-      ],
-      B2: [
-        `Write a professional email to a client proposing a change to the project timeline, including your reasons and a clear action point.`,
-        `Write a paragraph arguing for or against remote work, using at least two specific reasons and one example.`,
-        `Write an internal memo to your team explaining a new policy and what action is expected from them.`,
-        `Write a covering letter paragraph for a job you are applying for, highlighting your most relevant experience.`,
-        `Write an email to a senior manager summarising the outcome of a meeting and the decisions made.`,
-      ],
-      C1: [
-        `Write a diplomatic email to a stakeholder who disagrees with a decision your team has made, acknowledging their concern and explaining your reasoning.`,
-        `Write a formal complaint letter to a service provider, detailing the issue, its impact, and the resolution you expect.`,
-        `Write a persuasive paragraph advocating for increased investment in a specific area of your organisation.`,
-        `Write a briefing note summarising a complex issue for a senior leader who has no prior knowledge of it.`,
-        `Write an apology email to a client for a serious error, taking accountability and offering a concrete remedy.`,
-      ],
-      C2: [
-        `Write a nuanced executive summary of a controversial proposal, balancing its benefits and risks without overstating either.`,
-        `Write a carefully worded email declining a request while preserving the professional relationship.`,
-        `Write a policy commentary paragraph that critiques an existing approach and proposes a more effective alternative, using precise language.`,
-        `Write a persuasive essay opening paragraph on the ethical implications of AI in the workplace.`,
-        `Write a diplomatic response to a public criticism of your organisation, using measured and authoritative language.`,
-      ],
-    },
-    'paragraph-building': {
-      A1: [
-        `Write a short paragraph about your daily routine. Include at least three activities.`,
-        `Describe your family in a paragraph. Mention at least two family members.`,
-        `Write a paragraph about your classroom. What do you see and do there?`,
-        `Write a paragraph about your favourite season and why you like it.`,
-        `Describe your home in a short paragraph.`,
-      ],
-      A2: [
-        `Write a paragraph about a recent trip or outing you took. What did you do and how did you feel?`,
-        `Describe a typical Saturday for you in a paragraph.`,
-        `Write a paragraph about a problem at your workplace or school and how you dealt with it.`,
-        `Write a paragraph about a skill you are learning and why you chose it.`,
-        `Describe someone you admire in a paragraph. What do they do and why do you admire them?`,
-      ],
-      B1: [
-        `Write a paragraph recommending a book or film to a friend. Include a brief summary and explain what makes it worth reading or watching.`,
-        `Write a paragraph explaining the advantages and disadvantages of studying online versus in a classroom.`,
-        `Write a paragraph describing a challenge you faced at work or school and what you learned from it.`,
-        `Write a paragraph giving advice to someone who is starting a new job.`,
-        `Write a paragraph about a change you would make to your city or neighbourhood and the reason for it.`,
-      ],
-      B2: [
-        `Write a well-structured paragraph discussing the impact of social media on young people's mental health, including evidence and a balanced conclusion.`,
-        `Write a paragraph evaluating two different approaches to project management, noting the tradeoffs.`,
-        `Write a paragraph arguing that continuous professional development should be mandatory in all industries.`,
-        `Write a paragraph analysing why some companies struggle with remote team communication and what can be done about it.`,
-        `Write a paragraph summarising the key findings of a fictional quarterly report, drawing a clear conclusion.`,
-      ],
-      C1: [
-        `Write a cohesive paragraph synthesising three perspectives on the role of government in regulating technology companies.`,
-        `Write a paragraph that builds a nuanced argument for why cultural context matters in international business communication.`,
-        `Write a paragraph evaluating the long-term risks of a rapid organisational restructuring, using hedged but precise language.`,
-        `Write a paragraph distinguishing between two commonly confused policy approaches, with a clear recommendation.`,
-        `Write a paragraph integrating statistical evidence, expert opinion, and a real-world example to support a position on urban housing policy.`,
-      ],
-      C2: [
-        `Write a paragraph that constructs a sophisticated critique of a widely accepted management theory, anticipating counterarguments.`,
-        `Write a paragraph that navigates the tension between innovation and ethical responsibility in product development.`,
-        `Write a paragraph in the style of a policy brief that identifies a systemic failure and proposes a structurally sound remedy.`,
-        `Write a paragraph that examines the rhetorical strategies used in a political speech and evaluates their effectiveness.`,
-        `Write a paragraph arguing that expertise alone is insufficient for leadership, using concrete examples and precise reasoning.`,
-      ],
-    },
-    cohesion: {
-      A1: [
-        `Write 3 sentences about your morning using the words 'first', 'then', and 'after'.`,
-        `Describe going to the market. Use 'and', 'but', and 'so' to connect your ideas.`,
-        `Write a short story about a lost cat. Connect your sentences using linking words.`,
-        `Write about your weekend plans using 'first', 'next', and 'finally'.`,
-        `Write 3 connected sentences about what you eat for breakfast.`,
-      ],
-      A2: [
-        `Write a short email using 'because', 'however', and 'therefore' to explain a problem and suggest a solution.`,
-        `Write a paragraph about your study routine. Use at least three different linking words or phrases.`,
-        `Write a message describing two options for a team outing. Connect your ideas clearly using contrast and addition words.`,
-        `Write a short paragraph comparing two smartphones. Use 'on the other hand', 'both', and 'in contrast'.`,
-        `Write an email updating your teacher about a project. Use connectors to show sequence and reason.`,
-      ],
-      B1: [
-        `Write a paragraph about the pros and cons of living in a big city. Use cohesive devices to link ideas within and between sentences.`,
-        `Write a short report on a survey about study habits. Use reference words (it, this, these) and connectors to avoid repetition.`,
-        `Write a paragraph describing a process, such as how to prepare for a job interview. Use sequence markers clearly.`,
-        `Write a paragraph comparing two career paths. Make sure each idea connects logically to the next.`,
-        `Write a recommendation paragraph about a product or service. Use cause-and-effect language throughout.`,
-      ],
-      B2: [
-        `Write a well-linked paragraph explaining why employee engagement affects company performance. Use a variety of cohesive devices.`,
-        `Write a paragraph that moves from a general claim to specific evidence to a conclusion, using clear logical connectors.`,
-        `Write a response to a colleague's proposal, agreeing with some points and disagreeing with others. Use contrast and concession language precisely.`,
-        `Write a paragraph discussing the causes and effects of urban traffic congestion. Ensure ideas flow naturally.`,
-        `Write a paragraph in which you rebut a counterargument and reinforce your own position using cohesive language.`,
-      ],
-      C1: [
-        `Write a paragraph that uses complex reference chains, substitution, and ellipsis to discuss the challenges of scaling a startup.`,
-        `Write a paragraph in which you transition smoothly between historical context, current evidence, and future projection on a topic of your choice.`,
-        `Write a paragraph synthesising two opposing viewpoints using sophisticated discourse markers.`,
-        `Write a paragraph that develops a single central idea through multiple interconnected sentences, avoiding repetition using reference words.`,
-        `Write a policy paragraph that guides the reader through a problem-cause-solution structure using varied and precise cohesive devices.`,
-      ],
-      C2: [
-        `Write a paragraph that demonstrates mastery of cohesion by interweaving evidence, interpretation, and implication without losing thread.`,
-        `Write a paragraph in which the connective logic is implied rather than explicit, yet the argument remains crystal clear.`,
-        `Write a paragraph that shifts between registers while maintaining textual coherence throughout.`,
-        `Write a paragraph that uses anaphora, ellipsis, and lexical chains to build a persuasive argument.`,
-        `Write a paragraph exploring a paradox, using cohesion to guide the reader from the apparent contradiction to a resolution.`,
-      ],
-    },
-    'tone-and-register': {
-      A1: [
-        `Write a polite message to your teacher asking for help with homework.`,
-        `Write a friendly text message to a classmate asking to borrow a book.`,
-        `Write a short note to your parent explaining what you did at school today.`,
-        `Write a polite request to a shopkeeper asking for the price of an item.`,
-        `Write a kind message to a friend who is feeling sad.`,
-      ],
-      A2: [
-        `Write a formal email to a hotel asking about room availability for next weekend.`,
-        `Write a friendly but polite reply to a colleague who sent you the wrong file.`,
-        `Write a formal complaint to a restaurant about poor service.`,
-        `Write an informal message to a friend explaining why you cannot attend their party.`,
-        `Write a semi-formal email to your landlord reporting a broken appliance.`,
-      ],
-      B1: [
-        `Write a professional email to a new client introducing yourself and your company's services.`,
-        `Write a formal letter of thanks to an organisation that sponsored your event.`,
-        `Write an internal message to your team asking them to complete a survey. Keep the tone encouraging but professional.`,
-        `Write a polite but firm email to a supplier who has missed a delivery deadline.`,
-        `Write a semi-formal message to a community group inviting them to a local event.`,
-      ],
-      B2: [
-        `Write a diplomatically worded email to a senior manager raising a concern about a recent decision without sounding confrontational.`,
-        `Write a formal report conclusion that remains objective while clearly recommending a course of action.`,
-        `Write a networking email to someone you admire professionally, requesting a short informational call.`,
-        `Write a message to a client who is frustrated with a delay, balancing empathy with professionalism.`,
-        `Write a formal response to a job offer, expressing enthusiasm while negotiating the salary.`,
-      ],
-      C1: [
-        `Write a carefully calibrated email to a board member challenging a strategic assumption without undermining their authority.`,
-        `Write a press statement responding to a public controversy about your organisation, using measured and authoritative language.`,
-        `Write a formal academic paragraph in which you critique a published study without appearing dismissive or biased.`,
-        `Write a diplomatically phrased performance review for an employee who has both strong points and significant areas for improvement.`,
-        `Write a nuanced email to an international partner navigating a cultural misunderstanding without causing offence.`,
-      ],
-      C2: [
-        `Write a communiqué to shareholders that conveys confidence in a difficult quarter without misrepresenting the data.`,
-        `Write a paragraph for a think-tank publication that critiques government policy in a rigorous but non-partisan tone.`,
-        `Write a response to a hostile online review of your organisation, de-escalating tension while protecting your reputation.`,
-        `Write a speech opening for a conference on artificial intelligence that is authoritative, inclusive, and intellectually engaging.`,
-        `Write a strategic memo that subtly shifts organisational culture without triggering resistance, using careful register and framing.`,
-      ],
-    },
-    'argument-development': {
-      A1: [
-        `Do you prefer studying alone or with friends? Write 2–3 sentences giving your opinion and one reason.`,
-        `Is it better to live in a city or in the countryside? Write a short opinion with one reason.`,
-        `Should students wear school uniforms? Write your opinion in 2–3 sentences.`,
-        `Do you think it is important to learn English? Write 2 sentences explaining why or why not.`,
-        `Is sport important for children? Write your view in 2–3 sentences.`,
-      ],
-      A2: [
-        `Write a short paragraph arguing whether people should work fewer hours per week. Give at least one reason and one example.`,
-        `Do you think social media is more harmful or beneficial for teenagers? Write a paragraph with your view and two supporting points.`,
-        `Write a short paragraph arguing that public transport should be free in cities. Include a reason and a possible objection.`,
-        `Should all schools teach cooking as a subject? Write a paragraph with your argument and one counter-point.`,
-        `Write a paragraph arguing that reading is better than watching television. Use at least two reasons.`,
-      ],
-      B1: [
-        `Write a structured argument paragraph for or against making voting compulsory. Include a claim, two reasons, and a concession.`,
-        `Write a paragraph arguing that companies should offer flexible working hours. Use a claim, supporting evidence, and a counter-argument.`,
-        `Write a paragraph arguing whether gap years are beneficial for young people. Include a claim, reasons, and a brief rebuttal.`,
-        `Write a well-argued paragraph about whether technology is making people less sociable.`,
-        `Write a paragraph arguing that universities should focus more on practical skills than academic theory.`,
-      ],
-      B2: [
-        `Write a structured argumentative paragraph on whether artificial intelligence will create more jobs than it destroys. Include a clear thesis, evidence, a counter-argument, and a rebuttal.`,
-        `Write a persuasive paragraph arguing that all businesses have an ethical responsibility to reduce their carbon footprint.`,
-        `Write an argument paragraph about whether governments should regulate social media platforms. Address complexity and avoid oversimplification.`,
-        `Write a paragraph arguing for a controversial position in education policy, anticipating the strongest objection and rebutting it.`,
-        `Write a paragraph arguing that economic growth and environmental sustainability are compatible goals, using precise evidence.`,
-      ],
-      C1: [
-        `Write an argument paragraph that builds a sophisticated case for redefining productivity in the modern workplace, engaging with counterarguments in depth.`,
-        `Write a nuanced paragraph arguing that free speech and social responsibility are not inherently in conflict, using examples from different contexts.`,
-        `Write an argument paragraph evaluating the claim that meritocracy is a myth in most modern societies.`,
-        `Write a persuasive paragraph arguing that the education system must fundamentally change to address the challenges of automation.`,
-        `Write an argument paragraph on whether international institutions like the UN are still relevant, synthesising multiple perspectives.`,
-      ],
-      C2: [
-        `Write a paragraph that constructs a philosophically rigorous argument for why truth in public discourse is more important than comfort.`,
-        `Write a sophisticated argumentative paragraph on whether capitalism is structurally incompatible with long-term environmental sustainability.`,
-        `Write an argument paragraph that challenges a widely accepted narrative about globalisation, using evidence and nuanced reasoning.`,
-        `Write a paragraph that builds an argument about the limits of data-driven decision-making in complex human systems.`,
-        `Write an argument paragraph exploring whether technological neutrality is possible, engaging with the strongest objections.`,
-      ],
-    },
-  };
-
-  const moduleId = module.id;
-  const promptPool = promptsByModule[moduleId]?.[level.id] || promptsByModule['sentence-control'][level.id];
-  const promptText = promptPool[index % promptPool.length];
-
-  const criteriaByLevel = {
-    A1: 'grammar accuracy, basic vocabulary, and clear meaning',
-    A2: 'correct grammar, appropriate vocabulary, and a clear message with a reason',
-    B1: 'well-organised paragraphs, connectors, appropriate tone, and a supported opinion',
-    B2: 'coherent structure, precise vocabulary, balanced argument, and professional register',
-    C1: 'sophisticated cohesion, nuanced argument, precise register, and critical thinking',
-    C2: 'near-native fluency, rhetorical effectiveness, lexical precision, and subtle reasoning',
-  };
-
-  const minWordsByLevel = { A1: 20, A2: 40, B1: 80, B2: 120, C1: 160, C2: 200 };
-
-  return {
-    stem: promptText,
-    passageText: `Module: ${module.label} | Level: ${level.id} | Competency: ${competency}\n\nYour response will be evaluated for: ${criteriaByLevel[level.id]}.\n\nWrite at least ${minWordsByLevel[level.id]} words.`,
-    correctAnswer: `A strong response addresses the prompt directly, is organised clearly, uses appropriate vocabulary and grammar for ${level.id}, and meets the word count.`,
-    distractors: [],
-    explanation: `This writing task evaluates ${competency} at ${level.id}. Focus on: ${criteriaByLevel[level.id]}.`,
-    hints: [
-      `Module: ${module.label}`,
-      `Target: ${criteriaByLevel[level.id]}`,
-      `Min words: ${minWordsByLevel[level.id]}`,
-    ],
-    minWords: minWordsByLevel[level.id],
-    evaluationCriteria: criteriaByLevel[level.id],
   };
 };
 
@@ -1030,6 +837,17 @@ const main = async () => {
   }
 
   await flushBulkOps();
+
+  const mixedTestOps = buildMixedTestWritingQuestions();
+  for (const op of mixedTestOps) {
+    bulkOps.push(op);
+    if (bulkOps.length >= 500) {
+      await flushBulkOps();
+    }
+  }
+  await flushBulkOps();
+  console.log(`Seeded mixed-test writing MCQ pool: ${mixedTestOps.length}`);
+
   const summary = await questions
     .aggregate([
       { $match: { seedKey: /^journey:/, status: 'Active' } },

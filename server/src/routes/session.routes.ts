@@ -555,9 +555,11 @@ router.get(
         .lean(),
     ]);
 
-    const countLookup = new Map(
-      questionCounts.map((row) => [`${row._id.skill}:${row._id.level}:${row._id.moduleOrder}`, row.totalQuestions as number]),
-    );
+    const countLookup = new Map<string, number>();
+    for (const row of questionCounts) {
+      const key = `${row._id.skill}:${row._id.level}:${row._id.moduleOrder}`;
+      countLookup.set(key, (countLookup.get(key) ?? 0) + (row.totalQuestions as number));
+    }
     const completedLookup = new Map<string, Array<{ setNumber: number; averageScore: number; completedAt?: Date }>>();
 
     for (const session of completedSessions) {
