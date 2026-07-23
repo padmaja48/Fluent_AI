@@ -1,4 +1,4 @@
-import type { GeneratedPassagePayload } from '../src/services/readingPassageGenerator.service';
+import type { GeneratedPassagePayload } from '../services/readingPassageGenerator.service';
 
 const paragraph = (parts: string[]) => parts.join(' ');
 
