@@ -10,6 +10,8 @@
     "test": "jest --runInBand",
     "seed": "node seed.js",
     "seed:practice": "ts-node --transpile-only scripts/seedPracticeJourney.js",
+    "seed:reading-pool": "ts-node --transpile-only scripts/seedReadingPassagePool.ts",
+    "seed:reading-pool:bootstrap": "ts-node --transpile-only scripts/seedReadingPassagePoolBootstrap.ts",
     "seed:cefr-content": "ts-node --transpile-only scripts/seedCefrContent.ts"
   },
   "keywords": [],

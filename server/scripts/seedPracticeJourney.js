@@ -4,7 +4,10 @@ const mongoose = require('mongoose');
 dotenv.config();
 
 require('ts-node/register/transpile-only');
-const { buildReadingItemContent } = require('../src/services/readingPassageGenerator.service');
+const {
+  buildReadingItemContent,
+  loadReadingPassagePoolFromDb,
+} = require('../src/services/readingPassageGenerator.service');
 
 const QUESTIONS_PER_SKILL_LEVEL = 1000;
 const MODULES_PER_SKILL_LEVEL = 5;
@@ -982,6 +985,10 @@ const buildListeningPassage = ({ level, context, competency, index }) => {
 const main = async () => {
   const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/fluentai';
   await mongoose.connect(uri);
+  const pool = await loadReadingPassagePoolFromDb();
+  for (const [tier, entries] of pool.entries()) {
+    console.log(`Reading passage pool loaded: ${tier}=${entries.length}`);
+  }
   const questions = mongoose.connection.collection('questions');
   await questions.createIndex({ seedKey: 1 }, { unique: true, sparse: true });
 
