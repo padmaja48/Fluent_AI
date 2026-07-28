@@ -11,7 +11,6 @@ import '../styles/Interview.css';
 
 const STEPS = ['Resume', 'Review', 'Interviewer', 'Setup', 'System Check'];
 const LIVE_STEP = 5;
-const REVIEW_WARNING_THRESHOLD = 3;
 const ROLE_OPTIONS = [
   { label: 'SDE', value: 'SDE', mode: 'sde' },
   { label: 'Data Analyst', value: 'Data Analyst', mode: 'data_analyst' },
@@ -145,32 +144,6 @@ function InterviewLoader({ title = 'Preparing interview', message = 'Please wait
   );
 }
 
-function ViolationWarningModal({ message, warningCount, maxWarnings, onDismiss, terminating }) {
-  return (
-    <div className="iv-violation-modal-backdrop" role="alertdialog" aria-modal="true" aria-labelledby="iv-violation-modal-title">
-      <div className="iv-violation-modal">
-        <span className="iv-violation-modal-icon" aria-hidden="true">!</span>
-        <h3 id="iv-violation-modal-title">Proctoring Warning {warningCount} of {maxWarnings}</h3>
-        <p>{message}</p>
-        {terminating ? (
-          <p className="iv-violation-modal-final">
-            Maximum warnings reached. This interview will end now.
-          </p>
-        ) : (
-          <>
-            <p className="iv-violation-modal-note">
-              Stay in fullscreen and keep your camera on. After {maxWarnings} warnings, the interview ends automatically.
-            </p>
-            <button type="button" className="iv-btn iv-btn--primary" onClick={onDismiss}>
-              I understand
-            </button>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function MobileBlockedInterview({ onBack }) {
   useEffect(() => {
     window.alert('AI interviews require a laptop or desktop. Please continue on a larger device with a camera and microphone.');
@@ -182,7 +155,7 @@ function MobileBlockedInterview({ onBack }) {
         <span className="iv-mobile-block-icon">!</span>
         <h2>Use a Laptop or Desktop</h2>
         <p>
-          AI mock interviews need desktop-style camera, microphone, fullscreen, and proctoring support.
+          AI mock interviews need desktop-style camera and microphone support.
           Please continue from a laptop or desktop browser.
         </p>
         <button type="button" className="iv-btn iv-btn--primary" onClick={() => onBack?.('dashboard')}>
@@ -742,18 +715,17 @@ function SystemCheckStep({ onStart, onBack, loading }) {
       <div className="iv-rules-box">
         <h4>Interview Rules</h4>
         <ul>
-          <li><strong>Fullscreen:</strong> Stay in fullscreen at all times.</li>
-          <li><strong>Tab switching:</strong> Do not leave this window during the interview.</li>
+          <li><strong>Fullscreen:</strong> Prefer staying in fullscreen for fewer distractions.</li>
+          <li><strong>Focus:</strong> Stay on this window during the interview when possible.</li>
           <li><strong>Copy/paste:</strong> Clipboard actions are disabled.</li>
           <li><strong>Right-click:</strong> Context menus are disabled.</li>
-          <li><strong>Camera:</strong> Keep your face visible at all times.</li>
-          <li><strong>Warnings:</strong> After {REVIEW_WARNING_THRESHOLD} proctoring warnings, the interview ends automatically.</li>
+          <li><strong>Camera:</strong> Keep your camera on so the interviewer can see you.</li>
         </ul>
       </div>
 
       <label className="iv-agree-label">
         <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} />
-        {' '}I understand and agree to all interview rules and fullscreen monitoring
+        {' '}I understand and agree to the interview rules
       </label>
 
       <div className="iv-step-actions">
@@ -770,7 +742,7 @@ function SystemCheckStep({ onStart, onBack, loading }) {
 }
 
 /* ─────────────────────────────────────────────────────────────────
-   Live Session — strict proctoring + audio
+   Live Session — camera + audio
 ───────────────────────────────────────────────────────────────── */
 function LiveSession({ interview, persona, onComplete }) {
   const [questions, setQuestions] = useState(interview.questions || []);
@@ -780,11 +752,6 @@ function LiveSession({ interview, persona, onComplete }) {
   const [isSpeaking, setIsSpeaking]   = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [audioLevel, setAudioLevel]   = useState(0);
-  const [violations, setViolations]   = useState(0);
-  const [violationMsg, setViolationMsg] = useState('');
-  const [violationPopup, setViolationPopup] = useState(null);
-  const [violationFlash, setViolationFlash] = useState(false);
-  const [terminated, setTerminated]   = useState(false);
   const [timer, setTimer]             = useState(interview.duration * 60 || 1800);
   const [interimText, setInterimText] = useState('');
   const [ending, setEnding]           = useState(false);
@@ -809,19 +776,18 @@ function LiveSession({ interview, persona, onComplete }) {
   const animFrameRef    = useRef(null);
   const timerRef        = useRef(null);
   const ttsSourceRef    = useRef(null);
-  const violationCountRef   = useRef(0);
   const autoSubmittedRef    = useRef(false);
   const finishingRef        = useRef(false);
   const sessionClosedRef    = useRef(false);
   const transcriptRef       = useRef([]);
   const interimTextRef      = useRef('');
   const currentAnswerPartsRef = useRef([]);
-  const violationCooldownRef = useRef({});
+  const eventCooldownRef = useRef({});
   const fullscreenRecoveryTimerRef = useRef(null);
   const focusRecoveryTimerRef = useRef(null);
   const keepSpeechRecognitionAliveRef = useRef(false);
   const personMissingSinceRef = useRef(null);
-  const lastCameraViolationAtRef = useRef(0);
+  const lastCameraEventAtRef = useRef(0);
   const lastAnswerActivityAtRef = useRef(Date.now());
   const silencePromptedRef = useRef(false);
 
@@ -894,11 +860,11 @@ function LiveSession({ interview, persona, onComplete }) {
   }, []);
 
   /* ── Finish session ─────────────────────────────── */
-  const finishSession = useCallback(async ({ terminatedBySystem = false } = {}) => {
+  const finishSession = useCallback(async () => {
     if (finishingRef.current) return;
     finishingRef.current = true;
     autoSubmittedRef.current = true;
-    setEnding(!terminatedBySystem);
+    setEnding(true);
     clearInterval(timerRef.current);
     const pendingAnswer = getAnswerSinceLastQuestionFromRefs();
     const currentQuestion = questions[currentIdx]?.question;
@@ -912,111 +878,77 @@ function LiveSession({ interview, persona, onComplete }) {
     stopSpeech();
     try { await interviewAPI.completeInterview(interview._id); } catch {}
     if (document.fullscreenElement || document.webkitFullscreenElement) { try { await exitAppFullscreen(); } catch {} }
-    if (terminatedBySystem) { setTerminated(true); setEnding(false); return; }
     onComplete(interview._id);
   }, [currentIdx, getAnswerSinceLastQuestionFromRefs, interview._id, onComplete, questions, stopListening, stopSpeech]);
 
-  /* ── Log violation ──────────────────────────────── */
-  const logViolation = useCallback(async (type, description) => {
+  /* ── Quiet session event log (no warning UI) ─────── */
+  const logSessionEvent = useCallback(async (type, description) => {
     if (sessionClosedRef.current || autoSubmittedRef.current) return;
     const now = Date.now();
-    if (now - (violationCooldownRef.current[type] ?? 0) < VIOLATION_COOLDOWN_MS) return;
-    violationCooldownRef.current[type] = now;
-    violationCountRef.current += 1;
-    const count = violationCountRef.current;
-    setViolations(count);
-    setViolationMsg(`Warning ${count}/${REVIEW_WARNING_THRESHOLD}: ${description}`);
-    setViolationPopup({ message: description, count });
-    setViolationFlash(true);
-    setTimeout(() => setViolationFlash(false), 800);
+    if (now - (eventCooldownRef.current[type] ?? 0) < VIOLATION_COOLDOWN_MS) return;
+    eventCooldownRef.current[type] = now;
     try { await interviewAPI.logViolation(interview._id, type, description); } catch {}
-    setTimeout(() => setViolationMsg(''), 8000);
+  }, [interview._id]);
 
-    if (count >= REVIEW_WARNING_THRESHOLD) {
-      setTimeout(() => {
-        if (!finishingRef.current && !sessionClosedRef.current) {
-          finishSession({ terminatedBySystem: true });
-        }
-      }, 3500);
-    }
-  }, [finishSession, interview._id]);
-
-  /* ── STRICT PROCTORING ──────────────────────────── */
+  /* ── Soft session guards (no warning popups) ─────── */
   useEffect(() => {
-    const fullscreenRequired = supportsFullscreen() && !isLikelyMobileDevice();
-    if (fullscreenRequired) {
+    const fullscreenPreferred = supportsFullscreen() && !isLikelyMobileDevice();
+    if (fullscreenPreferred) {
       requestAppFullscreen().catch(() => {});
     }
 
     const onFSChange = () => {
-      if (fullscreenRequired && !document.fullscreenElement && !document.webkitFullscreenElement && !autoSubmittedRef.current) {
+      if (fullscreenPreferred && !document.fullscreenElement && !document.webkitFullscreenElement && !autoSubmittedRef.current) {
         clearTimeout(fullscreenRecoveryTimerRef.current);
         fullscreenRecoveryTimerRef.current = setTimeout(() => {
           if (sessionClosedRef.current || autoSubmittedRef.current) return;
           if (document.fullscreenElement || document.webkitFullscreenElement) return;
-          logViolation('fullscreen_exit', 'Exited fullscreen mode');
+          logSessionEvent('fullscreen_exit', 'Exited fullscreen mode');
           requestAppFullscreen().catch(() => {});
         }, FULLSCREEN_RECHECK_MS);
       }
     };
 
-    // 3. Tab switch / visibility change
     const onVisibility = () => {
       if (!document.hidden || autoSubmittedRef.current) return;
       setTimeout(() => {
         if (document.hidden && !sessionClosedRef.current && !autoSubmittedRef.current) {
-          logViolation('tab_switch', 'Switched to another tab or minimized window');
+          logSessionEvent('tab_switch', 'Switched to another tab or minimized window');
         }
       }, FOCUS_RECHECK_MS);
     };
 
-    // 4. Window blur (alt+tab, click outside)
     const onBlur = () => {
       if (autoSubmittedRef.current) return;
       clearTimeout(focusRecoveryTimerRef.current);
       focusRecoveryTimerRef.current = setTimeout(() => {
         if (document.hidden && !sessionClosedRef.current && !autoSubmittedRef.current) {
-          logViolation('tab_switch', 'Window lost focus');
+          logSessionEvent('tab_switch', 'Window lost focus');
         }
       }, FOCUS_RECHECK_MS);
     };
 
-    // 5. Copy / Cut / Paste
-    const onCopy  = e => { e.preventDefault(); logViolation('copy_attempt', 'Attempted to copy content'); };
-    const onCut   = e => { e.preventDefault(); logViolation('cut_attempt', 'Attempted to cut content'); };
-    const onPaste = e => { e.preventDefault(); logViolation('paste_attempt', 'Attempted to paste content'); };
+    const onCopy  = e => { e.preventDefault(); logSessionEvent('copy_attempt', 'Attempted to copy content'); };
+    const onCut   = e => { e.preventDefault(); logSessionEvent('cut_attempt', 'Attempted to cut content'); };
+    const onPaste = e => { e.preventDefault(); logSessionEvent('paste_attempt', 'Attempted to paste content'); };
 
-    // 6. Right-click
     const onContextMenu = e => {
       e.preventDefault();
-      logViolation('right_click', 'Right-click menu attempted');
+      logSessionEvent('right_click', 'Right-click menu attempted');
     };
 
-    // 7. Keyboard shortcuts (clipboard, print/save/select-all, devtools, Alt+Tab)
     const onKeyDown = e => {
       if (autoSubmittedRef.current) return;
       if (isBlockedInterviewShortcut(e)) {
         e.preventDefault();
         e.stopPropagation();
         const type = isClipboardShortcut(e) ? 'clipboard_shortcut' : 'blocked_shortcut';
-        logViolation(type, `Blocked keyboard shortcut: ${e.key}`);
+        logSessionEvent(type, `Blocked keyboard shortcut: ${e.key}`);
       }
     };
 
-    // 8. Periodic devtools size detection (heuristic)
-    const devToolsCheck = setInterval(() => {
-      if (autoSubmittedRef.current) return;
-      const threshold = 160;
-      if (
-        window.outerWidth - window.innerWidth > threshold ||
-        window.outerHeight - window.innerHeight > threshold
-      ) {
-        logViolation('devtools_open', 'Developer tools appear to be open');
-      }
-    }, 8000);
-
-    if (fullscreenRequired) document.addEventListener('fullscreenchange', onFSChange);
-    if (fullscreenRequired) document.addEventListener('webkitfullscreenchange', onFSChange);
+    if (fullscreenPreferred) document.addEventListener('fullscreenchange', onFSChange);
+    if (fullscreenPreferred) document.addEventListener('webkitfullscreenchange', onFSChange);
     document.addEventListener('visibilitychange', onVisibility);
     document.addEventListener('copy', onCopy, true);
     document.addEventListener('cut', onCut, true);
@@ -1026,8 +958,8 @@ function LiveSession({ interview, persona, onComplete }) {
     window.addEventListener('keydown', onKeyDown, true);
 
     return () => {
-      if (fullscreenRequired) document.removeEventListener('fullscreenchange', onFSChange);
-      if (fullscreenRequired) document.removeEventListener('webkitfullscreenchange', onFSChange);
+      if (fullscreenPreferred) document.removeEventListener('fullscreenchange', onFSChange);
+      if (fullscreenPreferred) document.removeEventListener('webkitfullscreenchange', onFSChange);
       document.removeEventListener('visibilitychange', onVisibility);
       document.removeEventListener('copy', onCopy, true);
       document.removeEventListener('cut', onCut, true);
@@ -1037,21 +969,20 @@ function LiveSession({ interview, persona, onComplete }) {
       window.removeEventListener('keydown', onKeyDown, true);
       clearTimeout(fullscreenRecoveryTimerRef.current);
       clearTimeout(focusRecoveryTimerRef.current);
-      clearInterval(devToolsCheck);
       if (document.fullscreenElement || document.webkitFullscreenElement) exitAppFullscreen().catch(() => {});
     };
-  }, [logViolation]);
+  }, [logSessionEvent]);
 
   /* ── Camera PiP + mic analyser ──────────────────── */
   useEffect(() => {
     let stream;
     let personCheck;
     let audioContext;
-    const reportCameraViolation = (type, description, { immediate = false } = {}) => {
+    const reportCameraEvent = (type, description, { immediate = false } = {}) => {
       const now = Date.now();
-      if (!immediate && now - lastCameraViolationAtRef.current < PERSON_MISSING_GRACE_MS) return;
-      lastCameraViolationAtRef.current = now;
-      logViolation(type, description);
+      if (!immediate && now - lastCameraEventAtRef.current < PERSON_MISSING_GRACE_MS) return;
+      lastCameraEventAtRef.current = now;
+      logSessionEvent(type, description);
     };
 
     (async () => {
@@ -1064,12 +995,12 @@ function LiveSession({ interview, persona, onComplete }) {
           track.onended = () => {
             setCameraReady(false);
             setPersonDetected(false);
-            reportCameraViolation('camera_off', 'Camera was turned off during the interview');
+            reportCameraEvent('camera_off', 'Camera was turned off during the interview');
           };
           track.onmute = () => {
             setCameraReady(false);
             setPersonDetected(false);
-            reportCameraViolation('camera_muted', 'Camera feed was interrupted during the interview');
+            reportCameraEvent('camera_muted', 'Camera feed was interrupted during the interview');
           };
         });
         if (videoRef.current) {
@@ -1085,7 +1016,7 @@ function LiveSession({ interview, persona, onComplete }) {
             setCameraReady(false);
             setPersonDetected(false);
             setProctorCameraStatus('off');
-            reportCameraViolation('camera_off', 'Camera must stay on during the interview');
+            reportCameraEvent('camera_off', 'Camera must stay on during the interview');
             return;
           }
 
@@ -1106,7 +1037,7 @@ function LiveSession({ interview, persona, onComplete }) {
 
           if (now - personMissingSinceRef.current >= PERSON_MISSING_GRACE_MS) {
             personMissingSinceRef.current = now;
-            reportCameraViolation('person_not_detected', result.reason || 'Person was not detected in camera view');
+            reportCameraEvent('person_not_detected', result.reason || 'Person was not detected in camera view');
           }
         };
         personCheck = setInterval(checkPerson, PERSON_CHECK_INTERVAL_MS);
@@ -1133,7 +1064,7 @@ function LiveSession({ interview, persona, onComplete }) {
       } catch {
         setCameraReady(false);
         setPersonDetected(false);
-        reportCameraViolation('camera_unavailable', 'Camera and microphone access are required during the interview');
+        reportCameraEvent('camera_unavailable', 'Camera and microphone access are required during the interview', { immediate: true });
       }
     })();
     return () => {
@@ -1142,7 +1073,7 @@ function LiveSession({ interview, persona, onComplete }) {
       audioContext?.close?.().catch?.(() => {});
       if (animRef.current) cancelAnimationFrame(animRef.current);
     };
-  }, [logViolation]);
+  }, [logSessionEvent]);
 
   /* ── Timer ──────────────────────────────────────── */
   useEffect(() => {
@@ -1536,41 +1467,15 @@ function LiveSession({ interview, persona, onComplete }) {
     speakQuestion(currentQ.question, false);
   };
 
-  /* Violation color: green → yellow → orange → red */
-  const violationColor = ['#10b981', '#f59e0b', '#f97316', '#ef4444'][Math.min(violations, REVIEW_WARNING_THRESHOLD)];
-
-  if (terminated) {
-    return (
-      <div className="iv-terminated">
-        <div className="iv-terminated-icon">!</div>
-        <h2>Interview Terminated</h2>
-        <p>You received {REVIEW_WARNING_THRESHOLD} proctoring warnings.</p>
-        <p>The interview was ended automatically and flagged for review.</p>
-        <button className="iv-btn iv-btn--primary" onClick={() => onComplete(interview._id)}>
-          View Results
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div className={`iv-live${ending ? ' iv-live--ending' : ''}${violationFlash ? ' iv-live--flash' : ''}`}>
-      {violationPopup && (
-        <ViolationWarningModal
-          message={violationPopup.message}
-          warningCount={violationPopup.count}
-          maxWarnings={REVIEW_WARNING_THRESHOLD}
-          terminating={violationPopup.count >= REVIEW_WARNING_THRESHOLD}
-          onDismiss={() => setViolationPopup(null)}
-        />
-      )}
+    <div className={`iv-live${ending ? ' iv-live--ending' : ''}`}>
       {ending && (
         <div className="iv-ending-overlay">
           <InterviewLoader title="Ending interview" message="Saving your responses and preparing your results." />
         </div>
       )}
 
-      {/* Proctor bar */}
+      {/* Session status bar */}
       <div className="iv-proctor-bar">
         <video ref={videoRef} muted playsInline className="iv-pip" />
         <canvas ref={personCanvasRef} className="iv-hidden-canvas" aria-hidden="true" />
@@ -1582,19 +1487,8 @@ function LiveSession({ interview, persona, onComplete }) {
             ? PROCTOR_STATUS_LABELS.off
             : PROCTOR_STATUS_LABELS[proctorCameraStatus] || PROCTOR_STATUS_LABELS.checking}
         </span>
-        {violations > 0 && (
-          <span className="iv-violation-count" style={{ color: violationColor }}>
-            {violations} warning{violations === 1 ? '' : 's'}
-          </span>
-        )}
         <span className="iv-proctor-status">{isSpeaking ? 'Interviewer speaking' : isListening ? 'Listening' : 'Ready'}</span>
       </div>
-
-      {violationMsg && (
-        <div className="iv-violation-banner" style={{ borderLeftColor: violationColor }}>
-          {violationMsg}
-        </div>
-      )}
 
       <div className="iv-session-body">
         {/* Left: Avatar */}

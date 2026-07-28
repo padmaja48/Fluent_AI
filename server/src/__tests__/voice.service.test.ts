@@ -164,6 +164,50 @@ describe('ElevenLabs listening TTS pacing', () => {
     expect(audio.buffer).toEqual(wav);
   });
 
+  it('falls back to Sarvam for listening clips when ElevenLabs quota is exceeded', async () => {
+    (env as typeof env & { ELEVENLABS_API_KEY: string }).ELEVENLABS_API_KEY = 'test-key';
+    (env as typeof env & { ELEVENLABS_VOICE_ID: string }).ELEVENLABS_VOICE_ID = 'test-voice-id';
+    (env as typeof env & { ELEVENLABS_PROFESSIONAL_FEMALE_VOICE_ID: string }).ELEVENLABS_PROFESSIONAL_FEMALE_VOICE_ID = 'test-voice-id';
+    (env as typeof env & { ELEVENLABS_OUTPUT_FORMAT: string }).ELEVENLABS_OUTPUT_FORMAT = 'mp3_44100_128';
+    (env as typeof env & { ELEVENLABS_MODEL_ID: string }).ELEVENLABS_MODEL_ID = 'eleven_multilingual_v2';
+    (env as typeof env & { SARVAM_API_KEY: string }).SARVAM_API_KEY = 'test-sarvam-key';
+    (env as typeof env & { SARVAM_TTS_ENDPOINT: string }).SARVAM_TTS_ENDPOINT = 'https://api.sarvam.ai/text-to-speech';
+    (env as typeof env & { SARVAM_TTS_MODEL: string }).SARVAM_TTS_MODEL = 'bulbul:v3';
+    (env as typeof env & { SARVAM_TTS_LANGUAGE_CODE: string }).SARVAM_TTS_LANGUAGE_CODE = 'en-IN';
+    const wav = Buffer.from('RIFF');
+    const quotaBody = JSON.stringify({
+      detail: {
+        status: 'quota_exceeded',
+        message: 'This request exceeds your quota of 10000. You have 0 credits remaining, while 445 credits are required for this request.',
+      },
+    });
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockImplementationOnce(async () =>
+        new Response(quotaBody, {
+          status: 401,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockImplementationOnce(async () =>
+        new Response(JSON.stringify({ audios: [wav.toString('base64')] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+    const audio = await synthesizeSpeech('Short listening clip.', 'neutral', undefined, 'priya', {
+      context: 'listening',
+      level: 'A1',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[0][0])).toContain('elevenlabs.io');
+    expect(String(fetchMock.mock.calls[1][0])).toBe('https://api.sarvam.ai/text-to-speech');
+    expect(audio.contentType).toBe('audio/wav');
+    expect(audio.buffer).toEqual(wav);
+  });
+
   it('keeps higher levels closer to natural speed', () => {
     expect(getListeningPaceForLevel('A2')).toBe(0.85);
     expect(getListeningPaceForLevel('B1')).toBe(0.95);

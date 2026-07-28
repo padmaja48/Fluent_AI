@@ -174,6 +174,10 @@ const parseProviderError = (errorText: string): ProviderErrorDetails => {
   }
 };
 
+const isElevenLabsQuotaError = (responseStatus: number, errorText: string) =>
+  (responseStatus === 401 || responseStatus === 429) &&
+  /quota|credits remaining|exceeds your/i.test(errorText);
+
 const elevenLabsAppError = (responseStatus: number, errorText: string) => {
   const providerError = parseProviderError(errorText);
   const providerStatus = providerError.status?.toLowerCase();
@@ -192,6 +196,14 @@ const elevenLabsAppError = (responseStatus: number, errorText: string) => {
     );
   }
 
+  if (isElevenLabsQuotaError(responseStatus, errorText)) {
+    return new AppError(
+      'ElevenLabs TTS quota exceeded for this clip. Upgrade your ElevenLabs plan or wait for your monthly credits to reset.',
+      429,
+      'ELEVENLABS_QUOTA_EXCEEDED',
+    );
+  }
+
   const providerMessage = providerError.message ? `: ${providerError.message}` : '';
   return new AppError(
     `ElevenLabs TTS failed with status ${responseStatus}${providerMessage}`,
@@ -202,6 +214,28 @@ const elevenLabsAppError = (responseStatus: number, errorText: string) => {
 
 const isElevenLabsPaidPlanError = (error: unknown) =>
   error instanceof AppError && error.code === 'ELEVENLABS_VOICE_REQUIRES_PAID_PLAN';
+
+const isElevenLabsQuotaAppError = (error: unknown) =>
+  error instanceof AppError && error.code === 'ELEVENLABS_QUOTA_EXCEEDED';
+
+const sarvamSpeakerForListening = (speaker: TtsSpeaker) => (speaker === 'rahul' ? 'rahul' : 'priya');
+
+const synthesizeListeningWithSarvam = async (
+  normalizedText: string,
+  selectedSpeaker: TtsSpeaker,
+  context: TtsContext,
+  pace: number,
+): Promise<CachedSpeech> => {
+  const sarvamSpeaker = sarvamSpeakerForListening(selectedSpeaker);
+  const cacheKey = cacheKeyForSarvam(normalizedText, sarvamSpeaker, { context, pace });
+  const cached = speechCache.get(cacheKey);
+  if (cached) return cached;
+
+  const audio = await callSarvam(normalizedText, sarvamSpeaker, pace);
+  const item = { ...audio, cacheKey };
+  remember(item);
+  return item;
+};
 
 const cacheKeyFor = (
   text: string,
@@ -424,14 +458,33 @@ export const synthesizeSpeech = async (
   }
 
   let paidPlanError: unknown;
+  let quotaError: unknown;
   for (const candidateVoiceId of voiceCandidates) {
     try {
       return await getCachedElevenLabsSpeech(normalizedText, selectedSpeaker, candidateVoiceId, context, pace);
     } catch (error) {
+      if (isElevenLabsQuotaAppError(error)) {
+        quotaError = error;
+        break;
+      }
       if (!isElevenLabsPaidPlanError(error)) throw error;
       paidPlanError = error;
     }
   }
+
+  if (
+    quotaError &&
+    context === 'listening' &&
+    configuredValue(env.SARVAM_API_KEY)
+  ) {
+    try {
+      return await synthesizeListeningWithSarvam(normalizedText, selectedSpeaker, context, pace);
+    } catch {
+      throw quotaError;
+    }
+  }
+
+  if (quotaError) throw quotaError;
 
   throw paidPlanError;
 };

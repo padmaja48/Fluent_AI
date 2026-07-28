@@ -125,6 +125,10 @@ export const getTtsApiErrorMessage = async (error, fallback = 'Unable to generat
     return 'Selected ElevenLabs voice requires a paid plan. Set the server ElevenLabs voice IDs to voices available to your API account, then restart the server.';
   }
 
+  if (code === 'ELEVENLABS_QUOTA_EXCEEDED' || /quota|credits remaining|exceeds your quota/i.test(message)) {
+    return 'ElevenLabs voice credits are used up for this clip. Upgrade your ElevenLabs plan or wait for your monthly credits to reset.';
+  }
+
   return message || fallback;
 };
 

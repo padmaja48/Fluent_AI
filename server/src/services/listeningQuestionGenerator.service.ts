@@ -83,10 +83,10 @@ export const balanceListeningOptions = (
   const balancedDistractors = distractors.map((option) => {
     const words = countWords(option);
     if (words >= target * 0.75 && words <= target * 1.25) return option.trim();
-    if (words < target * 0.75) {
-      return trimToWords(`${option.trim()} during the ${target >= 8 ? 'same exchange' : 'clip'}.`, Math.max(6, Math.round(target)));
+    if (words > target * 1.25) {
+      return trimToWords(option, Math.max(6, Math.round(target)));
     }
-    return trimToWords(option, Math.max(6, Math.round(target)));
+    return option.trim();
   });
 
   const avgDistractor =
@@ -211,11 +211,11 @@ const buildClipFacts = (input: {
   let passageText = '';
 
   if (input.level.id === 'A1' || input.level.id === 'A2') {
-    passageText = `${speakerOne}: Hi ${speakerTwo}, this is ${reference} about ${input.context} during the ${setting}. I checked the ${artifact} this morning. The ${primaryDetail} matters, and the note lists ${measure}. ${speakerTwo}: Should we act today? ${speakerOne}: Not yet. We said ${wrongDay} first, but I meant ${correctDay} after finance checks the ${secondaryDetail}. ${speakerTwo}: So we ${plannedAction} at minute ${minute}, not before. ${speakerOne}: Right, and mention the ${primaryDetail} when you write the summary.`;
+    passageText = `${speakerOne}: Hi ${speakerTwo}, ${reference} on ${input.context} at the ${setting}. The ${artifact} lists ${measure}; note ${primaryDetail}. ${speakerTwo}: When? ${speakerOne}: We said ${wrongDay}, but I meant ${correctDay} after the ${secondaryDetail} check. Then ${plannedAction} at minute ${minute}.`;
   } else if (input.level.id === 'B1' || input.level.id === 'B2') {
-    passageText = `${speakerOne}: In ${reference}, the ${setting} on ${input.context} started simply, but the ${artifact} showed ${measure}. ${speakerTwo}: I flagged the ${secondaryDetail} because ${concern}. ${speakerOne}: I initially said we would move on ${wrongDay}, actually ${correctDay} once the ${primaryDetail} is confirmed. ${speakerTwo}: Then we should ${plannedAction} ${timeMarker}. ${speakerOne}: Yes, keep the update ${tone}; the ${artifact} makes the gap look smaller than it is. ${speakerTwo}: Listeners often miss that the ${secondaryDetail} still blocks approval.`;
+    passageText = `${speakerOne}: ${reference} covers ${input.context} in a ${setting}. The ${artifact} shows ${measure}, and ${concern}. ${speakerTwo}: Move on ${wrongDay}? ${speakerOne}: Actually ${correctDay}, once ${primaryDetail} is confirmed. ${speakerTwo}: Then ${plannedAction} ${timeMarker}. ${speakerOne}: Keep it ${tone}; the ${secondaryDetail} still blocks approval.`;
   } else {
-    passageText = `${speakerOne}: ${reference} covers ${input.context} in a ${setting}. The ${artifact}, ${primaryDetail}, and ${measure} frame the discussion, though ${concern}. ${speakerTwo}: You said ${wrongDay}, then corrected it to ${correctDay}; that change affects whether we ${plannedAction} ${timeMarker}. ${speakerOne}: Exactly. The ${tone} wording keeps alignment open while the ${secondaryDetail} remains unresolved. ${speakerTwo}: So the clip turns on timing and evidence, not on rejecting the goal outright. ${speakerOne}: Final note: record minute ${minute} and the ${primaryDetail} in the shared log.`;
+    passageText = `${speakerOne}: ${reference} on ${input.context} at the ${setting}. The ${artifact}, ${primaryDetail}, and ${measure} matter, though ${concern}. ${speakerTwo}: You said ${wrongDay}, then corrected to ${correctDay}. ${speakerOne}: That affects whether we ${plannedAction} ${timeMarker}. ${speakerTwo}: Record minute ${minute} and the ${primaryDetail} in the log.`;
   }
 
   return { reference, passageText, facts };
@@ -280,7 +280,7 @@ const buildQuestionForCompetency = (
       distractors: [
         `The speaker asks the team to accept the ${measure} without reviewing the ${secondaryDetail}.`,
         `The speaker tries to cancel the ${context} plan because of the ${wrongDay} note.`,
-        `The speaker wants to postpone all action until minute ${minute} passes with no update.`,
+        `The speaker wants to delay action until minute ${minute} without checking the ${primaryDetail}.`,
       ],
       explanation: `Speaker intent is practical: secure confirmation, then move to ${plannedAction}.`,
     },
