@@ -228,12 +228,18 @@ const shouldMergeResumeLines = (previous, current) => {
   const prev = String(previous || '').trim();
   const curr = String(current || '').trim();
   if (!prev || !curr) return false;
+  if (isLinkOrMetaLine(curr) || isBulletDescriptionLine(curr) || isSectionNoiseLine(curr)) return false;
+  if (isLinkOrMetaLine(prev) || isBulletDescriptionLine(prev)) return false;
+  // Prefer not gluing onto an already-complete title (stops bullet wraps like "analytics, and…")
+  if (looksLikeNewResumeItem(curr)) return false;
+  if (looksLikeCompleteResumeItem(prev)) return false;
   if (/^[a-z(]/.test(curr)) return true;
   if (/[-–—,:/&]$/.test(prev)) return true;
   if (/\bat$/i.test(prev)) return true;
-  if (looksLikeNewResumeItem(curr)) return false;
-  if (looksLikeCompleteResumeItem(prev)) return false;
-  // Incomplete wrap only: "Professional Cloud" + "Architect Certification"
+  // Lone wrap word like "Certification" completing the previous title
+  if (curr.split(/\s+/).length <= 2 && /^(?:certification|certificate|certified|architect|developer|engineer|internship|platform|system|application)\b/i.test(curr)) {
+    return true;
+  }
   return true;
 };
 
@@ -242,6 +248,14 @@ const mergeWrappedResumeLines = (lines = []) => {
   for (const line of lines) {
     const cleaned = String(line || '').replace(/\s+/g, ' ').trim();
     if (!cleaned) continue;
+    if (isLinkOrMetaLine(cleaned) || isSectionNoiseLine(cleaned) || isBulletDescriptionLine(cleaned)) {
+      // Keep description/noise from attaching to the previous title
+      continue;
+    }
+    // Orphan wrap after a skipped bullet (e.g. "analytics, and database management")
+    if (/^[a-z(]/.test(cleaned) && (!merged.length || looksLikeCompleteResumeItem(merged[merged.length - 1]))) {
+      continue;
+    }
     if (merged.length && shouldMergeResumeLines(merged[merged.length - 1], cleaned)) {
       merged[merged.length - 1] = `${merged[merged.length - 1]} ${cleaned}`.replace(/\s+/g, ' ').trim();
     } else {
@@ -255,7 +269,9 @@ const sectionLines = (lines, headingPattern) => {
   const start = lines.findIndex(line => headingPattern.test(line));
   if (start < 0) return [];
   const output = [];
-  const headingLike = /^(career objective|summary|education|technical skills|skills|projects?|experience|internships?|work experience|certifications?|coursework|achievements)$/i;
+  // Use plural "certifications" (not certifications?) so a wrapped title word
+  // like "Certification" is not treated as the next section header.
+  const headingLike = /^(career objective|summary|education|technical skills|skills|projects?|experience|internships?|work experience|certifications|technical certifications|coursework|achievements|language proficiency|workshop participation)$/i;
   for (let i = start + 1; i < lines.length; i += 1) {
     if (headingLike.test(lines[i]) && output.length > 0) break;
     if (!headingLike.test(lines[i])) output.push(lines[i]);
@@ -265,17 +281,56 @@ const sectionLines = (lines, headingPattern) => {
 
 const cleanResumeItem = (value) =>
   String(value || '')
-    .replace(/\s+[–-]\s+.*$/, '')
+    .replace(/\s+(?:live\s+demo|demo\s+link|github|gitlab|portfolio)\b.*$/i, '')
+    .replace(/\b[\w.-]+\/live\s*demo\b/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
 
+const isLinkOrMetaLine = (line) =>
+  /^(?:live\s+demo|demo|github|gitlab|link|url)\b/i.test(line)
+  || /^[\w.-]+\/(?:live\s*)?demo$/i.test(line)
+  || /^(https?:\/\/|www\.)/i.test(line);
+
+const isBulletDescriptionLine = (line) =>
+  /^(?:developed|built|designed|implemented|created|integrated|deployed|worked|responsible|collaborated|optimized|improved|achieved|managed|led|used|utilized|configured|established|enabled|provided|supported|handled|wrote|maintained|tested|automated|analyzed|engineered|attended|participated)\b/i.test(line)
+  || /[,;]$/.test(line)
+  || (line.split(/\s+/).length >= 12 && /^(?:a|an|the|for|with|using|to)\b/i.test(line));
+
+const isSectionNoiseLine = (line) =>
+  /^(?:technical certifications?|workshop participation|language proficiency|achievements?|coursework|soft skills|tools?)\s*$/i.test(line);
+
+/**
+ * Keep title-like entries only. Drop wrapped bullets, "Live Demo" labels, and section noise.
+ */
+const extractTitleItems = (lines, { titleHint, maxItems = 8 } = {}) => {
+  const merged = mergeWrappedResumeLines(lines);
+  const titles = [];
+
+  for (const raw of merged) {
+    let line = cleanResumeItem(raw);
+    if (!line || line.length < 3) continue;
+    if (isLinkOrMetaLine(line) || isSectionNoiseLine(line) || isBulletDescriptionLine(line)) continue;
+
+    // PDF often puts "Title ... LiveDemoLabel" on one extracted line — strip trailing demo labels
+    line = line
+      .replace(/\s+[A-Za-z][\w.-]*\/(?:Live\s*)?Demo\s*$/i, '')
+      .replace(/\s+Live\s*Demo\s*$/i, '')
+      .trim();
+    if (!line || isLinkOrMetaLine(line)) continue;
+
+    // Prefer lines that look like named titles (short-to-medium, optional stack after dash)
+    const wordCount = line.split(/\s+/).length;
+    if (wordCount > 14) continue;
+    if (titleHint && !titleHint.test(line) && wordCount > 10) continue;
+
+    titles.push(line);
+  }
+
+  return Array.from(new Set(titles)).slice(0, maxItems);
+};
+
 const extractNamedItems = (lines, pattern, maxItems = 8) =>
-  Array.from(new Set(
-    mergeWrappedResumeLines(lines)
-      .map(cleanResumeItem)
-      .filter(line => line.length >= 3)
-      .filter(line => pattern.test(line) || line.split(/\s+/).length <= 12),
-  )).slice(0, maxItems);
+  extractTitleItems(lines, { titleHint: pattern, maxItems });
 
 const extractResumePreview = (resume) => {
   const rawText = resume?.rawText || resume?.extractedText || '';
@@ -283,9 +338,27 @@ const extractResumePreview = (resume) => {
   const skills = resume?.analysis?.skills?.length
     ? Array.from(new Set(resume.analysis.skills.map(skill => skill.trim()).filter(Boolean)))
     : extractNamedItems(sectionLines(lines, /^(technical skills|skills)$/i), /\b(java|python|react|node|sql|aws|api|ml|ai|excel|power bi|selenium)\b/i, 14);
-  const projects = extractNamedItems(sectionLines(lines, /^projects?$/i), /\b(project|app|system|platform|dashboard|website|chatbot|api|portal|model)\b/i, 8);
-  const internships = extractNamedItems(sectionLines(lines, /^(experience|internships?|work experience)$/i), /\b(intern|developer|engineer|analyst|associate|trainee)\b/i, 6);
-  const certifications = extractNamedItems(sectionLines(lines, /^certifications?/i), /\b(certified|certification|certificate|hackerrank|aws|azure|google|nptel|oracle|microsoft)\b/i, 8);
+  const projects = extractTitleItems(
+    sectionLines(lines, /^projects?$/i),
+    {
+      titleHint: /\b(chatbot|platform|system|app|website|dashboard|portal|api|model|nlp|mern|full\s*stack|generative|donation|inventory|knowledge)\b/i,
+      maxItems: 8,
+    },
+  );
+  const internships = extractTitleItems(
+    sectionLines(lines, /^(experience|internships?|work experience)$/i),
+    {
+      titleHint: /\b(intern|developer|engineer|analyst|associate|trainee|at\b)\b/i,
+      maxItems: 6,
+    },
+  );
+  const certifications = extractTitleItems(
+    sectionLines(lines, /^certifications?/i),
+    {
+      titleHint: /\b(certified|certification|certificate|hackerrank|aws|azure|google|nptel|oracle|microsoft|cisco|mern|sql|python)\b/i,
+      maxItems: 8,
+    },
+  );
 
   return { skills, projects, internships, certifications };
 };
