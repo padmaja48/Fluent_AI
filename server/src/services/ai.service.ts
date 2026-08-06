@@ -63,6 +63,7 @@ type TranscriptionContext = {
   resumeText?: string;
   resumeProjects?: string[];
   resumeSummary?: string;
+  resumeEducation?: string[];
   targetCompany?: string;
 };
 
@@ -614,9 +615,94 @@ const TECHNICAL_TERM_REPLACEMENTS: Array<[RegExp, string]> = [
   [/\br\s*a\s*g\b/gi, 'RAG'],
   [/\bf\s*a\s*i\s*s\s*s\b/gi, 'FAISS'],
   [/\bgit\s*hub\b/gi, 'GitHub'],
+  // Degree / qualification phrasing only (not a national college dictionary)
+  [/\bbee\s*tech\b/gi, 'B.Tech'],
+  [/\bb\s*tech\b/gi, 'B.Tech'],
+  [/\bm\s*tech\b/gi, 'M.Tech'],
 ];
 
 const SAFE_CONTEXT_TERM_MIN_LENGTH = 5;
+
+const EDUCATION_ANCHOR =
+  /\b(?:university|college|institute|institution|school|academy|polytechnic)\b/i;
+
+/** Pull college/university names from THIS candidate's resume — scales without a national list. */
+export const extractEducationEntities = (resumeText?: string): string[] => {
+  if (!resumeText?.trim()) return [];
+  const lines = resumeText
+    .split(/\r?\n|[,;|]/)
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+
+  const entities: string[] = [];
+  for (const line of lines) {
+    if (!EDUCATION_ANCHOR.test(line)) continue;
+    if (line.length < 6 || line.length > 120) continue;
+    // Drop long bullet paragraphs; keep institution-like phrases
+    if ((line.match(/\b/g) || []).length > 28) continue;
+    const cleaned = line
+      .replace(/^(education|academic|qualification|college|university)\s*[:\-–]?\s*/i, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (cleaned.length >= 6) entities.push(cleaned);
+  }
+
+  return unique(entities).slice(0, 12);
+};
+
+const significantTokens = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((token) => token.length >= 3 && !['the', 'and', 'for', 'from', 'with', 'university', 'college', 'institute', 'of'].includes(token));
+
+/**
+ * When the transcript mentions a university/college, map the garbled phrase
+ * to the closest institution name found on the candidate's resume.
+ */
+export const alignTranscriptWithResumeEducation = (
+  transcript: string,
+  educationEntities: string[],
+): string => {
+  if (!transcript?.trim() || !educationEntities.length) return transcript;
+
+  const anchorMatch = transcript.match(
+    /\b(?:[\w'.-]+\s+){0,5}(?:university|college|institute|institution|school|academy|polytechnic)\b(?:\s+[\w'.-]+){0,3}/gi,
+  );
+  if (!anchorMatch?.length) return transcript;
+
+  let updated = transcript;
+  for (const phrase of anchorMatch) {
+    const phraseTokens = new Set(significantTokens(phrase));
+    if (!phraseTokens.size && !EDUCATION_ANCHOR.test(phrase)) continue;
+
+    let best: { name: string; score: number } | null = null;
+    for (const entity of educationEntities) {
+      const entityTokens = significantTokens(entity);
+      if (!entityTokens.length) continue;
+      const overlap = entityTokens.filter((token) => {
+        if (phraseTokens.has(token)) return true;
+        // Allow fuzzy token match (vigyan ~ vignan, nancy distant from vignan so won't false-match alone)
+        return [...phraseTokens].some((pt) => {
+          const distance = levenshtein(pt, token);
+          const maxDistance = token.length >= 6 ? 2 : 1;
+          return distance <= maxDistance;
+        });
+      }).length;
+      const coverage = overlap / entityTokens.length;
+      // Prefer entities with shared distinctive tokens; also prefer sole resume school near "university"
+      const score = coverage + (educationEntities.length === 1 ? 0.35 : 0);
+      if (!best || score > best.score) best = { name: entity, score };
+    }
+
+    if (best && best.score >= 0.35) {
+      updated = updated.replace(phrase, best.name);
+    }
+  }
+
+  return updated.replace(/\bfrom\s+with\s+/gi, 'from ').replace(/\s+/g, ' ').trim();
+};
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -652,9 +738,16 @@ export const normalizeTechnicalTranscript = (text: string, context?: Transcripti
     normalized = normalized.replace(pattern, replacement);
   });
 
+  const educationEntities = unique([
+    ...(context?.resumeEducation ?? []),
+    ...extractEducationEntities(context?.resumeText),
+  ]);
+  normalized = alignTranscriptWithResumeEducation(normalized, educationEntities);
+
   const contextTerms = unique([
     ...(context?.resumeSkills ?? []),
     ...(context?.resumeProjects ?? []),
+    ...educationEntities,
     ...extractJobDescriptionTechnologies(context?.jobDescription),
   ]).sort((a, b) => b.length - a.length);
 
@@ -679,8 +772,14 @@ const extractQuestionVocabulary = (question?: string) => {
  * We prime with a short, natural candidate-answer sentence containing expected terms.
  */
 export const buildGroqWhisperPrompt = (context?: TranscriptionContext): string => {
+  const educationEntities = unique([
+    ...(context?.resumeEducation ?? []),
+    ...extractEducationEntities(context?.resumeText),
+  ]).slice(0, 4);
+
   const terms = unique(
     [
+      ...educationEntities,
       ...(context?.resumeSkills ?? []),
       ...(context?.resumeProjects ?? []),
       ...extractJobDescriptionTechnologies(context?.jobDescription),
@@ -696,10 +795,20 @@ export const buildGroqWhisperPrompt = (context?: TranscriptionContext): string =
   if (terms.length >= 3) {
     const [first, second, third, ...rest] = terms;
     const tail = rest.slice(0, 6).join(', ');
+    const educationBit = educationEntities[0]
+      ? `I studied at ${educationEntities[0]}. `
+      : '';
     const sample = tail
-      ? `In my project I used ${first}, ${second}, and ${third}, along with ${tail}. I explained the architecture, trade-offs, and testing approach.`
-      : `In my project I used ${first}, ${second}, and ${third}. I explained the design, implementation, and results.`;
+      ? `${educationBit}In my project I used ${first}, ${second}, and ${third}, along with ${tail}. I explained the architecture, trade-offs, and testing approach.`
+      : `${educationBit}In my project I used ${first}, ${second}, and ${third}. I explained the design, implementation, and results.`;
     return sample.slice(0, WHISPER_PROMPT_MAX_CHARS);
+  }
+
+  if (educationEntities[0]) {
+    return `I completed my B.Tech at ${educationEntities[0]}. In my internship I worked on REST APIs, a SQL database, and backend services.`.slice(
+      0,
+      WHISPER_PROMPT_MAX_CHARS,
+    );
   }
 
   return 'In my internship I worked on REST APIs, a SQL database, and backend services. I handled debugging, testing, and deployment.'.slice(

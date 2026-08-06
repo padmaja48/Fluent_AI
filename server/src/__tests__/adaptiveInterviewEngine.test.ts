@@ -2,6 +2,7 @@ import {
   buildJobDescriptionProfile,
   decideAdaptiveFollowUp,
   evaluateAnswer,
+  extractEducationEntities,
   getInterviewModeGuidance,
   normalizeTechnicalTranscript,
 } from '../services/ai.service';
@@ -36,6 +37,21 @@ describe('adaptive interview engine helpers', () => {
     expect(text).toContain('NumPy');
     expect(text).toContain('PostgreSQL');
     expect(text).toContain('GitHub');
+  });
+
+  it('corrects university mishears using THIS resume, not a national college list', () => {
+    const text = normalizeTechnicalTranscript('I am from with Nancy University vigyan', {
+      resumeText: "Education\nB.Tech CSE - Vignan's University, Guntur\nSkills: Python, ML",
+    });
+    expect(text.toLowerCase()).toContain('vignan');
+    expect(text.toLowerCase()).not.toContain('nancy');
+  });
+
+  it('extracts education entities from resume text', () => {
+    const entities = extractEducationEntities(
+      "Education\nVignan's University, Guntur\nB.Tech Computer Science\nSkills: React",
+    );
+    expect(entities.some((item) => /vignan/i.test(item))).toBe(true);
   });
 
   it('keeps distinct prompt guidance for each role-wise interview mode', () => {

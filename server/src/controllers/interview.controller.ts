@@ -9,6 +9,7 @@ import {
   buildJobDescriptionProfile,
   decideAdaptiveFollowUp,
   evaluateAnswer,
+  extractEducationEntities,
   generateAdaptiveInterviewQuestion,
   generateInterviewQuestions,
   generateReport,
@@ -701,7 +702,8 @@ export const transcribeRecording = asyncHandler(async (req, res) => {
     resumeSkills: (interview as any).resumeSkills ?? [],
     resumeProjects: resumeProfile?.projects ?? [],
     resumeSummary: (interview as any).resumeSummary,
-    resumeText: interview.resumeText?.slice(0, 1200),
+    resumeText: interview.resumeText?.slice(0, 4000),
+    resumeEducation: extractEducationEntities(interview.resumeText),
     targetCompany: (interview as any).targetCompany,
   });
   res.json(transcription);

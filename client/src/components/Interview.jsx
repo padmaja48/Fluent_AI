@@ -4,6 +4,7 @@ import { PERSONAS } from '../lib/personas';
 import { COMPANY_OPTIONS } from '../lib/companyOptions';
 import { createAudioRecorder, getRecordedAudioFileName } from '../lib/audioRecording';
 import { playProcessedTtsBlob, stopTtsAudio } from '../lib/ttsAudio';
+import { normalizeSpeechTranscript } from '../lib/speechTranscriptNormalize';
 import { AvatarPortrait } from './interview/AvatarPortrait';
 import LiveCodingPanel, { detectMentionedLanguage, isCodingQuestion, languageStarter } from './interview/LiveCodingPanel';
 import VoiceIndicator from './interview/VoiceIndicator';
@@ -181,6 +182,7 @@ const splitSkillList = (value) =>
     .map(item => item.trim())
     .filter(item => item.length >= 2 && item.length <= 48);
 
+/** Newline = separate item only when the user edited the review boxes. */
 const splitMultilineItems = (value) =>
   String(value || '')
     .split(/\r?\n/)
@@ -190,19 +192,75 @@ const splitMultilineItems = (value) =>
 const resumeLines = (text = '') =>
   String(text)
     .split(/\r?\n/)
-    .map(line => line.replace(/^[\s>*•-]+/, '').trim())
+    .map(line => line.replace(/^[\s>*•\-–—]+/, '').trim())
     .filter(line => line.length > 1);
+
+/**
+ * PDF/paste often wraps one long name across 2+ lines. Merge continuations so
+ * we don't count each visual line as a separate project/cert/internship.
+ */
+const looksLikeNewResumeItem = (line) => {
+  const text = String(line || '').trim();
+  if (!text) return false;
+  if (/^(?:\d{1,2}[\/.\-]|\d{4}\b|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b)/i.test(text)) {
+    return true;
+  }
+  if (/^(?:aws|azure|google|microsoft|oracle|ibm|meta|nptel|hackerrank|coursera|udemy|linkedin)\b/i.test(text)) {
+    return true;
+  }
+  if (/^(?:software|senior|junior|associate|graduate|intern\b|internship\b|developer\b|engineer\b|analyst\b|trainee\b)/i.test(text)
+    && /\b(at|[-–]|intern|developer|engineer|analyst)\b/i.test(text)) {
+    return true;
+  }
+  if (/^(?:project\s*\d+|[\d]+[\).])/i.test(text)) return true;
+  return false;
+};
+
+const looksLikeCompleteResumeItem = (line) => {
+  const text = String(line || '').trim();
+  if (/[.!?)]$/.test(text)) return true;
+  if (/\b(20\d{2}|present)\b/i.test(text)) return true;
+  return /\b(certificate|certification|certified|practitioner|nanodegree|internship|intern\b|developer|engineer|analyst|associate|trainee|project|application|system|platform|dashboard|website|chatbot|portal|model|course)\b/i.test(text)
+    && text.split(/\s+/).length >= 3;
+};
+
+const shouldMergeResumeLines = (previous, current) => {
+  const prev = String(previous || '').trim();
+  const curr = String(current || '').trim();
+  if (!prev || !curr) return false;
+  if (/^[a-z(]/.test(curr)) return true;
+  if (/[-–—,:/&]$/.test(prev)) return true;
+  if (/\bat$/i.test(prev)) return true;
+  if (looksLikeNewResumeItem(curr)) return false;
+  if (looksLikeCompleteResumeItem(prev)) return false;
+  // Incomplete wrap only: "Professional Cloud" + "Architect Certification"
+  return true;
+};
+
+const mergeWrappedResumeLines = (lines = []) => {
+  const merged = [];
+  for (const line of lines) {
+    const cleaned = String(line || '').replace(/\s+/g, ' ').trim();
+    if (!cleaned) continue;
+    if (merged.length && shouldMergeResumeLines(merged[merged.length - 1], cleaned)) {
+      merged[merged.length - 1] = `${merged[merged.length - 1]} ${cleaned}`.replace(/\s+/g, ' ').trim();
+    } else {
+      merged.push(cleaned);
+    }
+  }
+  return merged;
+};
 
 const sectionLines = (lines, headingPattern) => {
   const start = lines.findIndex(line => headingPattern.test(line));
   if (start < 0) return [];
   const output = [];
-  const headingLike = /^(career objective|summary|education|technical skills|skills|projects?|experience|internships?|certifications?|coursework|achievements)$/i;
+  const headingLike = /^(career objective|summary|education|technical skills|skills|projects?|experience|internships?|work experience|certifications?|coursework|achievements)$/i;
   for (let i = start + 1; i < lines.length; i += 1) {
     if (headingLike.test(lines[i]) && output.length > 0) break;
     if (!headingLike.test(lines[i])) output.push(lines[i]);
   }
-  return output.slice(0, 12);
+  return mergeWrappedResumeLines(output).slice(0, 12);
 };
 
 const cleanResumeItem = (value) =>
@@ -213,10 +271,10 @@ const cleanResumeItem = (value) =>
 
 const extractNamedItems = (lines, pattern, maxItems = 8) =>
   Array.from(new Set(
-    lines
+    mergeWrappedResumeLines(lines)
       .map(cleanResumeItem)
       .filter(line => line.length >= 3)
-      .filter(line => pattern.test(line) || line.split(/\s+/).length <= 8),
+      .filter(line => pattern.test(line) || line.split(/\s+/).length <= 12),
   )).slice(0, maxItems);
 
 const extractResumePreview = (resume) => {
@@ -1280,7 +1338,11 @@ function LiveSession({ interview, persona, onComplete }) {
       return;
     }
     const rec = new SR();
-    rec.lang = 'en-US'; rec.continuous = true; rec.interimResults = true;
+    // en-IN improves recognition of Indian names/universities vs default en-US
+    // (e.g. "Vignan" is often misheard as "Nancy" under en-US).
+    rec.lang = 'en-IN';
+    rec.continuous = true;
+    rec.interimResults = true;
     rec.onresult = e => {
       let interim = '', final = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -1288,8 +1350,11 @@ function LiveSession({ interview, persona, onComplete }) {
         else interim += e.results[i][0].transcript;
       }
       if (interim || final) lastAnswerActivityAtRef.current = Date.now();
-      setInterimText(interim);
-      if (final) { setInterimText(''); addCandidateTranscript(final); }
+      setInterimText(normalizeSpeechTranscript(interim, interview.resumeText));
+      if (final) {
+        setInterimText('');
+        addCandidateTranscript(normalizeSpeechTranscript(final, interview.resumeText));
+      }
     };
     rec.onend = () => {
       if (sessionClosedRef.current || !keepSpeechRecognitionAliveRef.current || answerCaptureModeRef.current !== 'speech') {
@@ -1363,7 +1428,10 @@ function LiveSession({ interview, persona, onComplete }) {
       const formData = new FormData();
       formData.append('audio', blob, getRecordedAudioFileName('interview-answer', blob.type));
       const response = await interviewAPI.transcribe(interview._id, formData);
-      const text = response.data?.text || response.data?.transcript || '';
+      const text = normalizeSpeechTranscript(
+        response.data?.text || response.data?.transcript || '',
+        interview.resumeText,
+      );
       addCandidateTranscript(text);
       return text.trim();
     } catch {
@@ -1389,8 +1457,7 @@ function LiveSession({ interview, persona, onComplete }) {
     if (ans) submitAnswer(ans);
   };
 
-  const prefersRecordedInput = () =>
-    typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
+  const prefersRecordedInput = () => true; // Groq Whisper + resume vocabulary beats browser STT for Indian names
 
   const handleAnswerButton = () => {
     if (ending || isProcessingAnswer) return;
